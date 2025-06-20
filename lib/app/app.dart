@@ -1,0 +1,24 @@
+import 'package:flutter/material.dart';
+import 'package:pretium/app/route_names.dart';
+import 'package:pretium/features/splash/screens/splash_page.dart';
+import 'package:pretium/features/auth/screens/login_page.dart';
+import 'package:pretium/features/auth/screens/register_page.dart';
+import 'package:pretium/features/home/screens/landing_page.dart';
+
+class PretiumApp extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'Pretium Mock',
+      debugShowCheckedModeBanner: false,
+      initialRoute: RouteNames.splash,
+      routes: {
+        RouteNames.splash: (_) => const SplashPage(),
+        RouteNames.login: (_) => const LoginPage(),
+        RouteNames.register: (_) => const RegisterPage(),
+        RouteNames.home: (_) => LandingPage(),
+      },
+    );
+  }
+}
+// This is the main entry point of the Pretium Mock application.
