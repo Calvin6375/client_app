@@ -35,8 +35,14 @@ class FinancialServices extends StatelessWidget {
                 style: TextStyle(fontWeight: FontWeight.bold),
               ),
               Spacer(),
-              Text("Kenya", style: TextStyle(color: const Color(0xFF176D68))),
-              Icon(Icons.keyboard_arrow_down, color: const Color(0xFF176D68)),
+              Text(
+                "Kenya",
+                style: TextStyle(color: Theme.of(context).colorScheme.primary),
+              ),
+              Icon(
+                Icons.keyboard_arrow_down,
+                color: Theme.of(context).colorScheme.primary,
+              ),
             ],
           ),
           const SizedBox(height: 16),
@@ -44,16 +50,26 @@ class FinancialServices extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              _buildServiceItem(FontAwesomeIcons.paperPlane, "Send Money"),
-              _buildServiceItem(FontAwesomeIcons.shoppingBasket, "Buy Goods"),
-              _buildServiceItem(FontAwesomeIcons.receipt, "Paybill"),
+              _buildServiceItem(
+                context,
+                FontAwesomeIcons.paperPlane,
+                "Send Money",
+              ),
+              _buildServiceItem(
+                context,
+                FontAwesomeIcons.shoppingBasket,
+                "Buy Goods",
+              ),
+              _buildServiceItem(context, FontAwesomeIcons.receipt, "Paybill"),
             ],
           ),
           const SizedBox(height: 16),
           // Second row with just Airtime, centered
           Row(
             mainAxisAlignment: MainAxisAlignment.start,
-            children: [_buildServiceItem(Icons.phone_android, "Airtime")],
+            children: [
+              _buildServiceItem(context, Icons.phone_android, "Airtime"),
+            ],
           ),
           const SizedBox(height: 8),
         ],
@@ -61,18 +77,27 @@ class FinancialServices extends StatelessWidget {
     );
   }
 
-  Widget _buildServiceItem(IconData icon, String label) {
-    final bool isFaIcon =
-        icon is IconData && icon.fontFamily == 'FontAwesomeSolid';
+  // Pass BuildContext so we can access Theme.of(context)
+  Widget _buildServiceItem(BuildContext context, IconData icon, String label) {
     return Column(
       children: [
         CircleAvatar(
-          backgroundColor: const Color(0xFF176D68).withOpacity(0.1),
+          backgroundColor: Theme.of(
+            context,
+          ).colorScheme.primary.withOpacity(0.1),
           radius: 25,
           child:
               icon is IconData && icon.fontFamily == 'FontAwesomeSolid'
-                  ? FaIcon(icon, color: const Color(0xFF176D68), size: 20)
-                  : Icon(icon, color: const Color(0xFF176D68), size: 20),
+                  ? FaIcon(
+                    icon,
+                    color: Theme.of(context).colorScheme.primary,
+                    size: 20,
+                  )
+                  : Icon(
+                    icon,
+                    color: Theme.of(context).colorScheme.primary,
+                    size: 20,
+                  ),
         ),
         SizedBox(height: 8),
         Text(label, style: TextStyle(fontSize: 12)),

@@ -9,17 +9,8 @@ import '/widgets/placeholder_transactions.dart';
 class LandingPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Wallet Dashboard',
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        fontFamily: 'Roboto',
-        scaffoldBackgroundColor: const Color(0xFFF2F5F8),
-        primaryColor: const Color(0xFF176D68),
-        useMaterial3: true,
-      ),
-      home: DashboardScreen(),
-    );
+    // Return the dashboard directly to avoid nesting MaterialApp, so app-level routes work
+    return DashboardScreen();
   }
 }
 
@@ -39,8 +30,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final primary = Theme.of(context).colorScheme.primary;
     return Scaffold(
-      backgroundColor: const Color(0xFF176D68),
+      backgroundColor: primary,
       body: Column(
         children: [
           Container(
@@ -50,7 +42,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               right: 16,
               bottom: 12,
             ),
-            color: const Color(0xFF176D68),
+            color: primary,
             child: const HeaderWidget(),
           ),
           Expanded(
@@ -70,9 +62,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     child: Column(
                       children: [
                         const SizedBox(height: 16),
-                        WalletCard(),
+                        const WalletCard(),
                         const SizedBox(height: 16),
-                        FinancialServices(),
+                        const FinancialServices(),
                         const SizedBox(height: 24),
                         const RecentTransactionsHeader(),
                         const PlaceholderTransactions(),
@@ -92,34 +84,32 @@ class _DashboardScreenState extends State<DashboardScreen> {
           mainAxisAlignment: MainAxisAlignment.spaceAround,
           children: <Widget>[
             IconButton(
-              icon: Icon(Icons.account_balance_wallet),
+              icon: const Icon(Icons.account_balance_wallet),
               iconSize: 28,
-              color:
-                  _selectedIndex == 0 ? const Color(0xFF176D68) : Colors.grey,
+              color: _selectedIndex == 0 ? primary : Colors.grey,
               onPressed: () => _onItemTapped(0),
             ),
             GestureDetector(
               onTap: () => _onItemTapped(1),
               child: Container(
                 decoration: BoxDecoration(
-                  color: const Color(0xFF176D68),
+                  color: primary,
                   shape: BoxShape.circle,
                   boxShadow: [
                     BoxShadow(
-                      color: const Color(0xFF176D68).withOpacity(0.2),
+                      color: primary.withOpacity(0.2),
                       blurRadius: 6,
                       offset: const Offset(0, 2),
                     ),
                   ],
                 ),
                 padding: const EdgeInsets.all(12),
-                child: Icon(Icons.qr_code, color: Colors.white, size: 28),
+                child: const Icon(Icons.qr_code, color: Colors.white, size: 28),
               ),
             ),
             IconButton(
-              icon: Icon(Icons.receipt_long),
-              color:
-                  _selectedIndex == 2 ? const Color(0xFF176D68) : Colors.grey,
+              icon: const Icon(Icons.receipt_long),
+              color: _selectedIndex == 2 ? primary : Colors.grey,
               onPressed: () => _onItemTapped(2),
             ),
           ],

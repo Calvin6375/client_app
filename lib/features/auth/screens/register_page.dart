@@ -1,23 +1,30 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../widgets/custom_text_field.dart';
 import '../widgets/register_header.dart';
 import '../widgets/terms_checkbox.dart';
 import 'package:pretium/features/home/screens/landing_page.dart';
 
-// Add this at the top of your file, after imports
-const Color primaryColor = Color(0xFF176D68);
+// Use app-level theme; no local constant color
 
 class RegisterApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
+    final primary = Theme.of(context).colorScheme.primary;
     return MaterialApp(
       title: 'Create Account',
-      theme: ThemeData(
-        primaryColor: const Color(0xFF176D68),
-        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF176D68)),
-        fontFamily: 'Roboto',
+      theme: Theme.of(context).copyWith(
+        colorScheme: Theme.of(
+          context,
+        ).colorScheme.copyWith(primary: primary, onPrimary: Colors.white),
+        primaryColor: primary,
+        appBarTheme: AppBarTheme(
+          backgroundColor: primary,
+          foregroundColor: Colors.white,
+        ),
       ),
-      home: RegisterPage(),
+      home: const RegisterPage(),
     );
   }
 }
@@ -35,6 +42,71 @@ class _RegisterPageState extends State<RegisterPage> {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   bool _termsAccepted = false;
+  bool _isSubmitting = false;
+
+  Future<void> _register() async {
+    if (!_termsAccepted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please accept the terms and conditions.'),
+        ),
+      );
+      return;
+    }
+
+    final firstName = _firstNameController.text.trim();
+    final lastName = _lastNameController.text.trim();
+    final email = _emailController.text.trim();
+    final password = _passwordController.text;
+
+    if (firstName.isEmpty ||
+        lastName.isEmpty ||
+        email.isEmpty ||
+        password.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please fill in all fields.')),
+      );
+      return;
+    }
+
+    setState(() => _isSubmitting = true);
+    try {
+      // 1) Create user in Firebase Auth
+      final credential = await FirebaseAuth.instance
+          .createUserWithEmailAndPassword(email: email, password: password);
+
+      // 2) Create user profile in Firestore (merge if exists)
+      final uid = credential.user!.uid;
+      await FirebaseFirestore.instance.collection('users').doc(uid).set({
+        'firstName': firstName,
+        'lastName': lastName,
+        'email': email,
+        'createdAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+
+      // 3) Navigate to landing page on success
+      if (!mounted) return;
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (context) => LandingPage()),
+        (route) => false,
+      );
+    } on FirebaseAuthException catch (e) {
+      String message = 'Registration failed';
+      if (e.code == 'email-already-in-use') message = 'Email already in use';
+      if (e.code == 'invalid-email') message = 'Invalid email';
+      if (e.code == 'weak-password') message = 'Weak password';
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
+    } catch (e) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Registration failed: $e')));
+    } finally {
+      if (mounted) setState(() => _isSubmitting = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -56,7 +128,10 @@ class _RegisterPageState extends State<RegisterPage> {
 
                 // Back Arrow
                 IconButton(
-                  icon: Icon(Icons.arrow_back, color: primaryColor),
+                  icon: Icon(
+                    Icons.arrow_back,
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
                   onPressed: () => Navigator.pop(context),
                 ),
 
@@ -70,8 +145,8 @@ class _RegisterPageState extends State<RegisterPage> {
                   labelText: 'First Name',
                   hintText: 'Enter your first name',
                   prefixIcon: Icons.person_outline,
-                  primaryColor: primaryColor,
-                  labelColor: primaryColor,
+                  primaryColor: Theme.of(context).colorScheme.primary,
+                  labelColor: Theme.of(context).colorScheme.primary,
                 ),
                 const SizedBox(height: 24),
 
@@ -81,8 +156,8 @@ class _RegisterPageState extends State<RegisterPage> {
                   labelText: 'Last Name',
                   hintText: 'Enter your last name',
                   prefixIcon: Icons.person_outline,
-                  primaryColor: primaryColor,
-                  labelColor: primaryColor,
+                  primaryColor: Theme.of(context).colorScheme.primary,
+                  labelColor: Theme.of(context).colorScheme.primary,
                 ),
                 const SizedBox(height: 24),
 
@@ -93,8 +168,8 @@ class _RegisterPageState extends State<RegisterPage> {
                   hintText: 'Enter your email',
                   prefixIcon: Icons.email_outlined,
                   keyboardType: TextInputType.emailAddress,
-                  primaryColor: primaryColor,
-                  labelColor: primaryColor,
+                  primaryColor: Theme.of(context).colorScheme.primary,
+                  labelColor: Theme.of(context).colorScheme.primary,
                 ),
                 const SizedBox(height: 24),
 
@@ -105,7 +180,7 @@ class _RegisterPageState extends State<RegisterPage> {
                   hintText: 'Enter your password',
                   prefixIcon: Icons.lock_outline,
                   isPassword: true,
-                  primaryColor: primaryColor,
+                  primaryColor: Theme.of(context).colorScheme.primary,
                 ),
 
                 const SizedBox(height: 16),
@@ -117,7 +192,7 @@ class _RegisterPageState extends State<RegisterPage> {
                       _termsAccepted = value!;
                     });
                   },
-                  color: primaryColor,
+                  color: Theme.of(context).colorScheme.primary,
                 ),
 
                 const SizedBox(height: 24),
@@ -127,22 +202,15 @@ class _RegisterPageState extends State<RegisterPage> {
                   height: 48,
                   child: ElevatedButton(
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: primaryColor,
+                      backgroundColor: Theme.of(context).colorScheme.primary,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(8),
                       ),
                     ),
-                    onPressed: () {
-                      // Navigate to landing page and remove all previous routes
-                      Navigator.pushAndRemoveUntil(
-                        context,
-                        MaterialPageRoute(builder: (context) => LandingPage()),
-                        (route) => false, // This removes all previous routes
-                      );
-                    },
-                    child: const Text(
-                      'Create Account',
-                      style: TextStyle(fontSize: 18, color: Colors.white),
+                    onPressed: _isSubmitting ? null : _register,
+                    child: Text(
+                      _isSubmitting ? 'Creating...' : 'Create Account',
+                      style: const TextStyle(fontSize: 18, color: Colors.white),
                     ),
                   ),
                 ),
@@ -159,7 +227,9 @@ class _RegisterPageState extends State<RegisterPage> {
                       onPressed: () => Navigator.pop(context), // Add navigation
                       child: Text(
                         'Login',
-                        style: TextStyle(color: primaryColor),
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.primary,
+                        ),
                       ),
                     ),
                   ],

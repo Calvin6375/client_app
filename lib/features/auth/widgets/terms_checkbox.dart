@@ -11,7 +11,7 @@ class TermsCheckbox extends StatelessWidget {
     required this.value,
     required this.onChanged,
     this.onTermsTap,
-    this.color = const Color(0xFF176D68),
+    this.color = const Color(0xFF0097A7),
   });
 
   @override

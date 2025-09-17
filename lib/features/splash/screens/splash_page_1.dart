@@ -11,8 +11,6 @@ class _SplashPage1State extends State<SplashPage1> {
   final PageController _controller = PageController();
   int _currentPage = 0;
 
-  final Color primaryColor = const Color(0xFF176D68);
-
   void _nextPage() {
     if (_currentPage < 2) {
       _controller.nextPage(
@@ -86,7 +84,7 @@ class _SplashPage1State extends State<SplashPage1> {
                     decoration: BoxDecoration(
                       color:
                           index == _currentPage
-                              ? primaryColor
+                              ? Theme.of(context).colorScheme.primary
                               : Colors.grey.withOpacity(0.3),
                       borderRadius: BorderRadius.circular(4),
                     ),
@@ -101,7 +99,7 @@ class _SplashPage1State extends State<SplashPage1> {
               child: ElevatedButton(
                 onPressed: _nextPage,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: primaryColor,
+                  backgroundColor: Theme.of(context).colorScheme.primary,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
@@ -134,7 +132,7 @@ class _SplashPage1State extends State<SplashPage1> {
           backgroundColor: const Color.fromARGB(255, 210, 213, 212),
           child: Icon(
             icon,
-            color: const Color(0xFF176D68),
+            color: Theme.of(context).colorScheme.primary,
             size: 60, // Increased icon size from 40 to 60
           ),
         ),
@@ -167,7 +165,7 @@ class SplashPage1Content extends StatelessWidget {
           backgroundColor: const Color.fromARGB(255, 210, 213, 212),
           child: Icon(
             Icons.credit_card,
-            color: const Color(0xFF176D68),
+            color: Theme.of(context).colorScheme.primary,
             size: 60,
           ),
         ),

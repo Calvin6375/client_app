@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "100976916568",
+    "project_id": "rukiziafrica-ae219",
+    "storage_bucket": "rukiziafrica-ae219.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:100976916568:android:81869f8dd301b400fc722d",
+        "android_client_info": {
+          "package_name": "com.example.pretium_mock"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "100976916568-csmsrbnhhq4sabjjdbkf31phcp897nok.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAYR2BC12gAyTGFwZxUz0gJ9bHx7N26NOs"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "100976916568-csmsrbnhhq4sabjjdbkf31phcp897nok.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
