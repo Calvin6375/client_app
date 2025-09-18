@@ -5,6 +5,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:pretium/features/topup/services/intasend_service.dart';
+import 'package:pretium/services/firebase_payment_service.dart';
 import 'dart:convert';
 import 'dart:io';
 
@@ -124,10 +125,17 @@ class _TopUpPageState extends State<TopUpPage> {
       if (result['success']) {
         print('✅ IntaSend checkout URL created successfully');
         final checkoutUrl = result['checkout_url'];
+        final paymentId = result['payment_id'];
+        final launchFailed = result['launch_failed'] ?? false;
         
-        if (checkoutUrl != null) {
+        if (checkoutUrl != null && paymentId != null) {
           // Show payment launched dialog with URL for manual access if needed
-          _showPaymentLaunchedDialog(checkoutUrl, result['message']);
+          String message = result['message'] ?? 'Checkout created successfully';
+          if (launchFailed) {
+            message += ' (automatic launch failed - use options below)';
+          }
+          
+          _showPaymentLaunchedDialog(checkoutUrl, paymentId, message);
         } else {
           _showError('Checkout URL not received from IntaSend');
         }
@@ -175,7 +183,7 @@ class _TopUpPageState extends State<TopUpPage> {
     );
   }
 
-  void _showPaymentLaunchedDialog(String checkoutUrl, String? message) {
+  void _showPaymentLaunchedDialog(String checkoutUrl, String paymentId, String? message) {
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
@@ -266,12 +274,19 @@ class _TopUpPageState extends State<TopUpPage> {
                                 publicKey: intaSendPublicKey,
                                 isTestMode: isTestMode,
                               );
-                              final launched = await intaSendService.launchCheckout(checkoutUrl);
+                              final launched = await intaSendService.launchCheckout(checkoutUrl, paymentId: paymentId);
                               if (!launched) {
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   const SnackBar(
                                     content: Text('Could not open payment page automatically. Please copy the URL above.'),
                                     backgroundColor: Colors.orange,
+                                  ),
+                                );
+                              } else {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('Payment page opened successfully!'),
+                                    backgroundColor: Colors.green,
                                   ),
                                 );
                               }
@@ -316,9 +331,21 @@ class _TopUpPageState extends State<TopUpPage> {
               backgroundColor: Colors.green,
               foregroundColor: Colors.white,
             ),
-            onPressed: () {
+            onPressed: () async {
               Navigator.of(context).pop();
-              // Simulate successful payment for demo
+              
+              // Mark payment as completed in Firebase
+              print('✅ User confirmed payment completion');
+              await FirebasePaymentService.markPaymentCompleted(
+                paymentId: paymentId,
+                transactionId: 'user_confirmed_${DateTime.now().millisecondsSinceEpoch}',
+                paymentDetails: {
+                  'completion_method': 'user_confirmation',
+                  'confirmed_at': DateTime.now().toIso8601String(),
+                },
+              );
+              
+              // Show success dialog
               _showSuccess();
             },
             child: const Text('Payment Completed'),

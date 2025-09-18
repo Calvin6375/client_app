@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
+import 'package:pretium/services/firebase_payment_service.dart';
 
 /// Custom IntaSend service using HTTP API calls
 /// This replaces the problematic intasend_flutter plugin
@@ -102,7 +103,7 @@ class IntaSendService {
   }
 
   /// Launch the checkout URL in browser
-  Future<bool> launchCheckout(String checkoutUrl) async {
+  Future<bool> launchCheckout(String checkoutUrl, {String? paymentId}) async {
     print('🚀 Attempting to launch checkout URL: $checkoutUrl');
     
     final uri = Uri.parse(checkoutUrl);
@@ -121,6 +122,18 @@ class IntaSendService {
           mode: LaunchMode.externalApplication,
         );
         print('  Launch result: $launched');
+        
+        // Update Firebase if payment ID is provided and launch was successful
+        if (launched && paymentId != null) {
+          await FirebasePaymentService.markPaymentLinkOpened(
+            paymentId: paymentId,
+            additionalData: {
+              'launch_method': 'manual_retry',
+              'user_agent': 'mobile_app',
+            },
+          );
+        }
+        
         return launched;
       } else {
         print('  ❌ Cannot launch URL - trying alternative modes...');
@@ -162,6 +175,10 @@ class IntaSendService {
     String? phoneNumber,
     Map<String, dynamic>? metadata,
   }) async {
+    // Generate unique payment ID
+    final paymentId = FirebasePaymentService.generatePaymentId();
+    print('🆔 Generated Payment ID: $paymentId');
+    
     // Step 1: Create checkout session
     final checkoutResult = await createCheckout(
       amount: amount,
@@ -174,33 +191,101 @@ class IntaSendService {
     );
 
     if (!checkoutResult['success']) {
+      // Store failed payment initiation
+      await FirebasePaymentService.markPaymentFailed(
+        paymentId: paymentId,
+        errorReason: 'Checkout creation failed',
+        errorDetails: checkoutResult,
+      );
       return checkoutResult;
     }
 
-    // Step 2: Launch checkout URL
     final checkoutUrl = checkoutResult['checkout_url'];
+    final responseData = checkoutResult['data'];
+    
+    // Extract IntaSend checkout ID from response
+    String intaSendCheckoutId = '';
+    if (responseData != null) {
+      intaSendCheckoutId = responseData['id']?.toString() ?? 
+                          responseData['checkout_id']?.toString() ??
+                          responseData['reference']?.toString() ?? 
+                          'unknown';
+    }
+    
     if (checkoutUrl != null) {
+      // Step 2: Store payment initiation in Firebase
+      print('💾 Storing payment initiation in Firebase...');
+      final storeResult = await FirebasePaymentService.storePaymentInitiation(
+        paymentId: paymentId,
+        amount: amount,
+        currency: currency,
+        email: email,
+        firstName: firstName ?? '',
+        lastName: lastName ?? '',
+        checkoutUrl: checkoutUrl,
+        intaSendCheckoutId: intaSendCheckoutId,
+        additionalData: {
+          'phone_number': phoneNumber,
+          'intasend_response': responseData,
+          'test_mode': isTestMode,
+          if (metadata != null) 'custom_metadata': metadata,
+        },
+      );
+      
+      if (storeResult['success']) {
+        print('✅ Payment data stored successfully in Firebase');
+      } else {
+        print('⚠️ Warning: Failed to store payment data: ${storeResult['error']}');
+      }
+      
+      // Step 3: Launch checkout URL
       final launched = await launchCheckout(checkoutUrl);
       
       if (launched) {
+        // Step 4: Mark payment link as opened in Firebase
+        print('🔗 Updating payment status to "link_opened" in Firebase...');
+        await FirebasePaymentService.markPaymentLinkOpened(
+          paymentId: paymentId,
+          additionalData: {
+            'launch_method': 'automatic',
+            'user_agent': 'mobile_app',
+          },
+        );
+        
         return {
           'success': true,
           'message': 'Checkout launched successfully',
           'checkout_url': checkoutUrl,
+          'payment_id': paymentId,
           'data': checkoutResult['data'],
         };
       } else {
+        // Even if launch failed, we still have a valid checkout URL
+        // User can copy and open manually
+        print('⚠️ Launch failed, but checkout URL is available for manual use');
+        
         return {
-          'success': false,
-          'error': 'Failed to launch checkout URL',
+          'success': true, // Still success because checkout was created
+          'message': 'Checkout URL created (manual launch required)',
           'checkout_url': checkoutUrl,
+          'payment_id': paymentId,
+          'launch_failed': true,
+          'data': checkoutResult['data'],
         };
       }
     }
 
+    // No checkout URL received - mark as failed
+    await FirebasePaymentService.markPaymentFailed(
+      paymentId: paymentId,
+      errorReason: 'No checkout URL received from IntaSend',
+      errorDetails: checkoutResult,
+    );
+    
     return {
       'success': false,
       'error': 'No checkout URL received from IntaSend',
+      'payment_id': paymentId,
     };
   }
 
