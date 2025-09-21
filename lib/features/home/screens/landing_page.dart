@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:pretium/features/send_money/screens/send_money_page.dart';
 import '/widgets/header_widget.dart';
 import '/widgets/wallet_card.dart';
 import '/widgets/financial_service.dart';
@@ -90,7 +91,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
               onPressed: () => _onItemTapped(0),
             ),
             GestureDetector(
-              onTap: () => _onItemTapped(1),
+              onTap: () {
+                _onItemTapped(1);
+                Navigator.of(context).push(
+                  MaterialPageRoute(builder: (context) => const SendMoneyPage()),
+                );
+              },
               child: Container(
                 decoration: BoxDecoration(
                   color: primary,
@@ -104,7 +110,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ],
                 ),
                 padding: const EdgeInsets.all(12),
-                child: const Icon(Icons.qr_code, color: Colors.white, size: 28),
+                child: const FaIcon(FontAwesomeIcons.paperPlane, color: Colors.white, size: 24),
               ),
             ),
             IconButton(

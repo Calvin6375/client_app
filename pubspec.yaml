@@ -48,6 +48,7 @@ dependencies:
   http: ^0.13.4
   url_launcher: ^6.2.1
   # intasend_flutter: ^0.0.2  # Using custom HTTP implementation instead
+  confetti: ^0.7.0
 
 dev_dependencies:
   flutter_test:

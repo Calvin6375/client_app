@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:pretium/features/swap/widgets/currency_picker_bottom_sheet.dart';
+import 'package:confetti/confetti.dart';
 import 'package:pretium/features/swap/services/rates_service.dart';
 
 class SwapPage extends StatefulWidget {
@@ -9,466 +9,488 @@ class SwapPage extends StatefulWidget {
   State<SwapPage> createState() => _SwapPageState();
 }
 
+enum _SwapStep { input, confirmation, success }
+
 class _SwapPageState extends State<SwapPage> {
-  final TextEditingController _fromCtrl = TextEditingController(text: '50000');
+  _SwapStep _step = _SwapStep.input;
+
+  // State for the swap flow
+  final _rates = RatesService();
+  final _fromCtrl = TextEditingController(text: '100000');
   String _fromCurrency = 'NGN';
   String _toCurrency = 'USD';
-  double _rate =
-      740; // NGN per 1 USD (demo / will be overridden by RatesService)
-  double _feeNgn = 200; // flat fee in NGN (demo)
+  double _balance = 250000; // Mock balance in NGN
+  late double _rate;
 
-  final _rates = RatesService();
+  void _swapCurrencies() {
+    setState(() {
+      final temp = _fromCurrency;
+      _fromCurrency = _toCurrency;
+      _toCurrency = temp;
+      // In a real app, you'd also refetch the rate here
+    });
+  }
 
-  double get _fromAmountNgn =>
-      double.tryParse(_fromCtrl.text.replaceAll(',', '')) ?? 0.0;
-  double get _toAmountUsd => (_fromAmountNgn - _feeNgn) / _rate;
+  void _nextStep() {
+    if (_step == _SwapStep.input) {
+      setState(() => _step = _SwapStep.confirmation);
+    } else if (_step == _SwapStep.confirmation) {
+      setState(() => _step = _SwapStep.success);
+      _showSuccessDialog();
+    }
+  }
+
+  void _previousStep() {
+    if (_step == _SwapStep.confirmation) {
+      setState(() => _step = _SwapStep.input);
+    }
+  }
+
+  late ConfettiController _confettiController;
 
   @override
   void initState() {
     super.initState();
+    _confettiController = ConfettiController(duration: const Duration(seconds: 1));
+    _rate = _rates.getRate(_fromCurrency, _toCurrency);
+
     // Listen to live rate updates
     _rates.ratesStream.listen((map) {
       setState(() {
-        _rate = _rates.getRate('NGN', 'USD');
+        _rate = _rates.getRate(_fromCurrency, _toCurrency);
       });
     });
   }
 
   @override
   void dispose() {
+    _confettiController.dispose();
+    _fromCtrl.dispose();
     _rates.dispose();
     super.dispose();
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final primary = Theme.of(context).colorScheme.primary;
-
-    return Scaffold(
-      backgroundColor: primary,
-      appBar: AppBar(
-        backgroundColor: primary,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.white),
-          onPressed: () => Navigator.of(context).pop(),
-        ),
-        title: const Text('Swap', style: TextStyle(color: Colors.white)),
-      ),
-      body: Column(
-        children: [
-          Expanded(
-            child: Container(
-              decoration: const BoxDecoration(
-                color: Color(0xFFF2F5F8),
-                borderRadius: BorderRadius.only(
-                  topLeft: Radius.circular(16),
-                  topRight: Radius.circular(16),
-                ),
-              ),
-              child: ListView(
-                padding: const EdgeInsets.all(16),
+  Future<void> _showSuccessDialog() async {
+    _confettiController.play();
+    await showDialog(
+      context: context,
+      builder: (context) {
+        final theme = Theme.of(context);
+        final primaryColor = theme.colorScheme.primary;
+        return Stack(
+          alignment: Alignment.topCenter,
+          children: [
+            AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              title: const Center(child: Text('Swap Successful')),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  _SwapCard(
-                    fromCtrl: _fromCtrl,
-                    fromCurrency: _fromCurrency,
-                    toCurrency: _toCurrency,
-                    toAmountText: _toAmountUsd.toStringAsFixed(3),
-                    onSwitch: () {
-                      setState(() {
-                        final tmp = _fromCurrency;
-                        _fromCurrency = _toCurrency;
-                        _toCurrency = tmp;
-                      });
-                    },
-                    onPickFrom: () => _showCurrencyPicker(true),
-                    onPickTo: () => _showCurrencyPicker(false),
-                  ),
+                  Icon(Icons.check_circle, color: primaryColor, size: 80),
                   const SizedBox(height: 16),
-                  _RatesAndFees(
-                    rateText: '₦${_rate.toStringAsFixed(0)} = \$1',
-                    feeText: '₦${_feeNgn.toStringAsFixed(0)}',
+                  const Text(
+                    'Check history for all transactions.',
+                    textAlign: TextAlign.center,
                   ),
                 ],
               ),
+              actions: [
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: () {
+                      Navigator.of(context).pop();
+                      setState(() => _step = _SwapStep.input);
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: primaryColor,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(30),
+                      ),
+                    ),
+                    child: const Text('Done', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  ),
+                ),
+              ],
             ),
+            ConfettiWidget(
+              confettiController: _confettiController,
+              blastDirectionality: BlastDirectionality.explosive,
+              shouldLoop: false,
+              colors: const [
+                Colors.green,
+                Colors.blue,
+                Colors.pink,
+                Colors.orange,
+                Colors.purple
+              ],
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Swap'),
+        leading: _step == _SwapStep.confirmation
+            ? IconButton(icon: const Icon(Icons.arrow_back), onPressed: _previousStep)
+            : null,
+      ),
+      body: IndexedStack(
+        index: _step.index,
+        children: [
+          _SwapInputScreen(
+            fromCtrl: _fromCtrl,
+            fromCurrency: _fromCurrency,
+            toCurrency: _toCurrency,
+            balance: _balance,
+            rate: _rate,
+            onSwapCurrencies: _swapCurrencies,
+            onNext: _nextStep,
           ),
-          _SlideToConfirm(
-            label: 'Slide to swap',
-            onCompleted: () => _showSuccess(context),
+          _SwapConfirmationScreen(
+            fromAmount: double.tryParse(_fromCtrl.text) ?? 0,
+            fromCurrency: _fromCurrency,
+            toAmount: (double.tryParse(_fromCtrl.text) ?? 0) * _rate,
+            toCurrency: _toCurrency,
+            rate: _rate,
+            onNext: _nextStep,
           ),
+          // Success is a dialog, so this is just a placeholder
+          const SizedBox.shrink(),
         ],
       ),
     );
   }
-
-  Future<void> _showCurrencyPicker(bool isFrom) async {
-    final list = const [
-      Currency(code: 'NGN', name: 'Nigerian Naira', flagEmoji: '🇳🇬'),
-      Currency(code: 'USD', name: 'US Dollar', flagEmoji: '🇺🇸'),
-      Currency(code: 'KES', name: 'Kenyan Shilling', flagEmoji: '🇰🇪'),
-      Currency(code: 'GHS', name: 'Ghanaian Cedi', flagEmoji: '🇬🇭'),
-    ];
-    final code = isFrom ? _fromCurrency : _toCurrency;
-    await showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder:
-          (_) => CurrencyPickerBottomSheet(
-            currencies: list,
-            selectedCode: code,
-            onSelected: (c) {
-              setState(() {
-                if (isFrom) {
-                  _fromCurrency = c.code;
-                } else {
-                  _toCurrency = c.code;
-                }
-                // Update rate for selected pair if we support it; fallback to NGNUSD for demo
-                if (_fromCurrency == 'NGN' && _toCurrency == 'USD') {
-                  _rate = _rates.getRate('NGN', 'USD');
-                } else if (_fromCurrency == 'USD' && _toCurrency == 'NGN') {
-                  _rate = 1 / _rates.getRate('NGN', 'USD');
-                } else {
-                  // simple fallback demo: convert via USD if needed
-                  _rate = _rates.getRate('NGN', 'USD');
-                }
-              });
-            },
-          ),
-    );
-  }
-
-  void _showSuccess(BuildContext context) {
-    final primary = Theme.of(context).colorScheme.primary;
-    showDialog(
-      context: context,
-      builder:
-          (_) => Dialog(
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 24, 16, 16),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    width: 72,
-                    height: 72,
-                    decoration: BoxDecoration(
-                      color: primary.withOpacity(0.12),
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(Icons.check_circle, color: primary, size: 56),
-                  ),
-                  const SizedBox(height: 12),
-                  const Text(
-                    'Swap Success',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'You received \$${_toAmountUsd.toStringAsFixed(3)}',
-                    style: const TextStyle(fontWeight: FontWeight.w600),
-                  ),
-                  const SizedBox(height: 16),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 48,
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: primary,
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(24),
-                        ),
-                      ),
-                      onPressed: () => Navigator.of(context).pop(),
-                      child: const Text('Back to home'),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-    );
-  }
 }
 
-class _SwapCard extends StatelessWidget {
+class _SwapInputScreen extends StatelessWidget {
+  final VoidCallback onNext;
   final TextEditingController fromCtrl;
   final String fromCurrency;
   final String toCurrency;
-  final String toAmountText;
-  final VoidCallback onSwitch;
-  final VoidCallback onPickFrom;
-  final VoidCallback onPickTo;
-  const _SwapCard({
+  final double balance;
+  final double rate;
+  final VoidCallback onSwapCurrencies;
+
+  const _SwapInputScreen({
+    required this.onNext,
     required this.fromCtrl,
     required this.fromCurrency,
     required this.toCurrency,
-    required this.toAmountText,
-    required this.onSwitch,
-    required this.onPickFrom,
-    required this.onPickTo,
+    required this.balance,
+    required this.rate,
+    required this.onSwapCurrencies,
   });
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final primary = theme.colorScheme.primary;
+    final primaryColor = theme.colorScheme.primary;
 
-    return Card(
-      elevation: 0,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      TextField(
-                        controller: fromCtrl,
-                        keyboardType: const TextInputType.numberWithOptions(
-                          decimal: true,
-                        ),
-                        style: const TextStyle(
-                          fontSize: 28,
-                          fontWeight: FontWeight.bold,
-                        ),
-                        decoration: const InputDecoration(
-                          border: InputBorder.none,
-                          hintText: '0',
-                        ),
-                        onChanged: (_) => (context as Element).markNeedsBuild(),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        '\$${(double.tryParse(fromCtrl.text) ?? 0) / 740}',
-                        style: const TextStyle(color: Colors.black54),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 12),
-                _CurrencyDropdown(code: fromCurrency, onTap: onPickFrom),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Center(
-              child: InkWell(
-                onTap: onSwitch,
-                borderRadius: BorderRadius.circular(24),
-                child: Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: primary.withOpacity(0.08),
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(Icons.swap_vert, color: primary),
-                ),
-              ),
-            ),
-            const SizedBox(height: 12),
-            Container(
+    return ListView(
+      padding: const EdgeInsets.all(16.0),
+      children: [
+        _SwapCurrencyCard(
+          label: 'You Send',
+          currency: fromCurrency,
+          balance: balance,
+          controller: fromCtrl,
+          onCurrencyTap: () { /* TODO: Show currency picker */ },
+        ),
+        const SizedBox(height: 8),
+        Center(
+          child: IconButton(
+            icon: Icon(Icons.swap_vert, color: primaryColor, size: 32),
+            onPressed: onSwapCurrencies,
+            style: IconButton.styleFrom(
+              backgroundColor: primaryColor.withOpacity(0.1),
+              shape: const CircleBorder(),
               padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.grey.shade100,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          "You'll receive",
-                          style: TextStyle(color: Colors.black54),
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          '\$$toAmountText',
-                          style: const TextStyle(
-                            fontSize: 24,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  _CurrencyDropdown(code: toCurrency, onTap: onPickTo),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _CurrencyDropdown extends StatelessWidget {
-  final String code;
-  final VoidCallback onTap;
-  const _CurrencyDropdown({required this.code, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.grey.shade300),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const CircleAvatar(radius: 10, child: Icon(Icons.flag, size: 12)),
-            const SizedBox(width: 6),
-            Text(code, style: const TextStyle(fontWeight: FontWeight.w600)),
-            const SizedBox(width: 4),
-            const Icon(Icons.keyboard_arrow_down),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _RatesAndFees extends StatelessWidget {
-  final String rateText;
-  final String feeText;
-  const _RatesAndFees({required this.rateText, required this.feeText});
-
-  @override
-  Widget build(BuildContext context) {
-    Widget row(String title, String value, IconData icon) {
-      return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 4),
-        child: Row(
-          children: [
-            Icon(icon, size: 18, color: Colors.black54),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(title, style: const TextStyle(color: Colors.black87)),
-            ),
-            Text(value, style: const TextStyle(fontWeight: FontWeight.w600)),
-          ],
-        ),
-      );
-    }
-
-    return Card(
-      elevation: 0,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Padding(
-        padding: const EdgeInsets.all(8.0),
-        child: Column(
-          children: [
-            row('Transaction rate', rateText, Icons.tag),
-            row('Transaction fee', feeText, Icons.bolt),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _SlideToConfirm extends StatefulWidget {
-  final String label;
-  final VoidCallback onCompleted;
-  const _SlideToConfirm({required this.label, required this.onCompleted});
-
-  @override
-  State<_SlideToConfirm> createState() => _SlideToConfirmState();
-}
-
-class _SlideToConfirmState extends State<_SlideToConfirm> {
-  double _progress = 0.0;
-
-  @override
-  Widget build(BuildContext context) {
-    final primary = Theme.of(context).colorScheme.primary;
-    return SafeArea(
-      top: false,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-        child: GestureDetector(
-          onHorizontalDragUpdate: (d) {
-            final width = MediaQuery.of(context).size.width - 32;
-            setState(() {
-              _progress = (_progress + d.delta.dx / width).clamp(0.0, 1.0);
-            });
-          },
-          onHorizontalDragEnd: (_) {
-            if (_progress > 0.85) {
-              widget.onCompleted();
-              setState(() => _progress = 0.0);
-            } else {
-              setState(() => _progress = 0.0);
-            }
-          },
-          child: Container(
-            height: 56,
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.7),
-              borderRadius: BorderRadius.circular(28),
-            ),
-            child: Stack(
-              children: [
-                Align(
-                  alignment: Alignment.center,
-                  child: Text(
-                    widget.label,
-                    style: TextStyle(
-                      color: Colors.grey[800],
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-                LayoutBuilder(
-                  builder: (context, c) {
-                    final knobSize = 48.0;
-                    final x = (_progress * (c.maxWidth - knobSize)).clamp(
-                      4.0,
-                      c.maxWidth - knobSize - 4.0,
-                    );
-                    return Positioned(
-                      left: x,
-                      top: 4,
-                      child: Container(
-                        width: knobSize,
-                        height: knobSize,
-                        decoration: BoxDecoration(
-                          color: primary,
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(
-                          Icons.double_arrow,
-                          color: Colors.white,
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              ],
             ),
           ),
         ),
+        const SizedBox(height: 8),
+        _SwapCurrencyCard(
+          label: 'You Receive',
+          currency: toCurrency,
+          balance: 4.42,
+          // Calculate received amount based on rate
+          amount: (double.tryParse(fromCtrl.text) ?? 0) * rate,
+          onCurrencyTap: () { /* TODO: Show currency picker */ },
+        ),
+        const SizedBox(height: 24),
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.grey.withOpacity(0.1),
+                spreadRadius: 1,
+                blurRadius: 10,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Column(
+            children: [
+              _TransactionDetailRow(
+                label: 'Exchange Rate',
+                value: '1 $fromCurrency = $rate $toCurrency',
+              ),
+              const _TransactionDetailRow(label: 'Network Fee', value: '0.2%'),
+              const _TransactionDetailRow(label: 'Service Fee', value: '0.2%'),
+              const _TransactionDetailRow(label: 'Price Impact', value: '0.42%'),
+            ],
+          ),
+        ),
+        const SizedBox(height: 24),
+        ElevatedButton(
+          onPressed: onNext,
+          style: ElevatedButton.styleFrom(
+            padding: const EdgeInsets.symmetric(vertical: 16),
+            backgroundColor: primaryColor,
+            foregroundColor: Colors.white,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(30),
+            ),
+          ),
+          child: const Text(
+            'Confirm and Swap',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _SwapCurrencyCard extends StatelessWidget {
+  final String label;
+  final String currency;
+  final double balance;
+  final TextEditingController? controller;
+  final double? amount; // Used for the "You Receive" card
+  final VoidCallback onCurrencyTap;
+
+  const _SwapCurrencyCard({
+    required this.label,
+    required this.currency,
+    required this.balance,
+    this.controller,
+    this.amount,
+    required this.onCurrencyTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.withOpacity(0.1),
+            spreadRadius: 1,
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(label, style: const TextStyle(color: Colors.grey)),
+              Text('Balance: $balance', style: const TextStyle(color: Colors.grey)),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              GestureDetector(
+                onTap: onCurrencyTap,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade100,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Row(
+                    children: [
+                      // TODO: Add currency icon
+                      const Icon(Icons.currency_bitcoin, size: 20),
+                      const SizedBox(width: 8),
+                      Text(currency, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                      const Icon(Icons.keyboard_arrow_down, size: 20),
+                    ],
+                  ),
+                ),
+              ),
+              const Spacer(),
+              if (controller != null)
+                Expanded(
+                  child: TextField(
+                    controller: controller,
+                    textAlign: TextAlign.end,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+                    decoration: const InputDecoration(
+                      border: InputBorder.none,
+                      hintText: '0.00',
+                    ),
+                  ),
+                )
+              else
+                Text(
+                  amount?.toStringAsFixed(5) ?? '0.00',
+                  style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TransactionDetailRow extends StatelessWidget {
+  final String label;
+  final String value;
+
+  const _TransactionDetailRow({required this.label, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8.0),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label, style: const TextStyle(color: Colors.grey)),
+          Text(value, style: const TextStyle(fontWeight: FontWeight.w500)),
+        ],
+      ),
+    );
+  }
+}
+
+class _SwapConfirmationScreen extends StatelessWidget {
+  final VoidCallback onNext;
+  final double fromAmount;
+  final String fromCurrency;
+  final double toAmount;
+  final String toCurrency;
+  final double rate;
+
+  const _SwapConfirmationScreen({
+    required this.onNext,
+    required this.fromAmount,
+    required this.fromCurrency,
+    required this.toAmount,
+    required this.toCurrency,
+    required this.rate,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final primaryColor = theme.colorScheme.primary;
+
+    return Padding(
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        children: [
+          const Text('Swap Details', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 24),
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.grey.withOpacity(0.1),
+                  spreadRadius: 1,
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: Column(
+              children: [
+                _DetailItem(label: 'From', amount: fromAmount, currency: fromCurrency),
+                const Divider(height: 32),
+                _DetailItem(label: 'To', amount: toAmount, currency: toCurrency, isReceiving: true),
+              ],
+            ),
+          ),
+          const SizedBox(height: 24),
+          _TransactionDetailRow(label: 'Rate', value: '1 $fromCurrency = $rate $toCurrency'),
+          const _TransactionDetailRow(label: 'Minimum received', value: '0.1470ETH'),
+          const _TransactionDetailRow(label: 'Slippage tolerance', value: '1.5%'),
+          const _TransactionDetailRow(label: 'Network fee', value: '\$0.3'),
+          const _TransactionDetailRow(label: 'Price impact', value: '-0.22'),
+          const Spacer(),
+          ElevatedButton(
+            onPressed: onNext,
+            style: ElevatedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              backgroundColor: primaryColor,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(30),
+              ),
+              minimumSize: const Size(double.infinity, 50),
+            ),
+            child: const Text('Confirm Swap', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DetailItem extends StatelessWidget {
+  final String label;
+  final double amount;
+  final String currency;
+  final bool isReceiving;
+
+  const _DetailItem({
+    required this.label,
+    required this.amount,
+    required this.currency,
+    this.isReceiving = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Text(label, style: const TextStyle(color: Colors.grey, fontSize: 16)),
+        const Spacer(),
+        Text(
+          '${isReceiving ? '' : '-'}${amount.toStringAsFixed(5)}',
+          style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(width: 8),
+        // TODO: Add currency icon
+        const Icon(Icons.currency_bitcoin, size: 20),
+        const SizedBox(width: 4),
+        Text(currency, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500)),
+      ],
     );
   }
 }

@@ -6,6 +6,8 @@ class RatesService {
   final Map<String, double> _pairToRate = {
     'NGNUSD': 740.0, // NGN per 1 USD
     'USDNGN': 1 / 740.0, // USD per 1 NGN
+    'KESNGN': 1 / 12.0, // KES per 1 NGN
+    'NGNKES': 120.0, // NGN per 1 KES
   };
 
   final StreamController<Map<String, double>> _controller = StreamController.broadcast();

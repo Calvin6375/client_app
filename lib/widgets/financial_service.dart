@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:pretium/features/send_money/screens/send_money_page.dart';
 
 class FinancialServices extends StatelessWidget {
   const FinancialServices({super.key});
@@ -54,13 +55,24 @@ class FinancialServices extends StatelessWidget {
                 context,
                 FontAwesomeIcons.paperPlane,
                 "Send Money",
+                () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(builder: (context) => const SendMoneyPage()),
+                  );
+                },
               ),
               _buildServiceItem(
                 context,
                 FontAwesomeIcons.shoppingBasket,
                 "Buy Goods",
+                () => _showComingSoonDialog(context),
               ),
-              _buildServiceItem(context, FontAwesomeIcons.receipt, "Paybill"),
+              _buildServiceItem(
+                context, 
+                FontAwesomeIcons.receipt, 
+                "Paybill",
+                () => _showComingSoonDialog(context),
+              ),
             ],
           ),
           const SizedBox(height: 16),
@@ -68,7 +80,12 @@ class FinancialServices extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.start,
             children: [
-              _buildServiceItem(context, Icons.phone_android, "Airtime"),
+              _buildServiceItem(
+                context, 
+                Icons.phone_android, 
+                "Airtime",
+                () => _showComingSoonDialog(context),
+              ),
             ],
           ),
           const SizedBox(height: 8),
@@ -78,8 +95,10 @@ class FinancialServices extends StatelessWidget {
   }
 
   // Pass BuildContext so we can access Theme.of(context)
-  Widget _buildServiceItem(BuildContext context, IconData icon, String label) {
-    return Column(
+  Widget _buildServiceItem(BuildContext context, IconData icon, String label, [VoidCallback? onTap]) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Column(
       children: [
         CircleAvatar(
           backgroundColor: Theme.of(
@@ -102,6 +121,26 @@ class FinancialServices extends StatelessWidget {
         SizedBox(height: 8),
         Text(label, style: TextStyle(fontSize: 12)),
       ],
+    ),);
+  }
+
+  void _showComingSoonDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text("Coming Soon"),
+          content: const Text("This feature is under development."),
+          actions: <Widget>[
+            TextButton(
+              child: const Text("OK"),
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+            ),
+          ],
+        );
+      },
     );
   }
 }
