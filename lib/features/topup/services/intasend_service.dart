@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
+import 'package:pretium/core/constants/app_strings.dart';
+import 'package:pretium/models/wallet_model.dart';
 import 'package:pretium/services/firebase_payment_service.dart';
 
 /// Custom IntaSend service using HTTP API calls
@@ -18,6 +20,29 @@ class IntaSendService {
   });
 
   String get _baseUrl => isTestMode ? _baseUrlTest : _baseUrlLive;
+
+  /// Fetch latest wallet balance for a given userId from backend
+  Future<Wallet> fetchWalletBalance(String userId) async {
+    final url = Uri.parse('$kBackendBaseUrl/wallet/balance/$userId');
+    try {
+      final response = await http.get(
+        url,
+        headers: const {
+          'Accept': 'application/json',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final Map<String, dynamic> data = json.decode(response.body);
+        return Wallet.fromJson(data);
+      }
+
+      // Non-200: try to parse body for details and throw
+      throw Exception('Failed to fetch balance: ${response.statusCode} ${response.body}');
+    } catch (e) {
+      throw Exception('Network error fetching balance: $e');
+    }
+  }
 
   /// Create a checkout session using IntaSend API
   Future<Map<String, dynamic>> createCheckout({

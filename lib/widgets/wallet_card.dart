@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:pretium/app/route_names.dart';
 import 'package:pretium/models/wallet_model.dart';
+import 'package:pretium/features/topup/services/intasend_service.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class WalletCard extends StatefulWidget {
   const WalletCard({super.key});
@@ -10,33 +12,75 @@ class WalletCard extends StatefulWidget {
 }
 
 class _WalletCardState extends State<WalletCard> {
-  final _wallets = [
-    Wallet(currencyCode: 'KES', balance: 12050.75),
-    Wallet(currencyCode: 'USD', balance: 350.50),
-    Wallet(currencyCode: 'NGN', balance: 150000.00),
-    Wallet(currencyCode: 'GBP', balance: 85.20),
-  ];
-
   int _currentPage = 0;
+  late final IntaSendService _service;
+  Wallet? _wallet;
+  bool _loading = false;
+  String? _error;
+  DateTime? _lastRefreshedAt;
+  
+  @override
+  void initState() {
+    super.initState();
+    _service = IntaSendService(publicKey: 'public-key-not-used-here');
+    _refreshBalance();
+    // Auto-refresh every 60s
+    Future.doWhile(() async {
+      await Future.delayed(const Duration(seconds: 60));
+      if (!mounted) return false;
+      await _refreshBalance(silent: true);
+      return mounted;
+    });
+  }
+
+  Future<void> _refreshBalance({bool silent = false}) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+    if (!silent) setState(() { _loading = true; _error = null; });
+    try {
+      final latest = await _service.fetchWalletBalance(user.uid);
+      if (!mounted) return;
+      setState(() {
+        _wallet = latest;
+        _lastRefreshedAt = DateTime.now();
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() { _error = e.toString(); });
+    } finally {
+      if (!mounted) return;
+      if (!silent) setState(() { _loading = false; });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
+    final wallets = _wallet != null ? [_wallet!] : [Wallet(currencyCode: 'KES', balance: 0.0)];
     return Column(
       children: [
         SizedBox(
           height: 250,
           child: PageView.builder(
-            itemCount: _wallets.length,
+            itemCount: wallets.length,
             onPageChanged: (index) => setState(() => _currentPage = index),
             itemBuilder: (context, index) {
-              return _SingleWalletCard(wallet: _wallets[index]);
+              return _SingleWalletCard(
+                wallet: wallets[index],
+                loading: _loading,
+                error: _error,
+                onRefresh: _refreshBalance,
+                onTopUpCompleted: () async {
+                  await _refreshBalance();
+                },
+                lastRefreshedAt: _lastRefreshedAt,
+              );
             },
           ),
         ),
         const SizedBox(height: 12),
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
-          children: List.generate(_wallets.length, (index) {
+          children: List.generate(wallets.length, (index) {
             return Container(
               width: 8,
               height: 8,
@@ -55,7 +99,12 @@ class _WalletCardState extends State<WalletCard> {
 
 class _SingleWalletCard extends StatelessWidget {
   final Wallet wallet;
-  const _SingleWalletCard({required this.wallet});
+  final bool loading;
+  final String? error;
+  final Future<void> Function() onRefresh;
+  final Future<void> Function() onTopUpCompleted;
+  final DateTime? lastRefreshedAt;
+  const _SingleWalletCard({required this.wallet, this.loading = false, this.error, required this.onRefresh, required this.onTopUpCompleted, this.lastRefreshedAt});
 
   @override
   Widget build(BuildContext context) {
@@ -80,14 +129,26 @@ class _SingleWalletCard extends StatelessWidget {
         children: [
           const Text("Wallet Balance", style: TextStyle(color: Colors.white70)),
           const SizedBox(height: 4),
-          Text(
-            "${wallet.currencyCode} ${wallet.balance.toStringAsFixed(2)}",
-            style: const TextStyle(
-              fontSize: 24,
-              color: Colors.white,
-              fontWeight: FontWeight.bold,
+          if (loading)
+            const SizedBox(height: 28, width: 28, child: CircularProgressIndicator(color: Colors.white))
+          else if (error != null)
+            Text(error!, style: const TextStyle(color: Colors.white))
+          else
+            Text(
+              "${wallet.currencyCode} ${wallet.balance.toStringAsFixed(2)}",
+              style: const TextStyle(
+                fontSize: 24,
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+              ),
             ),
-          ),
+          if (lastRefreshedAt != null) ...[
+            const SizedBox(height: 6),
+            Text(
+              'Updated ${TimeOfDay.fromDateTime(lastRefreshedAt!).format(context)}',
+              style: const TextStyle(color: Colors.white70, fontSize: 12),
+            ),
+          ],
           const Spacer(),
           Row(
             children: [
@@ -98,7 +159,10 @@ class _SingleWalletCard extends StatelessWidget {
                     foregroundColor: primary,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
-                  onPressed: () => Navigator.of(context).pushNamed(RouteNames.topup),
+                  onPressed: () async {
+                    await Navigator.of(context).pushNamed(RouteNames.topup);
+                    await onTopUpCompleted();
+                  },
                   icon: const Icon(Icons.add_circle_outline),
                   label: const Text('Top Up'),
                 ),
@@ -115,6 +179,12 @@ class _SingleWalletCard extends StatelessWidget {
                   icon: const Icon(Icons.swap_horiz),
                   label: const Text('Swap'),
                 ),
+              ),
+              const SizedBox(width: 12),
+              IconButton(
+                onPressed: loading ? null : onRefresh,
+                icon: const Icon(Icons.refresh, color: Colors.white),
+                tooltip: 'Refresh Balance',
               ),
             ],
           ),
