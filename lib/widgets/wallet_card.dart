@@ -132,7 +132,12 @@ class _SingleWalletCard extends StatelessWidget {
           if (loading)
             const SizedBox(height: 28, width: 28, child: CircularProgressIndicator(color: Colors.white))
           else if (error != null)
-            Text(error!, style: const TextStyle(color: Colors.white))
+            Text(
+              error!,
+              style: const TextStyle(color: Colors.white),
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+            )
           else
             Text(
               "${wallet.currencyCode} ${wallet.balance.toStringAsFixed(2)}",

@@ -1,8 +1,9 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
-import 'package:pretium/core/constants/app_strings.dart';
 import 'package:pretium/models/wallet_model.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_database/firebase_database.dart';
 import 'package:pretium/services/firebase_payment_service.dart';
 
 /// Custom IntaSend service using HTTP API calls
@@ -23,26 +24,27 @@ class IntaSendService {
 
   /// Fetch latest wallet balance for a given userId from backend
   Future<Wallet> fetchWalletBalance(String userId) async {
-    final url = Uri.parse('$kBackendBaseUrl/wallet/balance/$userId');
-    try {
-      final response = await http.get(
-        url,
-        headers: const {
-          'Accept': 'application/json',
-        },
-      );
+    final authUserId = FirebaseAuth.instance.currentUser!.uid;
+    print('📡 Reading wallet balance for auth user: $authUserId (param: $userId)');
 
-      if (response.statusCode == 200) {
-        final Map<String, dynamic> data = json.decode(response.body);
+    try {
+      final balanceRef = FirebaseDatabase.instance.ref().child('wallet/balance/$authUserId');
+      final snapshot = await balanceRef.get();
+
+      if (snapshot.exists && snapshot.value != null) {
+        final data = Map<String, dynamic>.from(snapshot.value as Map);
+        print('✅ Wallet balance snapshot: $data');
         return Wallet.fromJson(data);
       }
 
-      // Non-200: try to parse body for details and throw
-      throw Exception('Failed to fetch balance: ${response.statusCode} ${response.body}');
+      print('🚨 No wallet balance data for user: $authUserId');
+      throw Exception('No wallet balance found');
     } catch (e) {
-      throw Exception('Network error fetching balance: $e');
+      print('🚨 Error fetching wallet balance: $e');
+      rethrow;
     }
   }
+
 
   /// Create a checkout session using IntaSend API
   Future<Map<String, dynamic>> createCheckout({
