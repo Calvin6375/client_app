@@ -9,7 +9,7 @@ plugins {
 android {
     namespace = "com.example.pretium_mock"
     compileSdk = flutter.compileSdkVersion
-    ndkVersion = "27.0.12077973"  // Align with plugin requirements
+    // ndkVersion = "26.3.11579264"  // Align with plugin requirements - commented out to let AGP choose
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
@@ -25,7 +25,7 @@ android {
         applicationId = "com.example.pretium_mock"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
-        minSdk = 23  // Updated to meet NDK requirements and Firebase compatibility
+        minSdk = flutter.minSdkVersion  // Updated to meet NDK requirements and Firebase compatibility
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
