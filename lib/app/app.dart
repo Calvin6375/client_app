@@ -10,7 +10,7 @@ class PretiumApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Pretium Mock',
+      title: 'TruePay',
       debugShowCheckedModeBanner: false,
       initialRoute: RouteNames.splash,
       routes: {
@@ -23,4 +23,4 @@ class PretiumApp extends StatelessWidget {
     );
   }
 }
-// This is the main entry point of the Pretium Mock application.
+// This is the main entry point of the TruePay application.

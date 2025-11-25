@@ -5,6 +5,7 @@ import 'package:pretium/features/auth/widgets/wallet_icon_header.dart';
 import 'package:pretium/features/auth/widgets/welcome_text_section.dart';
 import 'package:pretium/features/home/screens/landing_page.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class LoginPage extends StatefulWidget {
@@ -270,6 +271,23 @@ class _LoginScreenState extends State<LoginPage> {
 
                             setState(() => _isLoading = true);
                             try {
+                              // Check if Firebase is initialized
+                              try {
+                                Firebase.app();
+                              } catch (e) {
+                                if (mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text(
+                                        'Firebase not configured. Please add GoogleService-Info.plist file.',
+                                      ),
+                                      duration: Duration(seconds: 4),
+                                    ),
+                                  );
+                                }
+                                return;
+                              }
+
                               await FirebaseAuth.instance
                                   .signInWithEmailAndPassword(
                                     email: email,
@@ -293,13 +311,20 @@ class _LoginScreenState extends State<LoginPage> {
                                 message = 'Wrong password';
                               if (code == 'invalid-email')
                                 message = 'Invalid email';
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(content: Text('$message ($code)')),
-                              );
+                              if (mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text('$message ($code)')),
+                                );
+                              }
                             } catch (e) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(content: Text('Login failed: $e')),
-                              );
+                              if (mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text('Login failed: ${e.toString()}'),
+                                    duration: const Duration(seconds: 4),
+                                  ),
+                                );
+                              }
                             } finally {
                               if (mounted) setState(() => _isLoading = false);
                             }

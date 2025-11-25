@@ -1,6 +1,6 @@
 {
-    "name": "pretium",
-    "short_name": "pretium",
+    "name": "TruePay",
+    "short_name": "TruePay",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",

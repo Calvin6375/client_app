@@ -3,6 +3,7 @@ import 'package:pretium/app/route_names.dart';
 import 'package:pretium/models/wallet_model.dart';
 import 'package:pretium/features/topup/services/intasend_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
 
 class WalletCard extends StatefulWidget {
   const WalletCard({super.key});
@@ -19,25 +20,40 @@ class _WalletCardState extends State<WalletCard> {
   String? _error;
   DateTime? _lastRefreshedAt;
   
+  bool _isFirebaseInitialized() {
+    try {
+      Firebase.app();
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
   @override
   void initState() {
     super.initState();
     _service = IntaSendService(publicKey: 'public-key-not-used-here');
-    _refreshBalance();
-    // Auto-refresh every 60s
-    Future.doWhile(() async {
-      await Future.delayed(const Duration(seconds: 60));
-      if (!mounted) return false;
-      await _refreshBalance(silent: true);
-      return mounted;
-    });
+    if (_isFirebaseInitialized()) {
+      _refreshBalance();
+      // Auto-refresh every 60s
+      Future.doWhile(() async {
+        await Future.delayed(const Duration(seconds: 60));
+        if (!mounted) return false;
+        await _refreshBalance(silent: true);
+        return mounted;
+      });
+    }
   }
 
   Future<void> _refreshBalance({bool silent = false}) async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return;
-    if (!silent) setState(() { _loading = true; _error = null; });
+    if (!_isFirebaseInitialized()) return;
+    
     try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) return;
+      
+      if (!silent) setState(() { _loading = true; _error = null; });
+      
       final latest = await _service.fetchWalletBalance(user.uid);
       if (!mounted) return;
       setState(() {
@@ -46,7 +62,11 @@ class _WalletCardState extends State<WalletCard> {
       });
     } catch (e) {
       if (!mounted) return;
-      setState(() { _error = e.toString(); });
+      setState(() { 
+        // Truncate error message to prevent overflow
+        final errorMsg = e.toString();
+        _error = errorMsg.length > 100 ? '${errorMsg.substring(0, 100)}...' : errorMsg;
+      });
     } finally {
       if (!mounted) return;
       if (!silent) setState(() { _loading = false; });
@@ -132,11 +152,16 @@ class _SingleWalletCard extends StatelessWidget {
           if (loading)
             const SizedBox(height: 28, width: 28, child: CircularProgressIndicator(color: Colors.white))
           else if (error != null)
-            Text(
-              error!,
-              style: const TextStyle(color: Colors.white),
-              maxLines: 3,
-              overflow: TextOverflow.ellipsis,
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 60),
+              child: SingleChildScrollView(
+                child: Text(
+                  error!,
+                  style: const TextStyle(color: Colors.white, fontSize: 12),
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
             )
           else
             Text(

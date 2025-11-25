@@ -1,12 +1,54 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 
 class HeaderWidget extends StatelessWidget {
   const HeaderWidget({super.key});
 
+  bool _isFirebaseInitialized() {
+    try {
+      Firebase.app();
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    // Check if Firebase is initialized before accessing FirebaseAuth
+    if (!_isFirebaseInitialized()) {
+      final primary = Theme.of(context).colorScheme.primary;
+      return Row(
+        children: [
+          CircleAvatar(
+            backgroundColor: Colors.white,
+            child: Text(
+              'U',
+              style: TextStyle(
+                color: primary,
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          const Expanded(
+            child: Text(
+              'Hello 👋',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ),
+        ],
+      );
+    }
+
     final user = FirebaseAuth.instance.currentUser;
 
     // If no user is logged in, show a simple placeholder header
@@ -42,12 +84,81 @@ class HeaderWidget extends StatelessWidget {
     }
 
     final uid = user.uid;
-    final userDocStream =
-        FirebaseFirestore.instance.collection('users').doc(uid).snapshots();
+    
+    // Wrap Firestore access in try-catch to handle errors gracefully
+    Stream<DocumentSnapshot<Map<String, dynamic>>>? userDocStream;
+    try {
+      userDocStream = FirebaseFirestore.instance.collection('users').doc(uid).snapshots();
+    } catch (e) {
+      // If Firestore fails, show default UI
+      final primary = Theme.of(context).colorScheme.primary;
+      return Row(
+        children: [
+          CircleAvatar(
+            backgroundColor: Colors.white,
+            child: Text(
+              (user.email?.isNotEmpty ?? false) ? user.email![0].toUpperCase() : 'U',
+              style: TextStyle(
+                color: primary,
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              user.email?.isNotEmpty ?? false 
+                  ? 'Hello, ${user.email!.split('@').first} 👋'
+                  : 'Hello 👋',
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ),
+        ],
+      );
+    }
 
     return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
       stream: userDocStream,
       builder: (context, snapshot) {
+        // Handle errors in the stream
+        if (snapshot.hasError) {
+          final primary = Theme.of(context).colorScheme.primary;
+          return Row(
+            children: [
+              CircleAvatar(
+                backgroundColor: Colors.white,
+                child: Text(
+                  (user.email?.isNotEmpty ?? false) ? user.email![0].toUpperCase() : 'U',
+                  style: TextStyle(
+                    color: primary,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  user.email?.isNotEmpty ?? false 
+                      ? 'Hello, ${user.email!.split('@').first} 👋'
+                      : 'Hello 👋',
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            ],
+          );
+        }
         String firstName = '';
         String lastName = '';
         String email = user.email ?? '';
@@ -62,7 +173,7 @@ class HeaderWidget extends StatelessWidget {
 
         final displayName =
             (firstName.isNotEmpty
-                    ? firstName
+                    ? lastName.isNotEmpty ? '$firstName $lastName' : firstName
                     : (email.isNotEmpty ? email.split('@').first : ''))
                 .trim();
         final avatarInitial =

@@ -11,7 +11,24 @@ import 'package:pretium/app/route_names.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp(); // Uses platform configs (GoogleService-Info.plist / google-services.json)
+  
+  // Initialize Firebase with error handling
+  try {
+    await Firebase.initializeApp();
+  } catch (e) {
+    debugPrint('Firebase initialization error: $e');
+    debugPrint('');
+    debugPrint('⚠️  FIREBASE SETUP REQUIRED:');
+    debugPrint('For iOS: Download GoogleService-Info.plist from Firebase Console');
+    debugPrint('1. Go to https://console.firebase.google.com/');
+    debugPrint('2. Select project: rukiziafrica-ae219');
+    debugPrint('3. Add iOS app (if not added) with bundle ID: com.example.pretiumMock');
+    debugPrint('4. Download GoogleService-Info.plist');
+    debugPrint('5. Place it in: ios/Runner/GoogleService-Info.plist');
+    debugPrint('');
+    debugPrint('App will continue but Firebase features may not work.');
+  }
+  
   runApp(const MyApp());
 }
 
@@ -97,7 +114,7 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Pretium Mock',
+      title: 'TruePay',
       debugShowCheckedModeBanner: false,
       theme: _buildLightTheme(),
       darkTheme: _buildDarkTheme(),
