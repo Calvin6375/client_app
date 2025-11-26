@@ -1,36 +1,27 @@
 {
   "project_info": {
     "project_number": "241917597382",
+    "firebase_url": "https://truepay-72060-default-rtdb.firebaseio.com",
     "project_id": "truepay-72060",
     "storage_bucket": "truepay-72060.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:100976916568:android:81869f8dd301b400fc722d",
+        "mobilesdk_app_id": "1:241917597382:android:11278578d75ad12f4969c7",
         "android_client_info": {
           "package_name": "com.example.pretium_mock"
         }
       },
-      "oauth_client": [
-        {
-          "client_id": "100976916568-csmsrbnhhq4sabjjdbkf31phcp897nok.apps.googleusercontent.com",
-          "client_type": 3
-        }
-      ],
+      "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyAYR2BC12gAyTGFwZxUz0gJ9bHx7N26NOs"
+          "current_key": "AIzaSyAbkhQZp_sbiGsaWYsqUqdJErvFVnI-KBI"
         }
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": [
-            {
-              "client_id": "100976916568-csmsrbnhhq4sabjjdbkf31phcp897nok.apps.googleusercontent.com",
-              "client_type": 3
-            }
-          ]
+          "other_platform_oauth_client": []
         }
       }
     }
