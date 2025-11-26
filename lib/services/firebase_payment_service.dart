@@ -5,7 +5,7 @@ import 'package:firebase_core/firebase_core.dart';
 
 /// Service for managing payment data in Firebase Realtime Database
 class FirebasePaymentService {
-  static const String _databaseUrl = 'https://rukiziafrica-ae219-default-rtdb.firebaseio.com/';
+  static const String _databaseUrl = 'https://truepay-72060-default-rtdb.firebaseio.com/';
   
   static FirebaseDatabase? _database;
   

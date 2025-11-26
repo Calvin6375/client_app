@@ -9,15 +9,15 @@
 	<key>API_KEY</key>
 	<string>AIzaSyDONpP-O4sv-a5FZLXQtaikHCFq5MglKZk</string>
 	<key>GCM_SENDER_ID</key>
-	<string>100976916568</string>
+	<string>241917597382</string>
 	<key>PLIST_VERSION</key>
 	<string>1</string>
 	<key>BUNDLE_ID</key>
 	<string>com.example.pretiumMock</string>
 	<key>PROJECT_ID</key>
-	<string>rukiziafrica-ae219</string>
+	<string>truepay-72060</string>
 	<key>STORAGE_BUCKET</key>
-	<string>rukiziafrica-ae219.firebasestorage.app</string>
+	<string>truepay-72060.firebasestorage.app</string>
 	<key>IS_ADS_ENABLED</key>
 	<false></false>
 	<key>IS_ANALYTICS_ENABLED</key>
@@ -31,6 +31,6 @@
 	<key>GOOGLE_APP_ID</key>
 	<string>1:100976916568:ios:f7fd433757eab8b2fc722d</string>
 	<key>DATABASE_URL</key>
-	<string>https://rukiziafrica-ae219-default-rtdb.firebaseio.com</string>
+	<string>https://truepay-72060-default-rtdb.firebaseio.com</string>
 </dict>
 </plist>

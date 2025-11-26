@@ -21,7 +21,7 @@ Future<void> main() async {
     debugPrint('⚠️  FIREBASE SETUP REQUIRED:');
     debugPrint('For iOS: Download GoogleService-Info.plist from Firebase Console');
     debugPrint('1. Go to https://console.firebase.google.com/');
-    debugPrint('2. Select project: rukiziafrica-ae219');
+      debugPrint('2. Select project: truepay-72060');
     debugPrint('3. Add iOS app (if not added) with bundle ID: com.example.pretiumMock');
     debugPrint('4. Download GoogleService-Info.plist');
     debugPrint('5. Place it in: ios/Runner/GoogleService-Info.plist');
