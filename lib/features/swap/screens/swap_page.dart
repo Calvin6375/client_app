@@ -1,9 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:confetti/confetti.dart';
 import 'package:pretium/features/swap/services/rates_service.dart';
+import 'package:pretium/repositories/wallet_repository.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
 
 class SwapPage extends StatefulWidget {
-  const SwapPage({super.key});
+  final String? initialFromCurrency;
+  
+  const SwapPage({super.key, this.initialFromCurrency});
 
   @override
   State<SwapPage> createState() => _SwapPageState();
@@ -16,10 +21,13 @@ class _SwapPageState extends State<SwapPage> {
 
   // State for the swap flow
   final _rates = RatesService();
-  final _fromCtrl = TextEditingController(text: '100000');
-  String _fromCurrency = 'NGN';
-  String _toCurrency = 'USD';
-  double _balance = 250000; // Mock balance in NGN
+  final _walletRepository = WalletRepository();
+  final _fromCtrl = TextEditingController();
+  String _fromCurrency = 'USD';
+  String _toCurrency = 'USDT';
+  double _fromBalance = 0.0;
+  double _toBalance = 0.0;
+  bool _loadingBalances = true;
   late double _rate;
 
   void _swapCurrencies() {
@@ -27,7 +35,17 @@ class _SwapPageState extends State<SwapPage> {
       final temp = _fromCurrency;
       _fromCurrency = _toCurrency;
       _toCurrency = temp;
-      // In a real app, you'd also refetch the rate here
+      
+      // Swap balances
+      final tempBalance = _fromBalance;
+      _fromBalance = _toBalance;
+      _toBalance = tempBalance;
+      
+      // Clear input
+      _fromCtrl.clear();
+      
+      // Refetch rate
+      _rate = _rates.getRate(_fromCurrency, _toCurrency);
     });
   }
 
@@ -48,18 +66,74 @@ class _SwapPageState extends State<SwapPage> {
 
   late ConfettiController _confettiController;
 
+  bool _isFirebaseInitialized() {
+    try {
+      Firebase.app();
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   @override
   void initState() {
     super.initState();
     _confettiController = ConfettiController(duration: const Duration(seconds: 1));
+    
+    // Set initial currency from parameter or default
+    if (widget.initialFromCurrency != null) {
+      _fromCurrency = widget.initialFromCurrency!;
+      _toCurrency = _fromCurrency == 'USD' ? 'USDT' : 'USD';
+    }
+    
     _rate = _rates.getRate(_fromCurrency, _toCurrency);
+    _loadBalances();
 
     // Listen to live rate updates
     _rates.ratesStream.listen((map) {
-      setState(() {
-        _rate = _rates.getRate(_fromCurrency, _toCurrency);
-      });
+      if (mounted) {
+        setState(() {
+          _rate = _rates.getRate(_fromCurrency, _toCurrency);
+        });
+      }
     });
+  }
+
+  Future<void> _loadBalances() async {
+    if (!_isFirebaseInitialized()) {
+      setState(() => _loadingBalances = false);
+      return;
+    }
+
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) {
+        setState(() => _loadingBalances = false);
+        return;
+      }
+
+      setState(() => _loadingBalances = true);
+
+      // Load both wallets
+      final fiatWallet = await _walletRepository.getWalletBalance(user.uid);
+      final cryptoWallet = await _walletRepository.getCryptoWalletBalance(user.uid, 'USDT');
+
+      if (!mounted) return;
+
+      // Set balances based on current currencies
+      if (_fromCurrency == 'USD') {
+        _fromBalance = fiatWallet?.balance ?? 0.0;
+        _toBalance = cryptoWallet?.balance ?? 0.0;
+      } else {
+        _fromBalance = cryptoWallet?.balance ?? 0.0;
+        _toBalance = fiatWallet?.balance ?? 0.0;
+      }
+
+      setState(() => _loadingBalances = false);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _loadingBalances = false);
+    }
   }
 
   @override
@@ -149,8 +223,10 @@ class _SwapPageState extends State<SwapPage> {
             fromCtrl: _fromCtrl,
             fromCurrency: _fromCurrency,
             toCurrency: _toCurrency,
-            balance: _balance,
+            fromBalance: _fromBalance,
+            toBalance: _toBalance,
             rate: _rate,
+            loadingBalances: _loadingBalances,
             onSwapCurrencies: _swapCurrencies,
             onNext: _nextStep,
           ),
@@ -175,8 +251,10 @@ class _SwapInputScreen extends StatelessWidget {
   final TextEditingController fromCtrl;
   final String fromCurrency;
   final String toCurrency;
-  final double balance;
+  final double fromBalance;
+  final double toBalance;
   final double rate;
+  final bool loadingBalances;
   final VoidCallback onSwapCurrencies;
 
   const _SwapInputScreen({
@@ -184,8 +262,10 @@ class _SwapInputScreen extends StatelessWidget {
     required this.fromCtrl,
     required this.fromCurrency,
     required this.toCurrency,
-    required this.balance,
+    required this.fromBalance,
+    required this.toBalance,
     required this.rate,
+    required this.loadingBalances,
     required this.onSwapCurrencies,
   });
 
@@ -200,7 +280,8 @@ class _SwapInputScreen extends StatelessWidget {
         _SwapCurrencyCard(
           label: 'You Send',
           currency: fromCurrency,
-          balance: balance,
+          balance: fromBalance,
+          loading: loadingBalances,
           controller: fromCtrl,
           onCurrencyTap: () { /* TODO: Show currency picker */ },
         ),
@@ -220,37 +301,11 @@ class _SwapInputScreen extends StatelessWidget {
         _SwapCurrencyCard(
           label: 'You Receive',
           currency: toCurrency,
-          balance: 4.42,
+          balance: toBalance,
+          loading: loadingBalances,
           // Calculate received amount based on rate
           amount: (double.tryParse(fromCtrl.text) ?? 0) * rate,
           onCurrencyTap: () { /* TODO: Show currency picker */ },
-        ),
-        const SizedBox(height: 24),
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(16),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.grey.withOpacity(0.1),
-                spreadRadius: 1,
-                blurRadius: 10,
-                offset: const Offset(0, 4),
-              ),
-            ],
-          ),
-          child: Column(
-            children: [
-              _TransactionDetailRow(
-                label: 'Exchange Rate',
-                value: '1 $fromCurrency = $rate $toCurrency',
-              ),
-              const _TransactionDetailRow(label: 'Network Fee', value: '0.2%'),
-              const _TransactionDetailRow(label: 'Service Fee', value: '0.2%'),
-              const _TransactionDetailRow(label: 'Price Impact', value: '0.42%'),
-            ],
-          ),
         ),
         const SizedBox(height: 24),
         ElevatedButton(
@@ -277,6 +332,7 @@ class _SwapCurrencyCard extends StatelessWidget {
   final String label;
   final String currency;
   final double balance;
+  final bool loading;
   final TextEditingController? controller;
   final double? amount; // Used for the "You Receive" card
   final VoidCallback onCurrencyTap;
@@ -285,6 +341,7 @@ class _SwapCurrencyCard extends StatelessWidget {
     required this.label,
     required this.currency,
     required this.balance,
+    this.loading = false,
     this.controller,
     this.amount,
     required this.onCurrencyTap,
@@ -313,7 +370,17 @@ class _SwapCurrencyCard extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(label, style: const TextStyle(color: Colors.grey)),
-              Text('Balance: $balance', style: const TextStyle(color: Colors.grey)),
+              if (loading)
+                const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              else
+                Text(
+                  'Balance: ${balance.toStringAsFixed(2)}',
+                  style: const TextStyle(color: Colors.grey),
+                ),
             ],
           ),
           const SizedBox(height: 16),
@@ -436,12 +503,6 @@ class _SwapConfirmationScreen extends StatelessWidget {
               ],
             ),
           ),
-          const SizedBox(height: 24),
-          _TransactionDetailRow(label: 'Rate', value: '1 $fromCurrency = $rate $toCurrency'),
-          const _TransactionDetailRow(label: 'Minimum received', value: '0.1470ETH'),
-          const _TransactionDetailRow(label: 'Slippage tolerance', value: '1.5%'),
-          const _TransactionDetailRow(label: 'Network fee', value: '\$0.3'),
-          const _TransactionDetailRow(label: 'Price impact', value: '-0.22'),
           const Spacer(),
           ElevatedButton(
             onPressed: onNext,

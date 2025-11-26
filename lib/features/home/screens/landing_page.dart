@@ -59,12 +59,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 padding: EdgeInsets.zero,
                 children: [
                   Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
                     child: Column(
                       children: [
-                        const SizedBox(height: 16),
+                        const SizedBox(height: 20),
                         const WalletCard(),
-                        const SizedBox(height: 16),
+                        const SizedBox(height: 24),
                         const FinancialServices(),
                         const SizedBox(height: 24),
                         const RecentTransactionsHeader(),

@@ -4,7 +4,12 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_database/firebase_database.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:pretium/features/topup/services/intasend_service.dart';
+import 'package:pretium/repositories/wallet_repository.dart';
 import 'package:pretium/services/firebase_payment_service.dart';
 import 'dart:convert';
 import 'dart:io';
@@ -25,10 +30,14 @@ class _TopUpPageState extends State<TopUpPage> {
   final TextEditingController _firstNameCtrl = TextEditingController();
   final TextEditingController _lastNameCtrl = TextEditingController();
 
+  final WalletRepository _walletRepository = WalletRepository();
+
   bool _hideBalance = false;
-  double _balance = 26135.00;
+  double _fiatBalance = 0.00;
+  double _cryptoBalance = 0.00;
   String _selectedCurrency = 'USD';
   bool _isProcessingPayment = false;
+  bool _isLoadingBalance = false;
 
   // IntaSend configuration
   static const String intaSendPublicKey ='ISPubKey_live_c2dbd636-a9a5-4a90-bdb8-dc7e7c7401a2';
@@ -49,8 +58,93 @@ class _TopUpPageState extends State<TopUpPage> {
         return '€';
       case 'GBP':
         return '£';
+      case 'USDT':
+        return '₮';
       default:
-        return '\$';
+        return currency; // Return currency code for crypto currencies
+    }
+  }
+
+  bool _isFirebaseInitialized() {
+    try {
+      Firebase.app();
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _loadWalletBalance();
+  }
+
+  Future<void> _loadWalletBalance() async {
+    if (_isLoadingBalance || !_isFirebaseInitialized()) return;
+
+    setState(() {
+      _isLoadingBalance = true;
+    });
+
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) return;
+
+      // Load both fiat (USD) and crypto (USDT) balances
+      final fiatWallet = await _walletRepository.getWalletBalance(user.uid);
+      var cryptoWallet = await _walletRepository.getCryptoWalletBalance(user.uid, 'USDT');
+      
+      // Create default USDT wallet if it doesn't exist (as a holding place)
+      final cryptoWalletRef = FirebaseDatabase.instance.ref('wallet/${user.uid}/crypto/USDT');
+      final cryptoSnapshot = await cryptoWalletRef.get();
+      
+      if (!cryptoSnapshot.exists) {
+        try {
+          final timestamp = DateTime.now().toIso8601String();
+          await cryptoWalletRef.set({
+            'balance': 0,
+            'currency': 'USDT',
+            'updatedAt': timestamp,
+            'createdAt': timestamp,
+          });
+          debugPrint('TopUpPage - Created default USDT wallet for user ${user.uid}');
+          
+          // Reload the wallet after creating it
+          cryptoWallet = await _walletRepository.getCryptoWalletBalance(user.uid, 'USDT');
+        } catch (e) {
+          debugPrint('TopUpPage - Failed to create default USDT wallet: $e');
+          // Continue with default 0 balance if creation fails
+        }
+      }
+      
+      debugPrint('TopUpPage - Fiat wallet: ${fiatWallet?.balance ?? 0.0} ${fiatWallet?.currencyCode ?? "USD"}');
+      debugPrint('TopUpPage - Crypto wallet: ${cryptoWallet?.balance ?? 0.0} ${cryptoWallet?.currencyCode ?? "USDT"}');
+      
+      if (!mounted) return;
+
+      setState(() {
+        _fiatBalance = fiatWallet?.balance ?? 0.0;
+        _cryptoBalance = cryptoWallet?.balance ?? 0.0;
+        // Keep selected currency for payment processing
+        _selectedCurrency = fiatWallet?.currencyCode ?? 'USD';
+      });
+      
+      debugPrint('TopUpPage - State updated: Fiat=$_fiatBalance, Crypto=$_cryptoBalance');
+    } catch (e) {
+      debugPrint('Failed to load wallet balances on TopUpPage: $e');
+      // Set default values on error
+      if (!mounted) return;
+      setState(() {
+        _fiatBalance = 0.0;
+        _cryptoBalance = 0.0;
+        _selectedCurrency = 'USD';
+      });
+    } finally {
+      if (!mounted) return;
+      setState(() {
+        _isLoadingBalance = false;
+      });
     }
   }
 
@@ -74,7 +168,8 @@ class _TopUpPageState extends State<TopUpPage> {
   // FIXED: Using the official IntaSend Flutter plugin
   Future<void> _processIntaSendPayment() async {
     print('\n🚀 Starting IntaSend payment process...');
-    print('Current balance: $_balance');
+    print('Fiat balance: $_fiatBalance');
+    print('Crypto balance: $_cryptoBalance');
     print('Selected currency: $_selectedCurrency');
 
     if (_amountCtrl.text.isEmpty ||
@@ -386,13 +481,14 @@ class _TopUpPageState extends State<TopUpPage> {
       ),
       body: Column(
         children: [
-          // Balance header area with subtle pattern could be added via decoration
+          // Balance header area with both fiat and crypto balances
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             child: _BalanceHeader(
-              balance: _balance,
+              fiatBalance: _fiatBalance,
+              cryptoBalance: _cryptoBalance,
               hidden: _hideBalance,
-              currencySymbol: _getCurrencySymbol(_selectedCurrency),
+              isLoading: _isLoadingBalance,
             ),
           ),
           Expanded(
@@ -441,13 +537,15 @@ class _TopUpPageState extends State<TopUpPage> {
 
 // Rest of your widget classes remain the same...
 class _BalanceHeader extends StatelessWidget {
-  final double balance;
+  final double fiatBalance;
+  final double cryptoBalance;
   final bool hidden;
-  final String currencySymbol;
+  final bool isLoading;
   const _BalanceHeader({
-    required this.balance,
+    required this.fiatBalance,
+    required this.cryptoBalance,
     required this.hidden,
-    required this.currencySymbol,
+    required this.isLoading,
   });
 
   @override
@@ -456,17 +554,82 @@ class _BalanceHeader extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const Text('Balance', style: TextStyle(color: Colors.white70)),
-        const SizedBox(height: 6),
-        Text(
-          hidden
-              ? '$currencySymbol ••••'
-              : '$currencySymbol${balance.toStringAsFixed(2)}',
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 28,
-            fontWeight: FontWeight.bold,
+        const SizedBox(height: 12),
+        if (isLoading)
+          const SizedBox(
+            height: 28,
+            width: 28,
+            child: CircularProgressIndicator(
+              color: Colors.white,
+              strokeWidth: 2,
+            ),
+          )
+        else
+          Row(
+            children: [
+              // Fiat Balance (USD)
+              Expanded(
+                flex: 1,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      hidden ? '\$ ••••' : '\$${fiatBalance.toStringAsFixed(2)}',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'USD',
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.7),
+                        fontSize: 11,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              // Divider
+              Container(
+                margin: const EdgeInsets.symmetric(horizontal: 12),
+                width: 1,
+                height: 45,
+                color: Colors.white.withOpacity(0.5),
+              ),
+              // Crypto Balance (USDT)
+              Expanded(
+                flex: 1,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      hidden ? 'USDT ••••' : 'USDT ${cryptoBalance.toStringAsFixed(2)}',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'USDT',
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.7),
+                        fontSize: 11,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
-        ),
       ],
     );
   }

@@ -25,7 +25,7 @@ android {
         applicationId = "com.example.pretium_mock"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
-        minSdk = 23  // Updated to meet Firebase Firestore requirement (minimum SDK 23)
+        minSdk = flutter.minSdkVersion  // Updated to meet Firebase Firestore requirement (minimum SDK 23)
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName

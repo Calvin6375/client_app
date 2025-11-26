@@ -1,0 +1,53 @@
+{
+  "rules": {
+    "payments": {
+      "$paymentId": {
+        // Allow authenticated users to read their own payments
+        ".read": "auth != null && (data.child('user_id').val() == auth.uid || root.child('users').child(auth.uid).child('payments').child($paymentId).exists())",
+        // Prevent all client writes - only Cloud Functions can write
+        ".write": false
+      }
+    },
+    "users": {
+      "$userId": {
+        // Users can only read their own data
+        ".read": "auth != null && auth.uid == $userId",
+        "payments": {
+          "$paymentId": {
+            // Allow users to read their own payment references
+            ".read": "auth != null && auth.uid == $userId",
+            // Prevent all client writes - only Cloud Functions can write
+            ".write": false
+          }
+        },
+        // Prevent all other writes to user nodes
+        ".write": false
+      }
+    },
+    "wallet": {
+      "$userId": {
+        // Users can only read their own wallet
+        ".read": "auth != null && auth.uid == $userId",
+        "balance": {
+          // Users can read their own wallet balance
+          ".read": "auth != null && auth.uid == $userId",
+          // Prevent all client writes - only Cloud Functions can write
+          ".write": false
+        },
+        "crypto": {
+          "$currencyCode": {
+            // Users can read their own crypto wallet
+            ".read": "auth != null && auth.uid == $userId",
+            // Allow creating crypto wallet if it doesn't exist (for initialization)
+            ".write": "auth != null && auth.uid == $userId && (!data.exists() || data.val() == null)",
+            // Validate write data
+            ".validate": "newData.hasChildren(['balance', 'currency']) && newData.child('balance').isNumber() && newData.child('currency').isString() && newData.child('balance').val() == 0"
+          }
+        },
+        // Prevent all other writes to wallet nodes
+        ".write": false
+      }
+    }
+  }
+}
+

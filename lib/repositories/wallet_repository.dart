@@ -64,6 +64,63 @@ class WalletRepository {
     }
   }
 
+  /// Get crypto wallet balance for a specific currency
+  /// Path: wallet/{uid}/crypto/{currencyCode}
+  Future<Wallet?> getCryptoWalletBalance(String uid, String currencyCode) async {
+    try {
+      Logger.debug('Fetching crypto wallet balance for user: $uid, currency: $currencyCode');
+      
+      final ref = _database.ref('wallet/$uid/crypto/$currencyCode');
+      final snapshot = await ref.get();
+      
+      if (snapshot.exists && snapshot.value != null) {
+        final data = Map<String, dynamic>.from(snapshot.value as Map);
+        final wallet = Wallet.fromJson(data);
+        Logger.debug('Crypto wallet balance fetched: ${wallet.balance} ${wallet.currencyCode}');
+        return wallet;
+      }
+      
+      Logger.warning('Crypto wallet balance not found for user: $uid, currency: $currencyCode');
+      // Return default wallet with 0 balance if not found
+      return Wallet(currencyCode: currencyCode, balance: 0.0);
+    } catch (e) {
+      Logger.error('Failed to get crypto wallet balance', e);
+      // Return default wallet with 0 balance on error
+      return Wallet(currencyCode: currencyCode, balance: 0.0);
+    }
+  }
+
+  /// Stream crypto wallet balance for a specific currency
+  /// Path: wallet/{uid}/crypto/{currencyCode}
+  Stream<Wallet?> streamCryptoWalletBalance(String uid, String currencyCode) {
+    try {
+      Logger.debug('Streaming crypto wallet balance for user: $uid, currency: $currencyCode');
+      
+      final ref = _database.ref('wallet/$uid/crypto/$currencyCode');
+      
+      return ref.onValue.map((event) {
+        if (event.snapshot.exists && event.snapshot.value != null) {
+          try {
+            final data = Map<String, dynamic>.from(
+              event.snapshot.value as Map,
+            );
+            final wallet = Wallet.fromJson(data);
+            Logger.debug('Crypto wallet balance updated: ${wallet.balance} ${wallet.currencyCode}');
+            return wallet;
+          } catch (e) {
+            Logger.error('Failed to parse crypto wallet data', e);
+            return Wallet(currencyCode: currencyCode, balance: 0.0);
+          }
+        }
+        Logger.warning('Crypto wallet balance not found for user: $uid, currency: $currencyCode');
+        return Wallet(currencyCode: currencyCode, balance: 0.0);
+      });
+    } catch (e) {
+      Logger.error('Failed to stream crypto wallet balance', e);
+      return Stream.value(Wallet(currencyCode: currencyCode, balance: 0.0));
+    }
+  }
+
   /// NOTE: This method is intentionally not implemented
   /// Wallet updates MUST be done via Cloud Functions only
   /// 
