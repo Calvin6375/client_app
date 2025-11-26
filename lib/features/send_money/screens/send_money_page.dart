@@ -8,7 +8,9 @@ import 'package:pretium/models/transaction_details_model.dart';
 enum SendMoneyStep { amount, payment, recipientDetails, review }
 
 class SendMoneyPage extends StatefulWidget {
-  const SendMoneyPage({super.key});
+  final String? initialFromCurrency;
+  
+  const SendMoneyPage({super.key, this.initialFromCurrency});
 
   @override
   State<SendMoneyPage> createState() => _SendMoneyPageState();
@@ -16,7 +18,17 @@ class SendMoneyPage extends StatefulWidget {
 
 class _SendMoneyPageState extends State<SendMoneyPage> {
   SendMoneyStep _step = SendMoneyStep.amount;
-  final _transactionDetails = TransactionDetails();
+  late final TransactionDetails _transactionDetails;
+  
+  @override
+  void initState() {
+    super.initState();
+    // Initialize with currency from parameter or defaults
+    _transactionDetails = TransactionDetails(
+      fromCurrency: widget.initialFromCurrency ?? 'USD',
+      toCurrency: widget.initialFromCurrency == 'USD' ? 'USDT' : 'USD',
+    );
+  }
 
   void _onPaymentMethodSelected(PaymentMethod method) {
     setState(() {

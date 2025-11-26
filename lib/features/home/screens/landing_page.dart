@@ -94,7 +94,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               onTap: () {
                 _onItemTapped(1);
                 Navigator.of(context).push(
-                  MaterialPageRoute(builder: (context) => const SendMoneyPage()),
+                  MaterialPageRoute(builder: (context) => const SendMoneyPage(initialFromCurrency: 'USD')),
                 );
               },
               child: Container(

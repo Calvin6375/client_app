@@ -13,9 +13,9 @@ class TransactionDetails {
 
   TransactionDetails({
     this.amountToSend = 0.0,
-    this.fromCurrency = 'NGN',
+    this.fromCurrency = '',
     this.amountToReceive = 0.0,
-    this.toCurrency = 'USD',
+    this.toCurrency = '',
     this.paymentMethod = PaymentMethod.mobileMoney,
     this.recipientFullName = '',
     this.recipientPhoneNumber = '',

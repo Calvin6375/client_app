@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:pretium/models/transaction_details_model.dart';
+import 'package:pretium/repositories/wallet_repository.dart';
+import 'package:pretium/features/swap/services/rates_service.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
 
 class SendAmountScreen extends StatefulWidget {
   final VoidCallback onNext;
@@ -20,17 +24,86 @@ class _SendAmountScreenState extends State<SendAmountScreen> {
   late final TextEditingController _fromCtrl;
   late String _fromCurrency;
   late String _toCurrency;
-  final double _balance = 250000.0; // This would come from a service
-  final double _rate = 740.0; // This would come from a service
+  final WalletRepository _walletRepository = WalletRepository();
+  final RatesService _ratesService = RatesService();
+  double _fromBalance = 0.0;
+  double _toBalance = 0.0;
+  double _rate = 1.0;
+  bool _loadingBalances = true;
+
+  bool _isFirebaseInitialized() {
+    try {
+      Firebase.app();
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
 
   @override
   void initState() {
     super.initState();
-    _fromCtrl = TextEditingController(text: widget.initialDetails.amountToSend.toString());
-    _fromCurrency = widget.initialDetails.fromCurrency;
-    _toCurrency = widget.initialDetails.toCurrency;
+    _fromCtrl = TextEditingController();
+    _fromCurrency = widget.initialDetails.fromCurrency.isNotEmpty 
+        ? widget.initialDetails.fromCurrency 
+        : 'USD';
+    _toCurrency = widget.initialDetails.toCurrency.isNotEmpty 
+        ? widget.initialDetails.toCurrency 
+        : (_fromCurrency == 'USD' ? 'USDT' : 'USD');
 
     _fromCtrl.addListener(_onAmountChanged);
+    _loadBalances();
+    _loadRate();
+  }
+
+  Future<void> _loadBalances() async {
+    if (!_isFirebaseInitialized()) {
+      setState(() => _loadingBalances = false);
+      return;
+    }
+
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) {
+        setState(() => _loadingBalances = false);
+        return;
+      }
+
+      setState(() => _loadingBalances = true);
+
+      // Load both wallets
+      final fiatWallet = await _walletRepository.getWalletBalance(user.uid);
+      final cryptoWallet = await _walletRepository.getCryptoWalletBalance(user.uid, 'USDT');
+
+      if (!mounted) return;
+
+      // Set balances based on current currencies
+      if (_fromCurrency == 'USD') {
+        _fromBalance = fiatWallet?.balance ?? 0.0;
+        _toBalance = cryptoWallet?.balance ?? 0.0;
+      } else {
+        _fromBalance = cryptoWallet?.balance ?? 0.0;
+        _toBalance = fiatWallet?.balance ?? 0.0;
+      }
+
+      setState(() => _loadingBalances = false);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _loadingBalances = false);
+    }
+  }
+
+  void _loadRate() {
+    _rate = _ratesService.getRate(_fromCurrency, _toCurrency);
+    // Listen to live rate updates
+    _ratesService.ratesStream.listen((map) {
+      if (mounted) {
+        setState(() {
+          _rate = _ratesService.getRate(_fromCurrency, _toCurrency);
+          _onAmountChanged(); // Recalculate received amount
+        });
+      }
+    });
   }
 
   void _onAmountChanged() {
@@ -39,7 +112,7 @@ class _SendAmountScreenState extends State<SendAmountScreen> {
       TransactionDetails(
         amountToSend: amount,
         fromCurrency: _fromCurrency,
-        amountToReceive: amount / _rate,
+        amountToReceive: amount * _rate,
         toCurrency: _toCurrency,
       ),
     );
@@ -50,6 +123,17 @@ class _SendAmountScreenState extends State<SendAmountScreen> {
       final temp = _fromCurrency;
       _fromCurrency = _toCurrency;
       _toCurrency = temp;
+      
+      // Swap balances
+      final tempBalance = _fromBalance;
+      _fromBalance = _toBalance;
+      _toBalance = tempBalance;
+      
+      // Clear input
+      _fromCtrl.clear();
+      
+      // Reload rate
+      _loadRate();
     });
     _onAmountChanged();
   }
@@ -58,6 +142,7 @@ class _SendAmountScreenState extends State<SendAmountScreen> {
   void dispose() {
     _fromCtrl.removeListener(_onAmountChanged);
     _fromCtrl.dispose();
+    _ratesService.dispose();
     super.dispose();
   }
 
@@ -76,7 +161,8 @@ class _SendAmountScreenState extends State<SendAmountScreen> {
                 _SwapCurrencyCard(
                   label: 'You Send',
                   currency: _fromCurrency,
-                  balance: _balance,
+                  balance: _fromBalance,
+                  loading: _loadingBalances,
                   controller: _fromCtrl,
                   onCurrencyTap: () { /* TODO: Show currency picker */ },
                 ),
@@ -96,36 +182,12 @@ class _SendAmountScreenState extends State<SendAmountScreen> {
                 _SwapCurrencyCard(
                   label: 'You Receive',
                   currency: _toCurrency,
-                  balance: 4.42,
-                  amount: (double.tryParse(_fromCtrl.text) ?? 0) / _rate,
+                  balance: _toBalance,
+                  loading: _loadingBalances,
+                  amount: (double.tryParse(_fromCtrl.text) ?? 0) * _rate,
                   onCurrencyTap: () { /* TODO: Show currency picker */ },
                 ),
                 const SizedBox(height: 24),
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(16),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.grey.withOpacity(0.1),
-                        spreadRadius: 1,
-                        blurRadius: 10,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
-                  ),
-                  child: Column(
-                    children: [
-                      _TransactionDetailRow(
-                        label: 'Exchange Rate',
-                        value: '1 $_toCurrency = $_rate $_fromCurrency',
-                      ),
-                      const _TransactionDetailRow(label: 'Network Fee', value: 'Free'),
-                      const _TransactionDetailRow(label: 'Service Fee', value: 'Free'),
-                    ],
-                  ),
-                ),
               ],
             ),
           ),
@@ -156,6 +218,7 @@ class _SwapCurrencyCard extends StatelessWidget {
   final String label;
   final String currency;
   final double balance;
+  final bool loading;
   final TextEditingController? controller;
   final double? amount;
   final VoidCallback onCurrencyTap;
@@ -164,6 +227,7 @@ class _SwapCurrencyCard extends StatelessWidget {
     required this.label,
     required this.currency,
     required this.balance,
+    this.loading = false,
     this.controller,
     this.amount,
     required this.onCurrencyTap,
@@ -192,7 +256,17 @@ class _SwapCurrencyCard extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(label, style: const TextStyle(color: Colors.grey)),
-              Text('Balance: $balance', style: const TextStyle(color: Colors.grey)),
+              if (loading)
+                const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              else
+                Text(
+                  'Balance: ${balance.toStringAsFixed(2)}',
+                  style: const TextStyle(color: Colors.grey),
+                ),
             ],
           ),
           const SizedBox(height: 16),
