@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:pretium/firebase_options.dart';
 import 'package:pretium/features/splash/screens/splash_page.dart';
 import 'package:pretium/features/splash/screens/splash_page_1.dart';
 import 'package:pretium/features/auth/screens/login_page.dart';
@@ -8,25 +9,20 @@ import 'package:pretium/features/home/screens/landing_page.dart';
 import 'package:pretium/features/topup/screens/topup_page.dart';
 import 'package:pretium/features/swap/screens/swap_page.dart';
 import 'package:pretium/app/route_names.dart';
+import 'package:pretium/utils/logger.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
   // Initialize Firebase with error handling
   try {
-    await Firebase.initializeApp();
-  } catch (e) {
-    debugPrint('Firebase initialization error: $e');
-    debugPrint('');
-    debugPrint('⚠️  FIREBASE SETUP REQUIRED:');
-    debugPrint('For iOS: Download GoogleService-Info.plist from Firebase Console');
-    debugPrint('1. Go to https://console.firebase.google.com/');
-      debugPrint('2. Select project: truepay-72060');
-    debugPrint('3. Add iOS app (if not added) with bundle ID: com.example.pretiumMock');
-    debugPrint('4. Download GoogleService-Info.plist');
-    debugPrint('5. Place it in: ios/Runner/GoogleService-Info.plist');
-    debugPrint('');
-    debugPrint('App will continue but Firebase features may not work.');
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+    Logger.success('Firebase initialized successfully');
+  } catch (e, stackTrace) {
+    Logger.error('Firebase initialization failed', e, stackTrace);
+    Logger.warning('App will continue but Firebase features may not work.');
   }
   
   runApp(const MyApp());

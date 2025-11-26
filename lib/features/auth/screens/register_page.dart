@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:pretium/services/auth_service.dart';
+import 'package:pretium/repositories/user_repository.dart';
+import 'package:pretium/utils/logger.dart';
 import '../widgets/custom_text_field.dart';
 import '../widgets/register_header.dart';
 import '../widgets/terms_checkbox.dart';
@@ -44,6 +45,9 @@ class _RegisterPageState extends State<RegisterPage> {
   bool _termsAccepted = false;
   bool _isSubmitting = false;
 
+  final AuthService _authService = AuthService();
+  final UserRepository _userRepository = UserRepository();
+
   Future<void> _register() async {
     if (!_termsAccepted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -72,17 +76,19 @@ class _RegisterPageState extends State<RegisterPage> {
     setState(() => _isSubmitting = true);
     try {
       // 1) Create user in Firebase Auth
-      final credential = await FirebaseAuth.instance
-          .createUserWithEmailAndPassword(email: email, password: password);
+      final credential = await _authService.signUp(
+        email: email,
+        password: password,
+      );
 
-      // 2) Create user profile in Firestore (merge if exists)
+      // 2) Create user profile in Firestore
       final uid = credential.user!.uid;
-      await FirebaseFirestore.instance.collection('users').doc(uid).set({
-        'firstName': firstName,
-        'lastName': lastName,
-        'email': email,
-        'createdAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
+      await _userRepository.createUserProfile(
+        uid: uid,
+        firstName: firstName,
+        lastName: lastName,
+        email: email,
+      );
 
       // 3) Navigate to landing page on success
       if (!mounted) return;
@@ -92,17 +98,19 @@ class _RegisterPageState extends State<RegisterPage> {
         (route) => false,
       );
     } on FirebaseAuthException catch (e) {
-      String message = 'Registration failed';
-      if (e.code == 'email-already-in-use') message = 'Email already in use';
-      if (e.code == 'invalid-email') message = 'Invalid email';
-      if (e.code == 'weak-password') message = 'Weak password';
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(message)));
+      final message = AuthService.getErrorMessage(e);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(message)),
+        );
+      }
     } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Registration failed: $e')));
+      Logger.error('Registration failed', e);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Registration failed: ${e.toString()}')),
+        );
+      }
     } finally {
       if (mounted) setState(() => _isSubmitting = false);
     }
