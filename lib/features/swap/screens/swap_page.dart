@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:confetti/confetti.dart';
 import 'package:pretium/features/swap/services/rates_service.dart';
 import 'package:pretium/repositories/wallet_repository.dart';
+import 'package:pretium/services/order_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 
@@ -22,6 +23,7 @@ class _SwapPageState extends State<SwapPage> {
   // State for the swap flow
   final _rates = RatesService();
   final _walletRepository = WalletRepository();
+  final _orderService = OrderService();
   final _fromCtrl = TextEditingController();
   String _fromCurrency = 'USD';
   String _toCurrency = 'USDT';
@@ -49,10 +51,35 @@ class _SwapPageState extends State<SwapPage> {
     });
   }
 
-  void _nextStep() {
+  void _nextStep() async {
     if (_step == _SwapStep.input) {
       setState(() => _step = _SwapStep.confirmation);
     } else if (_step == _SwapStep.confirmation) {
+      // Create order when swap is confirmed
+      try {
+        final user = FirebaseAuth.instance.currentUser;
+        if (user != null) {
+          final fromAmount = double.tryParse(_fromCtrl.text) ?? 0;
+          await _orderService.createOrder(
+            userId: user.uid,
+            amount: fromAmount,
+            currency: _fromCurrency,
+            orderType: 'swap',
+            metadata: {
+              'fromCurrency': _fromCurrency,
+              'toCurrency': _toCurrency,
+              'fromAmount': fromAmount,
+              'toAmount': fromAmount * _rate,
+              'rate': _rate,
+            },
+          );
+          print('✅ Swap order created in Firestore');
+        }
+      } catch (e) {
+        print('⚠️ Failed to create swap order: $e');
+        // Don't block the swap flow if order creation fails
+      }
+      
       setState(() => _step = _SwapStep.success);
       _showSuccessDialog();
     }

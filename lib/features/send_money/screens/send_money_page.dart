@@ -4,6 +4,8 @@ import 'package:pretium/features/send_money/screens/payment_method_screen.dart';
 import 'package:pretium/features/send_money/screens/review_details_screen.dart';
 import 'package:pretium/features/send_money/screens/recipient_details_screen.dart';
 import 'package:pretium/models/transaction_details_model.dart';
+import 'package:pretium/services/order_service.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 enum SendMoneyStep { amount, payment, recipientDetails, review }
 
@@ -19,6 +21,7 @@ class SendMoneyPage extends StatefulWidget {
 class _SendMoneyPageState extends State<SendMoneyPage> {
   SendMoneyStep _step = SendMoneyStep.amount;
   late final TransactionDetails _transactionDetails;
+  final OrderService _orderService = OrderService();
   
   @override
   void initState() {
@@ -50,17 +53,48 @@ class _SendMoneyPageState extends State<SendMoneyPage> {
     });
   }
 
-  void _nextStep() {
+  void _nextStep() async {
     setState(() {
       if (_step == SendMoneyStep.amount) {
         _step = SendMoneyStep.payment;
       } else if (_step == SendMoneyStep.recipientDetails) {
         _step = SendMoneyStep.review;
       } else if (_step == SendMoneyStep.review) {
-        // TODO: Finalize transaction
+        // Create order when transaction is finalized
+        _createSendMoneyOrder();
         Navigator.of(context).pop();
       }
     });
+  }
+
+  Future<void> _createSendMoneyOrder() async {
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user != null && _transactionDetails.amountToSend > 0) {
+        await _orderService.createOrder(
+          userId: user.uid,
+          amount: _transactionDetails.amountToSend,
+          currency: _transactionDetails.fromCurrency,
+          orderType: 'send_money',
+          metadata: {
+            'fromCurrency': _transactionDetails.fromCurrency,
+            'toCurrency': _transactionDetails.toCurrency,
+            'amountToReceive': _transactionDetails.amountToReceive,
+            'recipientFullName': _transactionDetails.recipientFullName,
+            'recipientPhoneNumber': _transactionDetails.recipientPhoneNumber,
+            'paymentMethod': _transactionDetails.paymentMethod.toString(),
+            if (_transactionDetails.recipientBankName != null)
+              'recipientBankName': _transactionDetails.recipientBankName,
+            if (_transactionDetails.recipientAccountNumber != null)
+              'recipientAccountNumber': _transactionDetails.recipientAccountNumber,
+          },
+        );
+        print('✅ Send money order created in Firestore');
+      }
+    } catch (e) {
+      print('⚠️ Failed to create send money order: $e');
+      // Don't block the transaction flow if order creation fails
+    }
   }
 
   void _previousStep() {
