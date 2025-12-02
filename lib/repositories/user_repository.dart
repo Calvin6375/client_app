@@ -14,17 +14,27 @@ class UserRepository {
     required String firstName,
     required String lastName,
     required String email,
+    String? phoneNumber,
   }) async {
     try {
       Logger.info('Creating user profile for: $uid');
       
-      await _firestore.collection(_collection).doc(uid).set({
+      final profileData = {
         'firstName': firstName,
         'lastName': lastName,
         'email': email,
         'createdAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
+      };
+      
+      if (phoneNumber != null && phoneNumber.isNotEmpty) {
+        profileData['phoneNumber'] = phoneNumber;
+      }
+      
+      await _firestore.collection(_collection).doc(uid).set(
+        profileData,
+        SetOptions(merge: true),
+      );
       
       Logger.success('User profile created successfully: $uid');
     } catch (e) {
@@ -81,6 +91,7 @@ class UserRepository {
     String? firstName,
     String? lastName,
     String? email,
+    String? phoneNumber,
   }) async {
     try {
       Logger.info('Updating user profile: $uid');
@@ -92,6 +103,7 @@ class UserRepository {
       if (firstName != null) updateData['firstName'] = firstName;
       if (lastName != null) updateData['lastName'] = lastName;
       if (email != null) updateData['email'] = email;
+      if (phoneNumber != null) updateData['phoneNumber'] = phoneNumber;
       
       await _firestore.collection(_collection).doc(uid).update(updateData);
       

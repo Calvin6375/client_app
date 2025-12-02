@@ -6,6 +6,7 @@ class UserModel {
   final String firstName;
   final String lastName;
   final String email;
+  final String? phoneNumber;
   final DateTime? createdAt;
   final DateTime? updatedAt;
 
@@ -14,6 +15,7 @@ class UserModel {
     required this.firstName,
     required this.lastName,
     required this.email,
+    this.phoneNumber,
     this.createdAt,
     this.updatedAt,
   });
@@ -26,6 +28,7 @@ class UserModel {
       firstName: data['firstName'] ?? '',
       lastName: data['lastName'] ?? '',
       email: data['email'] ?? '',
+      phoneNumber: data['phoneNumber'] as String?,
       createdAt: (data['createdAt'] as Timestamp?)?.toDate(),
       updatedAt: (data['updatedAt'] as Timestamp?)?.toDate(),
     );
@@ -38,6 +41,7 @@ class UserModel {
       firstName: json['firstName'] ?? '',
       lastName: json['lastName'] ?? '',
       email: json['email'] ?? '',
+      phoneNumber: json['phoneNumber'] as String?,
       createdAt: json['createdAt'] != null
           ? (json['createdAt'] is Timestamp
               ? (json['createdAt'] as Timestamp).toDate()
@@ -57,6 +61,7 @@ class UserModel {
       'firstName': firstName,
       'lastName': lastName,
       'email': email,
+      if (phoneNumber != null) 'phoneNumber': phoneNumber,
       if (createdAt != null) 'createdAt': Timestamp.fromDate(createdAt!),
       'updatedAt': FieldValue.serverTimestamp(),
     };
@@ -68,6 +73,7 @@ class UserModel {
     String? firstName,
     String? lastName,
     String? email,
+    String? phoneNumber,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) {
@@ -76,6 +82,7 @@ class UserModel {
       firstName: firstName ?? this.firstName,
       lastName: lastName ?? this.lastName,
       email: email ?? this.email,
+      phoneNumber: phoneNumber ?? this.phoneNumber,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );

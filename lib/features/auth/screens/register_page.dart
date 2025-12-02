@@ -4,6 +4,7 @@ import 'package:pretium/services/auth_service.dart';
 import 'package:pretium/repositories/user_repository.dart';
 import 'package:pretium/utils/logger.dart';
 import '../widgets/custom_text_field.dart';
+import '../widgets/phone_number_field.dart';
 import '../widgets/register_header.dart';
 import '../widgets/terms_checkbox.dart';
 import 'package:pretium/features/home/screens/landing_page.dart';
@@ -43,13 +44,20 @@ class _RegisterPageState extends State<RegisterPage> {
   final TextEditingController _lastNameController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
+  final TextEditingController _phoneController = TextEditingController();
+  final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
   bool _termsAccepted = false;
   bool _isSubmitting = false;
+  String _selectedCountryCode = '254'; // Default to Kenya
 
   final AuthService _authService = AuthService();
   final UserRepository _userRepository = UserRepository();
 
   Future<void> _register() async {
+    if (!_formKey.currentState!.validate()) {
+      return;
+    }
+
     if (!_termsAccepted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -63,13 +71,17 @@ class _RegisterPageState extends State<RegisterPage> {
     final lastName = _lastNameController.text.trim();
     final email = _emailController.text.trim();
     final password = _passwordController.text;
+    
+    // Get formatted phone number (country code + number, e.g., '254742844875')
+    final phoneDigits = _phoneController.text.trim().replaceAll(RegExp(r'[^\d]'), '');
+    final phoneNumber = phoneDigits.isNotEmpty ? '$_selectedCountryCode$phoneDigits' : '';
 
     if (firstName.isEmpty ||
         lastName.isEmpty ||
         email.isEmpty ||
         password.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please fill in all fields.')),
+        const SnackBar(content: Text('Please fill in all required fields.')),
       );
       return;
     }
@@ -89,6 +101,7 @@ class _RegisterPageState extends State<RegisterPage> {
         firstName: firstName,
         lastName: lastName,
         email: email,
+        phoneNumber: phoneNumber.isNotEmpty ? phoneNumber : null,
       );
 
       // 3) Navigate to landing page on success
@@ -118,133 +131,169 @@ class _RegisterPageState extends State<RegisterPage> {
   }
 
   @override
+  void dispose() {
+    _firstNameController.dispose();
+    _lastNameController.dispose();
+    _emailController.dispose();
+    _passwordController.dispose();
+    _phoneController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       body: SafeArea(
-        child: SingleChildScrollView(
+        child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 24.0),
-          child: SizedBox(
-            // Set minimum height to screen height minus safe area
-            height:
-                MediaQuery.of(context).size.height -
-                MediaQuery.of(context).padding.top -
-                MediaQuery.of(context).padding.bottom,
-            child: Column(
-              crossAxisAlignment:
-                  CrossAxisAlignment.start, // Align children to the left
-              children: [
-                const SizedBox(height: 16),
+          child: SingleChildScrollView(
+            child: SizedBox(
+              // Set minimum height to screen height minus safe area
+              height: MediaQuery.of(context).size.height -
+                  MediaQuery.of(context).padding.top -
+                  MediaQuery.of(context).padding.bottom,
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                  const SizedBox(height: 16),
 
-                // Back Arrow
-                IconButton(
-                  icon: Icon(
-                    Icons.arrow_back,
+                  // Back Arrow
+                  IconButton(
+                    icon: Icon(
+                      Icons.arrow_back,
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+
+                  // Header section with left alignment
+                  const RegisterHeader(),
+                  const SizedBox(height: 32),
+
+                  // First Name field
+                  CustomTextField(
+                    controller: _firstNameController,
+                    labelText: 'First Name',
+                    hintText: 'Enter your first name',
+                    prefixIcon: Icons.person_outline,
+                    primaryColor: Theme.of(context).colorScheme.primary,
+                    labelColor: Theme.of(context).colorScheme.primary,
+                  ),
+                  const SizedBox(height: 24),
+
+                  // Last Name field
+                  CustomTextField(
+                    controller: _lastNameController,
+                    labelText: 'Last Name',
+                    hintText: 'Enter your last name',
+                    prefixIcon: Icons.person_outline,
+                    primaryColor: Theme.of(context).colorScheme.primary,
+                    labelColor: Theme.of(context).colorScheme.primary,
+                  ),
+                  const SizedBox(height: 24),
+
+                  // Email field
+                  CustomTextField(
+                    controller: _emailController,
+                    labelText: 'Email',
+                    hintText: 'Enter your email',
+                    prefixIcon: Icons.email_outlined,
+                    keyboardType: TextInputType.emailAddress,
+                    primaryColor: Theme.of(context).colorScheme.primary,
+                    labelColor: Theme.of(context).colorScheme.primary,
+                  ),
+                  const SizedBox(height: 24),
+
+                  // Phone Number field with country code selector
+                  PhoneNumberField(
+                    phoneController: _phoneController,
+                    primaryColor: Theme.of(context).colorScheme.primary,
+                    labelColor: Theme.of(context).colorScheme.primary,
+                    initialCountryCode: _selectedCountryCode,
+                    onCountryCodeChanged: (countryCode) {
+                      setState(() {
+                        _selectedCountryCode = countryCode;
+                      });
+                    },
+                    validator: (value) {
+                      if (value == null || value.trim().isEmpty) {
+                        return 'Please enter your phone number';
+                      }
+                      if (value.trim().length < 7) {
+                        return 'Please enter a valid phone number';
+                      }
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 24),
+
+                  // Password field
+                  CustomTextField(
+                    controller: _passwordController,
+                    labelText: 'Password',
+                    hintText: 'Enter your password',
+                    prefixIcon: Icons.lock_outline,
+                    isPassword: true,
+                    primaryColor: Theme.of(context).colorScheme.primary,
+                  ),
+
+                  const SizedBox(height: 16),
+                  // Terms and conditions checkbox
+                  TermsCheckbox(
+                    value: _termsAccepted,
+                    onChanged: (value) {
+                      setState(() {
+                        _termsAccepted = value!;
+                      });
+                    },
                     color: Theme.of(context).colorScheme.primary,
                   ),
-                  onPressed: () => Navigator.pop(context),
-                ),
 
-                // Header section with left alignment
-                const RegisterHeader(),
-                const SizedBox(height: 32),
-
-                // First Name field
-                CustomTextField(
-                  controller: _firstNameController,
-                  labelText: 'First Name',
-                  hintText: 'Enter your first name',
-                  prefixIcon: Icons.person_outline,
-                  primaryColor: Theme.of(context).colorScheme.primary,
-                  labelColor: Theme.of(context).colorScheme.primary,
-                ),
-                const SizedBox(height: 24),
-
-                // Last Name field
-                CustomTextField(
-                  controller: _lastNameController,
-                  labelText: 'Last Name',
-                  hintText: 'Enter your last name',
-                  prefixIcon: Icons.person_outline,
-                  primaryColor: Theme.of(context).colorScheme.primary,
-                  labelColor: Theme.of(context).colorScheme.primary,
-                ),
-                const SizedBox(height: 24),
-
-                // Email field
-                CustomTextField(
-                  controller: _emailController,
-                  labelText: 'Email',
-                  hintText: 'Enter your email',
-                  prefixIcon: Icons.email_outlined,
-                  keyboardType: TextInputType.emailAddress,
-                  primaryColor: Theme.of(context).colorScheme.primary,
-                  labelColor: Theme.of(context).colorScheme.primary,
-                ),
-                const SizedBox(height: 24),
-
-                // Password field
-                CustomTextField(
-                  controller: _passwordController,
-                  labelText: 'Password',
-                  hintText: 'Enter your password',
-                  prefixIcon: Icons.lock_outline,
-                  isPassword: true,
-                  primaryColor: Theme.of(context).colorScheme.primary,
-                ),
-
-                const SizedBox(height: 16),
-                // Terms and conditions checkbox
-                TermsCheckbox(
-                  value: _termsAccepted,
-                  onChanged: (value) {
-                    setState(() {
-                      _termsAccepted = value!;
-                    });
-                  },
-                  color: Theme.of(context).colorScheme.primary,
-                ),
-
-                const SizedBox(height: 24),
-                // Create Account button
-                SizedBox(
-                  width: double.infinity,
-                  height: 48,
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Theme.of(context).colorScheme.primary,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
-                    onPressed: _isSubmitting ? null : _register,
-                    child: Text(
-                      _isSubmitting ? 'Creating...' : 'Create Account',
-                      style: const TextStyle(fontSize: 18, color: Colors.white),
-                    ),
-                  ),
-                ),
-
-                const Expanded(
-                  child: SizedBox(),
-                ), // Replace Spacer with Expanded
-                // Login section
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Text('Already have an account?'),
-                    TextButton(
-                      onPressed: () => Navigator.pop(context), // Add navigation
-                      child: Text(
-                        'Login',
-                        style: TextStyle(
-                          color: Theme.of(context).colorScheme.primary,
+                  const SizedBox(height: 24),
+                  // Create Account button
+                  SizedBox(
+                    width: double.infinity,
+                    height: 48,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Theme.of(context).colorScheme.primary,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
                         ),
                       ),
+                      onPressed: _isSubmitting ? null : _register,
+                      child: Text(
+                        _isSubmitting ? 'Creating...' : 'Create Account',
+                        style: const TextStyle(fontSize: 18, color: Colors.white),
+                      ),
                     ),
+                  ),
+
+                  const Expanded(
+                    child: SizedBox(),
+                  ), // Replace Spacer with Expanded
+                  // Login section
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Text('Already have an account?'),
+                      TextButton(
+                        onPressed: () => Navigator.pop(context), // Add navigation
+                        child: Text(
+                          'Login',
+                          style: TextStyle(
+                            color: Theme.of(context).colorScheme.primary,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
                   ],
                 ),
-                const SizedBox(height: 24),
-              ],
+              ),
             ),
           ),
         ),
