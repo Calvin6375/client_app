@@ -12,12 +12,12 @@ class WalletRepository {
   final FirebaseDatabase _database = FirebaseDatabase.instance;
 
   /// Stream wallet balance for a user
-  /// Path: wallet/{uid}/balance
-  Stream<Wallet?> streamWalletBalance(String uid) {
+  /// Path: wallet/{uid}/fiat/{currency}
+  Stream<Wallet?> streamWalletBalance(String uid, {String currency = 'USD'}) {
     try {
-      Logger.debug('Streaming wallet balance for user: $uid');
+      Logger.debug('Streaming wallet balance for user: $uid, currency: $currency');
       
-      final ref = _database.ref('wallet/$uid/balance');
+      final ref = _database.ref('wallet/$uid/fiat/$currency');
       
       return ref.onValue.map((event) {
         if (event.snapshot.exists && event.snapshot.value != null) {
@@ -33,7 +33,7 @@ class WalletRepository {
             return null;
           }
         }
-        Logger.warning('Wallet balance not found for user: $uid');
+        Logger.warning('Wallet balance not found for user: $uid, currency: $currency');
         return null;
       });
     } catch (e) {
@@ -44,9 +44,11 @@ class WalletRepository {
 
   /// Get wallet balance once (non-streaming)
   /// Use streamWalletBalance() for real-time updates
-  Future<Wallet?> getWalletBalance(String uid) async {
+  /// Path: wallet/{uid}/fiat/{currency}
+  Future<Wallet?> getWalletBalance(String uid, {String currency = 'USD'}) async {
     try {
-      final dbPath = 'wallet/$uid/balance';
+      // New path: wallet/{userId}/fiat/{currency}
+      final dbPath = 'wallet/$uid/fiat/$currency';
       final ref = _database.ref(dbPath);
       
       // Get database URL from Firebase options
@@ -54,7 +56,7 @@ class WalletRepository {
                          'https://truepay-72060-default-rtdb.firebaseio.com';
       final fullEndpointUrl = '$databaseUrl/$dbPath.json';
       
-      Logger.debug('Fetching wallet balance for user: $uid');
+      Logger.debug('Fetching wallet balance for user: $uid, currency: $currency');
       Logger.debug('═══════════════════════════════════════════════════════════');
       Logger.debug('📤 FULL RAW REQUEST:');
       Logger.debug('  HTTP Method: GET');
@@ -72,6 +74,7 @@ class WalletRepository {
       Logger.debug('    "format": "export"');
       Logger.debug('  }');
       Logger.debug('  User ID: $uid');
+      Logger.debug('  Currency: $currency');
       Logger.debug('═══════════════════════════════════════════════════════════');
       
       final startTime = DateTime.now();
@@ -110,7 +113,7 @@ class WalletRepository {
         return wallet;
       }
       
-      Logger.warning('Wallet balance not found for user: $uid');
+      Logger.warning('Wallet balance not found for user: $uid, currency: $currency');
       Logger.debug('═══════════════════════════════════════════════════════════');
       return null;
     } catch (e) {
