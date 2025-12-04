@@ -1,6 +1,8 @@
+import 'dart:convert';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:pretium/models/wallet_model.dart';
 import 'package:pretium/utils/logger.dart';
+import 'package:pretium/firebase_options.dart';
 
 /// Repository for wallet operations in Realtime Database
 /// STRICT RULE: This repository is READ-ONLY
@@ -44,19 +46,72 @@ class WalletRepository {
   /// Use streamWalletBalance() for real-time updates
   Future<Wallet?> getWalletBalance(String uid) async {
     try {
-      Logger.debug('Fetching wallet balance for user: $uid');
+      final dbPath = 'wallet/$uid/balance';
+      final ref = _database.ref(dbPath);
       
-      final ref = _database.ref('wallet/$uid/balance');
+      // Get database URL from Firebase options
+      final databaseUrl = DefaultFirebaseOptions.currentPlatform.databaseURL ?? 
+                         'https://truepay-72060-default-rtdb.firebaseio.com';
+      final fullEndpointUrl = '$databaseUrl/$dbPath.json';
+      
+      Logger.debug('Fetching wallet balance for user: $uid');
+      Logger.debug('═══════════════════════════════════════════════════════════');
+      Logger.debug('📤 FULL RAW REQUEST:');
+      Logger.debug('  HTTP Method: GET');
+      Logger.debug('  Database URL: $databaseUrl');
+      Logger.debug('  Reference Path: $dbPath');
+      Logger.debug('  Full Reference Path: ${ref.path}');
+      Logger.debug('  Full Endpoint URL: $fullEndpointUrl');
+      Logger.debug('  Request Headers: {');
+      Logger.debug('    "Content-Type": "application/json",');
+      Logger.debug('    "Accept": "application/json"');
+      Logger.debug('  }');
+      Logger.debug('  Request Body: null (GET request)');
+      Logger.debug('  Query Parameters: {');
+      Logger.debug('    "auth": "[Firebase Auth Token]",');
+      Logger.debug('    "format": "export"');
+      Logger.debug('  }');
+      Logger.debug('  User ID: $uid');
+      Logger.debug('═══════════════════════════════════════════════════════════');
+      
+      final startTime = DateTime.now();
       final snapshot = await ref.get();
+      final endTime = DateTime.now();
+      final duration = endTime.difference(startTime);
+      
+      Logger.debug('📥 FULL RAW RESPONSE:');
+      Logger.debug('  Response Time: ${duration.inMilliseconds}ms');
+      Logger.debug('  Snapshot exists: ${snapshot.exists}');
+      Logger.debug('  Has value: ${snapshot.value != null}');
+      Logger.debug('  Snapshot key: ${snapshot.key}');
+      Logger.debug('  Snapshot priority: ${snapshot.priority}');
+      
+      if (snapshot.value != null) {
+        // Convert to JSON string for full raw response
+        final rawResponseJson = jsonEncode(snapshot.value);
+        Logger.debug('  Raw Response Body (JSON):');
+        Logger.debug('  $rawResponseJson');
+        Logger.debug('');
+        Logger.debug('  Raw Response Body (Formatted):');
+        Logger.debug('  ${snapshot.value}');
+      } else {
+        Logger.debug('  Raw Response Body: null');
+      }
       
       if (snapshot.exists && snapshot.value != null) {
         final data = Map<String, dynamic>.from(snapshot.value as Map);
+        Logger.debug('');
+        Logger.debug('  Parsed Response Data:');
+        Logger.debug('  $data');
+        Logger.debug('');
         final wallet = Wallet.fromJson(data);
-        Logger.debug('Wallet balance fetched: ${wallet.balance} ${wallet.currencyCode}');
+        Logger.debug('✅ Wallet balance fetched: ${wallet.balance} ${wallet.currencyCode}');
+        Logger.debug('═══════════════════════════════════════════════════════════');
         return wallet;
       }
       
       Logger.warning('Wallet balance not found for user: $uid');
+      Logger.debug('═══════════════════════════════════════════════════════════');
       return null;
     } catch (e) {
       Logger.error('Failed to get wallet balance', e);
@@ -68,19 +123,73 @@ class WalletRepository {
   /// Path: wallet/{uid}/crypto/{currencyCode}
   Future<Wallet?> getCryptoWalletBalance(String uid, String currencyCode) async {
     try {
-      Logger.debug('Fetching crypto wallet balance for user: $uid, currency: $currencyCode');
+      final dbPath = 'wallet/$uid/crypto/$currencyCode';
+      final ref = _database.ref(dbPath);
       
-      final ref = _database.ref('wallet/$uid/crypto/$currencyCode');
+      // Get database URL from Firebase options
+      final databaseUrl = DefaultFirebaseOptions.currentPlatform.databaseURL ?? 
+                         'https://truepay-72060-default-rtdb.firebaseio.com';
+      final fullEndpointUrl = '$databaseUrl/$dbPath.json';
+      
+      Logger.debug('Fetching crypto wallet balance for user: $uid, currency: $currencyCode');
+      Logger.debug('═══════════════════════════════════════════════════════════');
+      Logger.debug('📤 FULL RAW REQUEST:');
+      Logger.debug('  HTTP Method: GET');
+      Logger.debug('  Database URL: $databaseUrl');
+      Logger.debug('  Reference Path: $dbPath');
+      Logger.debug('  Full Reference Path: ${ref.path}');
+      Logger.debug('  Full Endpoint URL: $fullEndpointUrl');
+      Logger.debug('  Request Headers: {');
+      Logger.debug('    "Content-Type": "application/json",');
+      Logger.debug('    "Accept": "application/json"');
+      Logger.debug('  }');
+      Logger.debug('  Request Body: null (GET request)');
+      Logger.debug('  Query Parameters: {');
+      Logger.debug('    "auth": "[Firebase Auth Token]",');
+      Logger.debug('    "format": "export"');
+      Logger.debug('  }');
+      Logger.debug('  User ID: $uid');
+      Logger.debug('  Currency Code: $currencyCode');
+      Logger.debug('═══════════════════════════════════════════════════════════');
+      
+      final startTime = DateTime.now();
       final snapshot = await ref.get();
+      final endTime = DateTime.now();
+      final duration = endTime.difference(startTime);
+      
+      Logger.debug('📥 FULL RAW RESPONSE:');
+      Logger.debug('  Response Time: ${duration.inMilliseconds}ms');
+      Logger.debug('  Snapshot exists: ${snapshot.exists}');
+      Logger.debug('  Has value: ${snapshot.value != null}');
+      Logger.debug('  Snapshot key: ${snapshot.key}');
+      Logger.debug('  Snapshot priority: ${snapshot.priority}');
+      
+      if (snapshot.value != null) {
+        // Convert to JSON string for full raw response
+        final rawResponseJson = jsonEncode(snapshot.value);
+        Logger.debug('  Raw Response Body (JSON):');
+        Logger.debug('  $rawResponseJson');
+        Logger.debug('');
+        Logger.debug('  Raw Response Body (Formatted):');
+        Logger.debug('  ${snapshot.value}');
+      } else {
+        Logger.debug('  Raw Response Body: null');
+      }
       
       if (snapshot.exists && snapshot.value != null) {
         final data = Map<String, dynamic>.from(snapshot.value as Map);
+        Logger.debug('');
+        Logger.debug('  Parsed Response Data:');
+        Logger.debug('  $data');
+        Logger.debug('');
         final wallet = Wallet.fromJson(data);
-        Logger.debug('Crypto wallet balance fetched: ${wallet.balance} ${wallet.currencyCode}');
+        Logger.debug('✅ Crypto wallet balance fetched: ${wallet.balance} ${wallet.currencyCode}');
+        Logger.debug('═══════════════════════════════════════════════════════════');
         return wallet;
       }
       
       Logger.warning('Crypto wallet balance not found for user: $uid, currency: $currencyCode');
+      Logger.debug('═══════════════════════════════════════════════════════════');
       // Return default wallet with 0 balance if not found
       return Wallet(currencyCode: currencyCode, balance: 0.0);
     } catch (e) {
