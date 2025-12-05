@@ -29,10 +29,20 @@
         // Users can only read their own wallet
         ".read": "auth != null && auth.uid == $userId",
         "balance": {
+          // DEPRECATED: Old path - kept for backward compatibility
           // Users can read their own wallet balance
           ".read": "auth != null && auth.uid == $userId",
           // Prevent all client writes - only Cloud Functions can write
           ".write": false
+        },
+        "fiat": {
+          "$currency": {
+            // NEW PATH: wallet/{userId}/fiat/{currency}
+            // Users can read their own fiat wallet balance
+            ".read": "auth != null && auth.uid == $userId",
+            // Prevent all client writes - only Cloud Functions can write
+            ".write": false
+          }
         },
         "crypto": {
           "$currencyCode": {

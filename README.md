@@ -284,7 +284,7 @@ lib/
 **Location**: `lib/repositories/wallet_repository.dart`, `lib/models/wallet_model.dart`
 
 **Dual Wallet Architecture**:
-- **Fiat Wallet**: `wallet/{userId}/balance` in Realtime Database
+- **Fiat Wallet**: `wallet/{userId}/fiat/{currency}` in Realtime Database (e.g., `wallet/{userId}/fiat/USD`)
 - **Crypto Wallet**: `wallet/{userId}/crypto/{currencyCode}` in Realtime Database
 
 **Features**:
@@ -463,7 +463,7 @@ lib/
 ### Wallet Structure
 
 **Fiat Wallet**:
-- Path: `wallet/{userId}/balance`
+- Path: `wallet/{userId}/fiat/{currency}` (e.g., `wallet/{userId}/fiat/USD`)
 - Default currency: USD
 - Supports: USD, KES, UGX, TZS, EUR, GBP
 - Structure:

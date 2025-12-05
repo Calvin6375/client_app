@@ -41,7 +41,8 @@ firebase deploy --only database
 The rules I've created:
 
 ### ✅ **Allowed (Read-Only for Clients)**
-- Authenticated users can **read** their own wallet balance: `wallet/{uid}/balance`
+- Authenticated users can **read** their own wallet balance: `wallet/{uid}/fiat/{currency}` (e.g., `wallet/{uid}/fiat/USD`)
+- Authenticated users can **read** their own crypto wallet: `wallet/{uid}/crypto/{currencyCode}`
 - Authenticated users can **read** their own payments: `payments/{paymentId}` (if `user_id` matches)
 - Authenticated users can **read** their payment references: `users/{uid}/payments/{paymentId}`
 
@@ -132,7 +133,8 @@ After deploying the rules:
    - Check for syntax errors
 
 3. **Check Database Path:**
-   - Wallet: `wallet/{uid}/balance`
+   - Fiat Wallet: `wallet/{uid}/fiat/{currency}` (e.g., `wallet/{uid}/fiat/USD`)
+   - Crypto Wallet: `wallet/{uid}/crypto/{currencyCode}`
    - Payments: `payments/{paymentId}` where `user_id == auth.uid`
 
 4. **Test Rules in Console:**

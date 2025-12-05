@@ -111,7 +111,7 @@ Cloud Function (handlePaymentWebhook)
   ↓
 updateWalletAfterPayment()
   ↓
-Updates wallet/{uid}/balance in RTDB
+Updates wallet/{uid}/fiat/{currency} in RTDB
   ↓
 WalletRepository.streamWalletBalance() (client reads)
 ```

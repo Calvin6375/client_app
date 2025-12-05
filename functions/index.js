@@ -29,7 +29,8 @@ exports.initializeWalletOnUserCreate = functions.auth.user().onCreate(async (use
     const timestamp = new Date().toISOString();
 
     // Check if fiat wallet already exists (shouldn't happen, but safety check)
-    const fiatWalletRef = db.ref(`wallet/${userId}/balance`);
+    // NEW PATH: wallet/{userId}/fiat/{currency} (matches backend sync path)
+    const fiatWalletRef = db.ref(`wallet/${userId}/fiat/USD`);
     const fiatWalletSnapshot = await fiatWalletRef.once("value");
 
     // Check if crypto wallet already exists
@@ -301,7 +302,9 @@ async function updateWalletAfterPayment(params) {
   const {userId, amount, currency} = params;
 
   try {
-    const walletRef = db.ref(`wallet/${userId}/balance`);
+    // NEW PATH: wallet/{userId}/fiat/{currency} (matches backend sync path)
+    const currencyCode = (currency || "USD").toUpperCase();
+    const walletRef = db.ref(`wallet/${userId}/fiat/${currencyCode}`);
     const walletSnapshot = await walletRef.once("value");
 
     const timestamp = new Date().toISOString();
@@ -313,20 +316,21 @@ async function updateWalletAfterPayment(params) {
 
       await walletRef.update({
         balance: newBalance,
-        currency: currency || currentBalance.currency || "USD",
+        currency: currencyCode,
         updatedAt: timestamp,
       });
 
-      console.log(`Wallet updated for user ${userId}: ${newBalance} ${currency}`);
+      console.log(`Wallet updated for user ${userId}: ${newBalance} ${currencyCode}`);
     } else {
       // Create new wallet
       await walletRef.set({
         balance: amount,
-        currency: currency || "USD",
+        currency: currencyCode,
         updatedAt: timestamp,
+        createdAt: timestamp,
       });
 
-      console.log(`Wallet created for user ${userId}: ${amount} ${currency}`);
+      console.log(`Wallet created for user ${userId}: ${amount} ${currencyCode}`);
     }
   } catch (error) {
     console.error("Error updating wallet:", error);
