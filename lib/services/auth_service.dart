@@ -46,18 +46,63 @@ class AuthService {
     required String password,
   }) async {
     try {
-      Logger.info('Signing up user: $email');
+      // Log request body (mask password for security)
+      final requestBody = {
+        'email': email.trim(),
+        'password': '***${password.length > 0 ? '*' * (password.length > 3 ? password.length - 3 : 0) : ''}***', // Mask password
+        'passwordLength': password.length,
+      };
+      Logger.info('📤 Firebase Auth - Create User Request:');
+      Logger.info('   Request Body: $requestBody');
+      
       final credential = await _auth.createUserWithEmailAndPassword(
         email: email.trim(),
         password: password,
       );
+      
+      // Log response body
+      // Get provider data from user (list of providers)
+      final providerData = credential.user?.providerData
+          .map((info) => {
+                'providerId': info.providerId,
+                'uid': info.uid,
+                'email': info.email,
+                'displayName': info.displayName,
+                'photoURL': info.photoURL,
+              })
+          .toList();
+      
+      final responseBody = {
+        'uid': credential.user?.uid,
+        'email': credential.user?.email,
+        'emailVerified': credential.user?.emailVerified,
+        'displayName': credential.user?.displayName,
+        'photoURL': credential.user?.photoURL,
+        'phoneNumber': credential.user?.phoneNumber,
+        'creationTime': credential.user?.metadata.creationTime?.toIso8601String(),
+        'lastSignInTime': credential.user?.metadata.lastSignInTime?.toIso8601String(),
+        'isAnonymous': credential.user?.isAnonymous,
+        'providerData': providerData,
+        'additionalUserInfo': {
+          'isNewUser': credential.additionalUserInfo?.isNewUser,
+          'providerId': credential.additionalUserInfo?.providerId,
+          'username': credential.additionalUserInfo?.username,
+          'profile': credential.additionalUserInfo?.profile,
+        },
+      };
+      Logger.info('📥 Firebase Auth - Create User Response:');
+      Logger.info('   Response Body: $responseBody');
       Logger.success('User signed up successfully: ${credential.user?.uid}');
       return credential;
     } on FirebaseAuthException catch (e) {
-      Logger.error('Sign up failed', e);
+      Logger.error('📥 Firebase Auth - Create User Error Response:');
+      Logger.error('   Error Code: ${e.code}');
+      Logger.error('   Error Message: ${e.message}');
+      Logger.error('   Error Details: ${e.toString()}');
       rethrow;
     } catch (e) {
-      Logger.error('Unexpected sign up error', e);
+      Logger.error('📥 Firebase Auth - Create User Unexpected Error:');
+      Logger.error('   Error: $e');
       rethrow;
     }
   }

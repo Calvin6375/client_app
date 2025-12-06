@@ -10,6 +10,7 @@ import 'package:firebase_database/firebase_database.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:pretium/features/topup/services/intasend_service.dart';
 import 'package:pretium/repositories/wallet_repository.dart';
+import 'package:pretium/repositories/user_repository.dart';
 import 'package:pretium/services/firebase_payment_service.dart';
 import 'package:pretium/services/order_service.dart';
 import 'dart:convert';
@@ -33,6 +34,7 @@ class _TopUpPageState extends State<TopUpPage> {
 
   final WalletRepository _walletRepository = WalletRepository();
   final OrderService _orderService = OrderService();
+  final UserRepository _userRepository = UserRepository();
 
   bool _hideBalance = false;
   double _fiatBalance = 0.00;
@@ -210,6 +212,24 @@ class _TopUpPageState extends State<TopUpPage> {
 
       print('🔗 Initiating IntaSend checkout...');
       
+      // Get user's phone number from Firestore profile
+      String? userPhoneNumber;
+      try {
+        final user = FirebaseAuth.instance.currentUser;
+        if (user != null) {
+          final userProfile = await _userRepository.getUserProfile(user.uid);
+          userPhoneNumber = userProfile?.phoneNumber;
+          if (userPhoneNumber != null && userPhoneNumber.isNotEmpty) {
+            print('📱 Found user phone number from profile: $userPhoneNumber');
+          } else {
+            print('⚠️ No phone number found in user profile');
+          }
+        }
+      } catch (e) {
+        print('⚠️ Failed to fetch user phone number: $e');
+        // Continue without phone number - it's optional
+      }
+      
       // Process payment using custom HTTP service
       final result = await intaSendService.processPayment(
         amount: amount,
@@ -217,6 +237,7 @@ class _TopUpPageState extends State<TopUpPage> {
         currency: _selectedCurrency,
         firstName: _firstNameCtrl.text.trim(),
         lastName: _lastNameCtrl.text.trim(),
+        phoneNumber: userPhoneNumber, // Pass the phone number from user profile
       );
 
       if (result['success']) {

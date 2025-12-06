@@ -88,7 +88,20 @@ class _RegisterPageState extends State<RegisterPage> {
 
     setState(() => _isSubmitting = true);
     try {
+      // Log complete registration request
+      final registrationRequest = {
+        'firstName': firstName,
+        'lastName': lastName,
+        'email': email,
+        'phoneNumber': phoneNumber.isNotEmpty ? phoneNumber : null,
+        'passwordLength': password.length,
+      };
+      Logger.info('🚀 ===== CREATE USER REQUEST =====');
+      Logger.info('📋 Registration Data: $registrationRequest');
+      Logger.info('=====================================');
+      
       // 1) Create user in Firebase Auth
+      Logger.info('📤 Step 1: Creating user in Firebase Auth...');
       final credential = await _authService.signUp(
         email: email,
         password: password,
@@ -96,6 +109,7 @@ class _RegisterPageState extends State<RegisterPage> {
 
       // 2) Create user profile in Firestore
       final uid = credential.user!.uid;
+      Logger.info('📤 Step 2: Creating user profile in Firestore...');
       await _userRepository.createUserProfile(
         uid: uid,
         firstName: firstName,
@@ -103,6 +117,11 @@ class _RegisterPageState extends State<RegisterPage> {
         email: email,
         phoneNumber: phoneNumber.isNotEmpty ? phoneNumber : null,
       );
+      
+      Logger.success('✅ ===== CREATE USER SUCCESS =====');
+      Logger.success('   User ID: $uid');
+      Logger.success('   Email: $email');
+      Logger.success('==================================');
 
       // 3) Navigate to landing page on success
       if (!mounted) return;

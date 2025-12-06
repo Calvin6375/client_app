@@ -31,14 +31,44 @@ class UserRepository {
         profileData['phoneNumber'] = phoneNumber;
       }
       
+      // Log request body
+      final requestBody = {
+        'collection': _collection,
+        'documentId': uid,
+        'data': {
+          ...profileData,
+          'createdAt': '<FieldValue.serverTimestamp()>',
+          'updatedAt': '<FieldValue.serverTimestamp()>',
+        },
+        'options': {
+          'merge': true,
+        },
+      };
+      Logger.info('📤 Firestore - Create User Profile Request:');
+      Logger.info('   Request Body: $requestBody');
+      
       await _firestore.collection(_collection).doc(uid).set(
         profileData,
         SetOptions(merge: true),
       );
       
+      // Fetch the created document to log response
+      final doc = await _firestore.collection(_collection).doc(uid).get();
+      final responseBody = {
+        'success': doc.exists,
+        'documentId': doc.id,
+        'data': doc.data(),
+        'metadata': {
+          'hasPendingWrites': doc.metadata.hasPendingWrites,
+          'isFromCache': doc.metadata.isFromCache,
+        },
+      };
+      Logger.info('📥 Firestore - Create User Profile Response:');
+      Logger.info('   Response Body: $responseBody');
       Logger.success('User profile created successfully: $uid');
     } catch (e) {
-      Logger.error('Failed to create user profile', e);
+      Logger.error('📥 Firestore - Create User Profile Error Response:');
+      Logger.error('   Error: $e');
       rethrow;
     }
   }
