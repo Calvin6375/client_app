@@ -212,7 +212,34 @@ class IntaSendService {
         };
       }
       
-      final paymentId = paymentResult['paymentId'] as String;
+      // Safely extract paymentId with null handling
+      final paymentId = paymentResult['paymentId'] as String?;
+      if (paymentId == null || paymentId.isEmpty) {
+        Logger.error('Payment created but paymentId is null or empty. Response: $paymentResult');
+        // Still proceed with checkout URL even if paymentId is missing
+        // Generate a temporary ID for tracking
+        final tempPaymentId = 'temp_${DateTime.now().millisecondsSinceEpoch}';
+        Logger.warning('Using temporary payment ID: $tempPaymentId');
+        
+        // Step 3: Launch checkout URL with temp ID
+        final launched = await launchCheckout(checkoutUrl, paymentId: tempPaymentId);
+        
+        if (launched) {
+          return {
+            'success': true,
+            'checkout_url': checkoutUrl,
+            'payment_id': tempPaymentId,
+            'warning': 'Payment created but payment ID was missing',
+          };
+        } else {
+          return {
+            'success': false,
+            'error': 'Failed to launch checkout URL',
+            'checkout_url': checkoutUrl,
+          };
+        }
+      }
+      
       Logger.success('Payment created: $paymentId');
       
       // Step 3: Launch checkout URL

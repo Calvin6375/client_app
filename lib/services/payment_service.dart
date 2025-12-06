@@ -6,7 +6,11 @@ import 'package:pretium/utils/logger.dart';
 /// All payment creation and updates are done server-side
 /// Client code MUST NOT write directly to Realtime Database
 class PaymentService {
-  final FirebaseFunctions _functions = FirebaseFunctions.instance;
+  // Use us-central1 region (default for Firebase Functions)
+  // If your functions are deployed to a different region, change this
+  final FirebaseFunctions _functions = FirebaseFunctions.instanceFor(
+    region: 'us-central1',
+  );
 
   /// Create a payment via Cloud Function
   /// This calls the server-side createPayment function
@@ -39,19 +43,83 @@ class PaymentService {
       });
       
       final data = result.data as Map<String, dynamic>;
-      Logger.success('Payment created successfully: ${data['paymentId']}');
+      
+      // Debug: Log the full response to understand the structure
+      Logger.info('Cloud Function response: $data');
+      
+      // Handle different response formats - check both camelCase and snake_case
+      // The Cloud Function returns: { success: true, paymentId: "...", checkoutUrl: "...", data: {...} }
+      // So paymentId should be at the top level, but also check nested data object as fallback
+      String? paymentId;
+      
+      // First try top-level camelCase
+      if (data.containsKey('paymentId') && data['paymentId'] != null) {
+        paymentId = data['paymentId'].toString();
+      }
+      // Then try top-level snake_case
+      else if (data.containsKey('payment_id') && data['payment_id'] != null) {
+        paymentId = data['payment_id'].toString();
+      }
+      // Then try nested data object
+      else if (data['data'] != null) {
+        final nestedData = data['data'] as Map<String, dynamic>?;
+        if (nestedData != null) {
+          if (nestedData.containsKey('payment_id') && nestedData['payment_id'] != null) {
+            paymentId = nestedData['payment_id'].toString();
+          } else if (nestedData.containsKey('paymentId') && nestedData['paymentId'] != null) {
+            paymentId = nestedData['paymentId'].toString();
+          }
+        }
+      }
+      
+      // Extract checkoutUrl from response (use different name to avoid conflict with parameter)
+      final responseCheckoutUrl = data['checkoutUrl'] as String? ?? 
+                                  data['checkout_url'] as String? ??
+                                  (data['data'] as Map<String, dynamic>?)?['checkout_url'] as String? ??
+                                  (data['data'] as Map<String, dynamic>?)?['checkoutUrl'] as String?;
+      
+      if (paymentId == null) {
+        Logger.error('Payment created but paymentId is null. Full response: $data');
+        Logger.error('Available keys in response: ${data.keys.toList()}');
+        if (data['data'] != null) {
+          final nestedData = data['data'] as Map<String, dynamic>?;
+          Logger.error('Nested data keys: ${nestedData?.keys.toList()}');
+        }
+        return {
+          'success': false,
+          'error': 'Payment created but payment ID is missing from response',
+          'code': 'invalid-response',
+          'data': data,
+        };
+      }
+      
+      Logger.success('Payment created successfully: $paymentId');
       
       return {
         'success': true,
-        'paymentId': data['paymentId'],
-        'checkoutUrl': data['checkoutUrl'],
+        'paymentId': paymentId,
+        'checkoutUrl': responseCheckoutUrl ?? checkoutUrl, // Use response value or fallback to parameter
         'data': data,
       };
     } on FirebaseFunctionsException catch (e) {
       Logger.error('Cloud Function error: ${e.code}', e);
+      
+      // Provide more helpful error messages
+      String errorMessage = e.message ?? 'Payment creation failed';
+      if (e.code == 'not-found') {
+        errorMessage = 'Payment function not found. Please ensure the Cloud Function "createPayment" is deployed.';
+        Logger.warning('The createPayment Cloud Function may not be deployed. Run: firebase deploy --only functions');
+      } else if (e.code == 'unauthenticated') {
+        errorMessage = 'Authentication required. Please log in and try again.';
+      } else if (e.code == 'permission-denied') {
+        errorMessage = 'Permission denied. You may not have access to create payments.';
+      } else if (e.code == 'invalid-argument') {
+        errorMessage = 'Invalid payment data: ${e.message ?? "Please check your input"}';
+      }
+      
       return {
         'success': false,
-        'error': e.message ?? 'Payment creation failed',
+        'error': errorMessage,
         'code': e.code,
       };
     } catch (e) {
