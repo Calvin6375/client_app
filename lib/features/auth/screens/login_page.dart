@@ -6,6 +6,7 @@ import 'package:pretium/features/auth/widgets/welcome_text_section.dart';
 import 'package:pretium/features/home/screens/landing_page.dart';
 import 'package:pretium/services/auth_service.dart';
 import 'package:pretium/utils/logger.dart';
+import 'package:pretium/core/constants/app_colors.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 class LoginPage extends StatefulWidget {
@@ -72,9 +73,9 @@ class _LoginScreenState extends State<LoginPage> {
                       Checkbox(
                         value: _rememberMe,
                         activeColor: Theme.of(context).colorScheme.primary,
-                        checkColor: Colors.white,
-                        side: const BorderSide(
-                          color: Color.fromARGB(255, 75, 72, 72),
+                        checkColor: AppColors.getThemeColors(context).onPrimary,
+                        side: BorderSide(
+                          color: AppColors.getThemeColors(context).border,
                           width: 3.0,
                         ),
                         onChanged: (value) {

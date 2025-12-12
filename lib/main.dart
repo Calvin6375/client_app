@@ -11,6 +11,7 @@ import 'package:pretium/features/topup/screens/topup_page.dart';
 import 'package:pretium/features/swap/screens/swap_page.dart';
 import 'package:pretium/app/route_names.dart';
 import 'package:pretium/utils/logger.dart';
+import 'package:pretium/core/constants/app_colors.dart';
 
 /// Background message handler (must be top-level function)
 @pragma('vm:entry-point')
@@ -99,79 +100,119 @@ Future<void> main() async {
 class MyApp extends StatelessWidget {
   const MyApp({Key? key}) : super(key: key);
 
-  static const Color brandPrimary = Color(0xFF0097A7); // Teal-blue from logo
-
   ThemeData _buildLightTheme() {
-    final base = ThemeData(useMaterial3: true, brightness: Brightness.light);
-    final scheme = ColorScheme.fromSeed(
-      seedColor: brandPrimary,
+    final colors = AppColors.light;
+    final base = ThemeData(
+      useMaterial3: true,
       brightness: Brightness.light,
-    ).copyWith(primary: brandPrimary, onPrimary: Colors.white);
+      scaffoldBackgroundColor: colors.background,
+    );
+    final scheme = ColorScheme.fromSeed(
+      seedColor: AppColors.brandPrimary,
+      brightness: Brightness.light,
+    ).copyWith(
+      primary: colors.primary,
+      onPrimary: colors.onPrimary,
+      surface: colors.surface,
+      onSurface: colors.textPrimary,
+      background: colors.background,
+      error: colors.error,
+    );
     return base.copyWith(
       colorScheme: scheme,
-      primaryColor: brandPrimary,
-      appBarTheme: const AppBarTheme(
-        backgroundColor: brandPrimary,
-        foregroundColor: Colors.white,
+      primaryColor: colors.primary,
+      appBarTheme: AppBarTheme(
+        backgroundColor: colors.primary,
+        foregroundColor: colors.onPrimary,
         elevation: 0,
-        iconTheme: IconThemeData(color: Colors.white),
+        iconTheme: IconThemeData(color: colors.onPrimary),
+      ),
+      cardTheme: CardThemeData(
+        color: colors.surface,
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
-          backgroundColor: brandPrimary,
-          foregroundColor: Colors.white,
+          backgroundColor: colors.primary,
+          foregroundColor: colors.onPrimary,
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
-          foregroundColor: brandPrimary,
-          side: const BorderSide(color: brandPrimary, width: 1.5),
+          foregroundColor: colors.primary,
+          side: BorderSide(color: colors.primary, width: 1.5),
         ),
       ),
       textButtonTheme: TextButtonThemeData(
-        style: TextButton.styleFrom(foregroundColor: brandPrimary),
+        style: TextButton.styleFrom(foregroundColor: colors.primary),
       ),
-      floatingActionButtonTheme: const FloatingActionButtonThemeData(
-        backgroundColor: brandPrimary,
-        foregroundColor: Colors.white,
+      floatingActionButtonTheme: FloatingActionButtonThemeData(
+        backgroundColor: colors.primary,
+        foregroundColor: colors.onPrimary,
       ),
+      dividerColor: colors.divider,
+      dividerTheme: DividerThemeData(color: colors.divider),
     );
   }
 
   ThemeData _buildDarkTheme() {
-    final base = ThemeData(useMaterial3: true, brightness: Brightness.dark);
-    final scheme = ColorScheme.fromSeed(
-      seedColor: brandPrimary,
+    final colors = AppColors.dark;
+    final base = ThemeData(
+      useMaterial3: true,
       brightness: Brightness.dark,
-    ).copyWith(primary: brandPrimary, onPrimary: Colors.white);
+      scaffoldBackgroundColor: colors.background,
+    );
+    final scheme = ColorScheme.fromSeed(
+      seedColor: AppColors.brandPrimary,
+      brightness: Brightness.dark,
+    ).copyWith(
+      primary: colors.primary,
+      onPrimary: colors.onPrimary,
+      surface: colors.surface,
+      onSurface: colors.textPrimary,
+      background: colors.background,
+      error: colors.error,
+    );
     return base.copyWith(
       colorScheme: scheme,
-      primaryColor: brandPrimary,
-      appBarTheme: const AppBarTheme(
-        backgroundColor: brandPrimary,
-        foregroundColor: Colors.white,
+      primaryColor: colors.primary,
+      appBarTheme: AppBarTheme(
+        backgroundColor: colors.primary,
+        foregroundColor: colors.onPrimary,
         elevation: 0,
-        iconTheme: IconThemeData(color: Colors.white),
+        iconTheme: IconThemeData(color: colors.onPrimary),
+      ),
+      cardTheme: CardThemeData(
+        color: colors.surface,
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
-          backgroundColor: brandPrimary,
-          foregroundColor: Colors.white,
+          backgroundColor: colors.primary,
+          foregroundColor: colors.onPrimary,
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
-          foregroundColor: brandPrimary,
-          side: const BorderSide(color: brandPrimary, width: 1.5),
+          foregroundColor: colors.primary,
+          side: BorderSide(color: colors.primary, width: 1.5),
         ),
       ),
       textButtonTheme: TextButtonThemeData(
-        style: TextButton.styleFrom(foregroundColor: brandPrimary),
+        style: TextButton.styleFrom(foregroundColor: colors.primary),
       ),
-      floatingActionButtonTheme: const FloatingActionButtonThemeData(
-        backgroundColor: brandPrimary,
-        foregroundColor: Colors.white,
+      floatingActionButtonTheme: FloatingActionButtonThemeData(
+        backgroundColor: colors.primary,
+        foregroundColor: colors.onPrimary,
       ),
+      dividerColor: colors.divider,
+      dividerTheme: DividerThemeData(color: colors.divider),
     );
   }
 

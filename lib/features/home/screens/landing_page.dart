@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:pretium/features/send_money/screens/send_money_page.dart';
+import 'package:pretium/core/constants/app_colors.dart';
 import '/widgets/header_widget.dart';
 import '/widgets/wallet_card.dart';
 import '/widgets/financial_service.dart';
@@ -31,6 +32,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AppColors.getThemeColors(context);
     final primary = Theme.of(context).colorScheme.primary;
     return Scaffold(
       backgroundColor: primary,
@@ -44,13 +46,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
               bottom: 12,
             ),
             color: primary,
-            child: const HeaderWidget(),
+            child: HeaderWidget(),
           ),
           Expanded(
             child: Container(
-              decoration: const BoxDecoration(
-                color: Color(0xFFF2F5F8),
-                borderRadius: BorderRadius.only(
+              decoration: BoxDecoration(
+                color: colors.background,
+                borderRadius: const BorderRadius.only(
                   topLeft: Radius.circular(0),
                   topRight: Radius.circular(0),
                 ),
@@ -87,7 +89,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             IconButton(
               icon: const Icon(Icons.account_balance_wallet),
               iconSize: 28,
-              color: _selectedIndex == 0 ? primary : Colors.grey,
+              color: _selectedIndex == 0 ? primary : colors.iconSecondary,
               onPressed: () => _onItemTapped(0),
             ),
             GestureDetector(
@@ -110,12 +112,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ],
                 ),
                 padding: const EdgeInsets.all(12),
-                child: const FaIcon(FontAwesomeIcons.paperPlane, color: Colors.white, size: 24),
+                child: FaIcon(FontAwesomeIcons.paperPlane, color: colors.onPrimary, size: 24),
               ),
             ),
             IconButton(
               icon: const Icon(Icons.receipt_long),
-              color: _selectedIndex == 2 ? primary : Colors.grey,
+              color: _selectedIndex == 2 ? primary : colors.iconSecondary,
               onPressed: () => _onItemTapped(2),
             ),
           ],

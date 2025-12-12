@@ -3,6 +3,7 @@ import 'package:pretium/app/route_names.dart';
 import 'package:pretium/models/wallet_model.dart';
 import 'package:pretium/repositories/wallet_repository.dart';
 import 'package:pretium/features/swap/screens/swap_page.dart';
+import 'package:pretium/core/constants/app_colors.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 
@@ -203,6 +204,7 @@ class WalletCardWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AppColors.getThemeColors(context);
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 4),
       padding: const EdgeInsets.all(24),
@@ -231,8 +233,8 @@ class WalletCardWidget extends StatelessWidget {
           // Title
           Text(
             title,
-            style: const TextStyle(
-              color: Colors.white70,
+            style: TextStyle(
+              color: colors.onPrimary.withOpacity(0.7),
               fontSize: 14,
               fontWeight: FontWeight.w500,
               letterSpacing: 0.5,
@@ -242,11 +244,11 @@ class WalletCardWidget extends StatelessWidget {
           
           // Balance or Loading/Error
           if (loading)
-            const SizedBox(
+            SizedBox(
               height: 36,
               width: 36,
               child: CircularProgressIndicator(
-                color: Colors.white,
+                color: colors.onPrimary,
                 strokeWidth: 3,
               ),
             )
@@ -256,8 +258,8 @@ class WalletCardWidget extends StatelessWidget {
               child: SingleChildScrollView(
                 child: Text(
                   error!,
-                  style: const TextStyle(
-                    color: Colors.white,
+                  style: TextStyle(
+                    color: colors.onPrimary,
                     fontSize: 12,
                   ),
                   maxLines: 3,
@@ -268,9 +270,9 @@ class WalletCardWidget extends StatelessWidget {
           else
             Text(
               "$currency ${balance.toStringAsFixed(2)}",
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 28,
-                color: Colors.white,
+                color: colors.onPrimary,
                 fontWeight: FontWeight.bold,
                 letterSpacing: 0.5,
               ),
@@ -281,8 +283,8 @@ class WalletCardWidget extends StatelessWidget {
             const SizedBox(height: 8),
             Text(
               'Updated ${TimeOfDay.fromDateTime(updatedAt!).format(context)}',
-              style: const TextStyle(
-                color: Colors.white70,
+              style: TextStyle(
+                color: colors.onPrimary.withOpacity(0.7),
                 fontSize: 12,
                 letterSpacing: 0.3,
               ),
@@ -300,7 +302,7 @@ class WalletCardWidget extends StatelessWidget {
                 icon: Icons.add_circle_outline,
                 label: 'Top Up',
                 onPressed: onTopUp,
-                backgroundColor: Colors.white,
+                backgroundColor: colors.onPrimary,
                 foregroundColor: backgroundColor,
               ),
               
@@ -311,9 +313,9 @@ class WalletCardWidget extends StatelessWidget {
                 icon: Icons.swap_horiz,
                 label: 'Swap',
                 onPressed: onSwap,
-                backgroundColor: Colors.white.withOpacity(0.2),
-                foregroundColor: Colors.white,
-                borderColor: Colors.white70,
+                backgroundColor: colors.onPrimary.withOpacity(0.2),
+                foregroundColor: colors.onPrimary,
+                borderColor: colors.onPrimary.withOpacity(0.7),
               ),
             ],
           ),
@@ -357,7 +359,7 @@ class _CircularActionButton extends StatelessWidget {
                   : null,
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.1),
+                  color: AppColors.getThemeColors(context).shadow,
                   blurRadius: 8,
                   offset: const Offset(0, 2),
                 ),

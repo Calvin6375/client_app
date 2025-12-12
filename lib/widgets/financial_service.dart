@@ -1,26 +1,28 @@
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:pretium/features/send_money/screens/send_money_page.dart';
+import 'package:pretium/core/constants/app_colors.dart';
 
 class FinancialServices extends StatelessWidget {
   const FinancialServices({super.key});
 
   @override
   Widget build(BuildContext context) {
+    final colors = AppColors.getThemeColors(context);
     return Container(
       padding: EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: colors.surface,
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.grey.withOpacity(0.3),
+            color: colors.shadow,
             spreadRadius: 5,
             blurRadius: 18,
             offset: const Offset(0, 8),
           ),
           BoxShadow(
-            color: Colors.grey.withOpacity(0.1),
+            color: colors.shadowLight,
             spreadRadius: 4,
             blurRadius: 20,
             offset: const Offset(0, 10),
@@ -106,7 +108,7 @@ class FinancialServices extends StatelessWidget {
           ).colorScheme.primary.withOpacity(0.1),
           radius: 25,
           child:
-              icon is IconData && icon.fontFamily == 'FontAwesomeSolid'
+              icon.runtimeType == IconData
                   ? FaIcon(
                     icon,
                     color: Theme.of(context).colorScheme.primary,
