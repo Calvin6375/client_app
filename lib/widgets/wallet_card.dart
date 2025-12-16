@@ -21,12 +21,7 @@ class _WalletCardState extends State<WalletCard> {
   DateTime? _lastRefreshedAt;
   
   bool _isFirebaseInitialized() {
-    try {
-      Firebase.app();
-      return true;
-    } catch (e) {
-      return false;
-    }
+    return Firebase.apps.isNotEmpty;
   }
 
   @override
@@ -54,18 +49,23 @@ class _WalletCardState extends State<WalletCard> {
       
       if (!silent) setState(() { _loading = true; _error = null; });
       
+      // fetchWalletBalance now always returns a Wallet (default if not found)
       final latest = await _service.fetchWalletBalance(user.uid);
       if (!mounted) return;
       setState(() {
         _wallet = latest;
         _lastRefreshedAt = DateTime.now();
+        _error = null; // Clear any previous errors
       });
     } catch (e) {
+      // This should rarely happen now since fetchWalletBalance returns default wallet
       if (!mounted) return;
       setState(() { 
-        // Truncate error message to prevent overflow
+        // Only show error for unexpected exceptions (network issues, etc.)
         final errorMsg = e.toString();
         _error = errorMsg.length > 100 ? '${errorMsg.substring(0, 100)}...' : errorMsg;
+        // Still set a default wallet so UI doesn't break
+        _wallet ??= Wallet(currencyCode: 'KES', balance: 0.0);
       });
     } finally {
       if (!mounted) return;

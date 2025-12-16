@@ -1,4 +1,6 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:pretium/features/splash/screens/splash_page.dart';
 import 'package:pretium/features/splash/screens/splash_page_1.dart';
@@ -9,28 +11,64 @@ import 'package:pretium/features/topup/screens/topup_page.dart';
 import 'package:pretium/features/swap/screens/swap_page.dart';
 import 'package:pretium/app/route_names.dart';
 
+// Global flag to track Firebase initialization status
+bool _firebaseInitialized = false;
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
   // Initialize Firebase with error handling
-  try {
-    await Firebase.initializeApp();
-  } catch (e) {
-    debugPrint('Firebase initialization error: $e');
-    debugPrint('');
-    debugPrint('⚠️  FIREBASE SETUP REQUIRED:');
-    debugPrint('For iOS: Download GoogleService-Info.plist from Firebase Console');
-    debugPrint('1. Go to https://console.firebase.google.com/');
-      debugPrint('2. Select project: truepay-72060');
-    debugPrint('3. Add iOS app (if not added) with bundle ID: com.example.pretiumMock');
-    debugPrint('4. Download GoogleService-Info.plist');
-    debugPrint('5. Place it in: ios/Runner/GoogleService-Info.plist');
-    debugPrint('');
-    debugPrint('App will continue but Firebase features may not work.');
-  }
+  await _initializeFirebase();
   
   runApp(const MyApp());
 }
+
+Future<void> _initializeFirebase() async {
+  try {
+    // Check if Firebase is already initialized
+    if (Firebase.apps.isNotEmpty) {
+      debugPrint('✅ Firebase already initialized');
+      _firebaseInitialized = true;
+      return;
+    }
+    
+    // Initialize Firebase
+    await Firebase.initializeApp();
+    _firebaseInitialized = true;
+    debugPrint('✅ Firebase initialized successfully');
+    
+    // Verify initialization by checking if we can access Firebase app
+    final app = Firebase.app();
+    debugPrint('✅ Firebase app verified: ${app.name}');
+    
+  } catch (e, stackTrace) {
+    _firebaseInitialized = false;
+    debugPrint('❌ Firebase initialization error: $e');
+    debugPrint('Stack trace: $stackTrace');
+    debugPrint('');
+    
+    // Platform-specific error messages
+    if (Platform.isIOS) {
+      debugPrint('⚠️  FIREBASE SETUP REQUIRED FOR iOS:');
+      debugPrint('1. Ensure GoogleService-Info.plist exists at: ios/Runner/GoogleService-Info.plist');
+      debugPrint('2. Open ios/Runner.xcworkspace (NOT .xcodeproj) in Xcode');
+      debugPrint('3. Verify GoogleService-Info.plist is in the Runner folder in Xcode');
+      debugPrint('4. Select the file and check "Target Membership" → "Runner" is checked');
+      debugPrint('5. Clean build: flutter clean && cd ios && rm -rf Pods Podfile.lock && pod install && cd ..');
+      debugPrint('6. Rebuild: flutter run');
+    } else if (Platform.isAndroid) {
+      debugPrint('⚠️  FIREBASE SETUP REQUIRED FOR ANDROID:');
+      debugPrint('1. Ensure google-services.json exists at: android/app/google-services.json');
+      debugPrint('2. Verify the file is properly configured in build.gradle');
+    }
+    
+    debugPrint('');
+    debugPrint('App will continue but Firebase features may not work.');
+  }
+}
+
+// Helper function to check if Firebase is initialized
+bool isFirebaseInitialized() => _firebaseInitialized;
 
 class MyApp extends StatelessWidget {
   const MyApp({Key? key}) : super(key: key);

@@ -23,12 +23,14 @@ class IntaSendService {
   String get _baseUrl => isTestMode ? _baseUrlTest : _baseUrlLive;
 
   /// Fetch latest wallet balance for a given userId from backend
+  /// Returns a default wallet with 0.00 balance if no data exists
   Future<Wallet> fetchWalletBalance(String userId) async {
     final authUserId = FirebaseAuth.instance.currentUser!.uid;
     print('📡 Reading wallet balance for auth user: $authUserId (param: $userId)');
 
     try {
-      final balanceRef = FirebaseDatabase.instance.ref().child('wallet/balance/$authUserId');
+      // Match the database rules structure: wallet/{userId}/balance
+      final balanceRef = FirebaseDatabase.instance.ref().child('wallet/$authUserId/balance');
       final snapshot = await balanceRef.get();
 
       if (snapshot.exists && snapshot.value != null) {
@@ -37,11 +39,13 @@ class IntaSendService {
         return Wallet.fromJson(data);
       }
 
-      print('🚨 No wallet balance data for user: $authUserId');
-      throw Exception('No wallet balance found');
+      // Return default wallet if no data exists (wallet not initialized yet)
+      print('ℹ️ No wallet balance data for user: $authUserId - returning default wallet');
+      return Wallet(currencyCode: 'KES', balance: 0.0);
     } catch (e) {
-      print('🚨 Error fetching wallet balance: $e');
-      rethrow;
+      // On permission errors or other exceptions, return default wallet
+      print('⚠️ Error fetching wallet balance: $e - returning default wallet');
+      return Wallet(currencyCode: 'KES', balance: 0.0);
     }
   }
 

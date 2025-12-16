@@ -7,12 +7,7 @@ class HeaderWidget extends StatelessWidget {
   const HeaderWidget({super.key});
 
   bool _isFirebaseInitialized() {
-    try {
-      Firebase.app();
-      return true;
-    } catch (e) {
-      return false;
-    }
+    return Firebase.apps.isNotEmpty;
   }
 
   @override

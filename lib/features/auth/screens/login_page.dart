@@ -272,9 +272,7 @@ class _LoginScreenState extends State<LoginPage> {
                             setState(() => _isLoading = true);
                             try {
                               // Check if Firebase is initialized
-                              try {
-                                Firebase.app();
-                              } catch (e) {
+                              if (Firebase.apps.isEmpty) {
                                 if (mounted) {
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     const SnackBar(
@@ -285,6 +283,7 @@ class _LoginScreenState extends State<LoginPage> {
                                     ),
                                   );
                                 }
+                                setState(() => _isLoading = false);
                                 return;
                               }
 
