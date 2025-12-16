@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:pretium/features/splash/screens/splash_page.dart';
 import 'package:pretium/features/splash/screens/splash_page_1.dart';
 import 'package:pretium/features/auth/screens/login_page.dart';
@@ -10,15 +11,32 @@ import 'package:pretium/features/home/screens/landing_page.dart';
 import 'package:pretium/features/topup/screens/topup_page.dart';
 import 'package:pretium/features/swap/screens/swap_page.dart';
 import 'package:pretium/app/route_names.dart';
+import 'package:pretium/services/notification_service.dart';
 
 // Global flag to track Firebase initialization status
 bool _firebaseInitialized = false;
+
+// Background message handler - must be top-level function
+@pragma('vm:entry-point')
+Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  await Firebase.initializeApp();
+  await NotificationService.backgroundMessageHandler(message);
+}
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
   // Initialize Firebase with error handling
   await _initializeFirebase();
+  
+  // Register background message handler
+  FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+  
+  // Initialize FCM notifications (after Firebase is initialized)
+  await NotificationService.initialize();
+  
+  // Setup foreground message handler
+  NotificationService.setupForegroundHandler();
   
   runApp(const MyApp());
 }
