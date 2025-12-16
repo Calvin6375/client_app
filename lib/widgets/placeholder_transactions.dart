@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:pretium/core/constants/app_colors.dart';
 
 class PlaceholderTransactions extends StatelessWidget {
   const PlaceholderTransactions({super.key});
@@ -46,12 +47,13 @@ class PlaceholderTransactions extends StatelessWidget {
                   amount = double.tryParse(amountRaw) ?? 0.0;
                 final isDebit = (data['type'] ?? 'debit') == 'debit';
 
+                final colors = AppColors.getThemeColors(context);
                 return ListTile(
                   leading: CircleAvatar(
-                    backgroundColor: Colors.teal.shade100,
+                    backgroundColor: colors.infoLight,
                     child: Icon(
                       isDebit ? Icons.call_made : Icons.call_received,
-                      color: Colors.teal.shade800,
+                      color: colors.primary,
                     ),
                   ),
                   title: Text(
@@ -67,8 +69,7 @@ class PlaceholderTransactions extends StatelessWidget {
                   trailing: Text(
                     (isDebit ? '-' : '+') + 'KES ' + amount.toStringAsFixed(2),
                     style: TextStyle(
-                      color:
-                          isDebit ? Colors.red.shade600 : Colors.green.shade700,
+                      color: isDebit ? colors.error : colors.success,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
@@ -84,21 +85,22 @@ class _SkeletonList extends StatelessWidget {
   const _SkeletonList();
   @override
   Widget build(BuildContext context) {
+    final colors = AppColors.getThemeColors(context);
     return Column(
       children: List.generate(
         3,
         (index) => ListTile(
-          leading: CircleAvatar(backgroundColor: Colors.grey.shade300),
-          title: Container(height: 10, color: Colors.grey.shade300),
+          leading: CircleAvatar(backgroundColor: colors.border),
+          title: Container(height: 10, color: colors.border),
           subtitle: Container(
             height: 10,
             width: 100,
-            color: Colors.grey.shade200,
+            color: colors.borderLight,
           ),
           trailing: Container(
             height: 10,
             width: 60,
-            color: Colors.grey.shade300,
+            color: colors.border,
           ),
         ),
       ),
@@ -110,11 +112,12 @@ class _EmptyTransactions extends StatelessWidget {
   const _EmptyTransactions();
   @override
   Widget build(BuildContext context) {
+    final colors = AppColors.getThemeColors(context);
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8.0),
       child: Text(
         'No recent transactions',
-        style: TextStyle(color: Colors.grey.shade600),
+        style: TextStyle(color: colors.textSecondary),
       ),
     );
   }

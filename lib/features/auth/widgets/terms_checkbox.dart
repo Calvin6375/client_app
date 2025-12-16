@@ -1,31 +1,31 @@
 import 'package:flutter/material.dart';
+import 'package:pretium/core/constants/app_colors.dart';
 
 class TermsCheckbox extends StatelessWidget {
   final bool value;
   final ValueChanged<bool?> onChanged;
   final VoidCallback? onTermsTap;
-  final Color color;
+  final Color? color;
 
   const TermsCheckbox({
     super.key,
     required this.value,
     required this.onChanged,
     this.onTermsTap,
-    this.color = const Color(0xFF0097A7),
+    this.color,
   });
 
   @override
   Widget build(BuildContext context) {
+    final colors = AppColors.getThemeColors(context);
+    final checkboxColor = color ?? colors.primary;
     return Row(
       children: [
         Checkbox(
           value: value,
-          activeColor: color,
-          checkColor: Colors.white,
-          side: const BorderSide(
-            color: Color.fromARGB(255, 75, 72, 72),
-            width: 3.0,
-          ),
+          activeColor: checkboxColor,
+          checkColor: colors.onPrimary,
+          side: BorderSide(color: colors.border, width: 3.0),
           onChanged: onChanged,
         ),
         GestureDetector(
@@ -34,7 +34,7 @@ class TermsCheckbox extends StatelessWidget {
             'Accept Terms and Conditions',
             style: TextStyle(
               decoration: TextDecoration.underline,
-              color: color,
+              color: checkboxColor,
             ),
           ),
         ),

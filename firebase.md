@@ -241,11 +241,19 @@ truepay-72060-default-rtdb/
 │               └── created_at
 │
 └── wallet/
-    └── balance/
-        └── {userId}/
-            ├── amount
-│           ├── currency
-│           └── [wallet_data]
+    └── {userId}/
+        ├── fiat/
+        │   └── {currency}/  (e.g., USD, KES, UGX)
+        │       ├── balance
+        │       ├── currency
+        │       ├── createdAt
+        │       └── updatedAt
+        └── crypto/
+            └── {currencyCode}/  (e.g., USDT)
+                ├── balance
+                ├── currency
+                ├── createdAt
+                └── updatedAt
 ```
 
 ### Payment Service Implementation
@@ -282,7 +290,8 @@ Methods for tracking payment lifecycle:
 ```dart
 Future<Wallet> fetchWalletBalance(String userId) async {
   final authUserId = FirebaseAuth.instance.currentUser!.uid;
-  final balanceRef = FirebaseDatabase.instance.ref().child('wallet/balance/$authUserId');
+  // NEW PATH: wallet/{userId}/fiat/{currency}
+  final balanceRef = FirebaseDatabase.instance.ref().child('wallet/$authUserId/fiat/USD');
   final snapshot = await balanceRef.get();
   
   if (snapshot.exists && snapshot.value != null) {

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:pretium/core/constants/app_colors.dart';
 
 class CustomTextField extends StatefulWidget {
   final TextEditingController controller;
@@ -31,31 +32,33 @@ class _CustomTextFieldState extends State<CustomTextField> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AppColors.getThemeColors(context);
     return TextField(
       controller: widget.controller,
       keyboardType: widget.keyboardType,
       obscureText: widget.isPassword ? _obscureText : false,
       cursorColor: widget.primaryColor,
       decoration: InputDecoration(
-        prefixIcon: Icon(widget.prefixIcon, color: Colors.black),
+        prefixIcon: Icon(widget.prefixIcon, color: colors.iconPrimary),
         labelText: widget.labelText,
         hintText: widget.hintText,
-        hintStyle: TextStyle(color: Colors.grey.shade400),
+        hintStyle: TextStyle(color: colors.inputPlaceholder),
         labelStyle: TextStyle(
           color: widget.labelColor ?? widget.primaryColor, // Not focused
         ),
         floatingLabelStyle: TextStyle(
           color: widget.labelColor ?? widget.primaryColor, // Focused
         ),
-        border: const OutlineInputBorder(
-          borderRadius: BorderRadius.all(Radius.circular(12)),
+        border: OutlineInputBorder(
+          borderRadius: const BorderRadius.all(Radius.circular(12)),
+          borderSide: BorderSide(color: colors.inputBorder),
         ),
         focusedBorder: OutlineInputBorder(
-          borderSide: BorderSide(color: widget.primaryColor, width: 2),
+          borderSide: BorderSide(color: colors.inputBorderFocused, width: 2),
           borderRadius: const BorderRadius.all(Radius.circular(12)),
         ),
         enabledBorder: OutlineInputBorder(
-          borderSide: BorderSide(color: Colors.grey.shade300),
+          borderSide: BorderSide(color: colors.inputBorder),
           borderRadius: const BorderRadius.all(Radius.circular(12)),
         ),
         suffixIcon:

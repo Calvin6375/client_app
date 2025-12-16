@@ -1,3 +1,4 @@
+/// Wallet model for Realtime Database
 class Wallet {
   final String currencyCode;
   final double balance;
@@ -10,7 +11,7 @@ class Wallet {
   });
 
   factory Wallet.fromJson(Map<String, dynamic> json) {
-    final dynamic balanceValue = json['balance'];
+    final dynamic balanceValue = json['balance'] ?? json['amount'];
     double parsedBalance;
     if (balanceValue is num) {
       parsedBalance = balanceValue.toDouble();
@@ -21,10 +22,12 @@ class Wallet {
     }
 
     return Wallet(
-      currencyCode: (json['currency'] ?? json['currencyCode'] ?? 'KES').toString(),
+      currencyCode: (json['currency'] ?? json['currencyCode'] ?? 'USD').toString(),
       balance: parsedBalance,
       updatedAt: json['updatedAt'] != null
-          ? DateTime.tryParse(json['updatedAt'].toString())
+          ? (json['updatedAt'] is String
+              ? DateTime.tryParse(json['updatedAt'].toString())
+              : null)
           : null,
     );
   }
@@ -34,4 +37,22 @@ class Wallet {
         'balance': balance,
         if (updatedAt != null) 'updatedAt': updatedAt!.toIso8601String(),
       };
+
+  /// Create a copy with updated fields
+  Wallet copyWith({
+    String? currencyCode,
+    double? balance,
+    DateTime? updatedAt,
+  }) {
+    return Wallet(
+      currencyCode: currencyCode ?? this.currencyCode,
+      balance: balance ?? this.balance,
+      updatedAt: updatedAt ?? this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return 'Wallet(currency: $currencyCode, balance: $balance)';
+  }
 }

@@ -1,8 +1,7 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:pretium/firebase_options.dart';
 import 'package:pretium/features/splash/screens/splash_page.dart';
 import 'package:pretium/features/splash/screens/splash_page_1.dart';
 import 'package:pretium/features/auth/screens/login_page.dart';
@@ -11,159 +10,216 @@ import 'package:pretium/features/home/screens/landing_page.dart';
 import 'package:pretium/features/topup/screens/topup_page.dart';
 import 'package:pretium/features/swap/screens/swap_page.dart';
 import 'package:pretium/app/route_names.dart';
-import 'package:pretium/services/notification_service.dart';
+import 'package:pretium/utils/logger.dart';
+import 'package:pretium/core/constants/app_colors.dart';
 
-// Global flag to track Firebase initialization status
-bool _firebaseInitialized = false;
-
-// Background message handler - must be top-level function
+/// Background message handler (must be top-level function)
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp();
-  await NotificationService.backgroundMessageHandler(message);
+  Logger.info('Handling background message: ${message.messageId}');
+  // Handle background message here
+}
+
+/// Initialize Firebase Cloud Messaging
+Future<void> _initializeFCM() async {
+  try {
+    final messaging = FirebaseMessaging.instance;
+
+    // Request permission for notifications
+    final settings = await messaging.requestPermission(
+      alert: true,
+      badge: true,
+      sound: true,
+      provisional: false,
+    );
+
+    if (settings.authorizationStatus == AuthorizationStatus.authorized) {
+      Logger.success('User granted notification permission');
+    } else if (settings.authorizationStatus == AuthorizationStatus.provisional) {
+      Logger.info('User granted provisional notification permission');
+    } else {
+      Logger.warning('User declined or has not accepted notification permission');
+    }
+
+    // Get FCM token
+    final token = await messaging.getToken();
+    if (token != null) {
+      Logger.info('FCM Token: $token');
+      // TODO: Save token to Firestore or send to your backend
+      // This token can be used by Cloud Functions to send push notifications
+    }
+
+    // Set up background message handler
+    FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+
+    // Handle foreground messages (optional)
+    FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+      Logger.info('Received foreground message: ${message.messageId}');
+      // Handle foreground message here
+      // You can show a local notification or update UI
+    });
+
+    // Handle notification taps when app is in background
+    FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
+      Logger.info('Notification opened app: ${message.messageId}');
+      // Navigate to specific screen based on message data
+    });
+
+    // Check if app was opened from a notification
+    final initialMessage = await messaging.getInitialMessage();
+    if (initialMessage != null) {
+      Logger.info('App opened from notification: ${initialMessage.messageId}');
+      // Handle initial message
+    }
+  } catch (e) {
+    Logger.error('Failed to initialize FCM', e);
+  }
 }
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
   // Initialize Firebase with error handling
-  await _initializeFirebase();
-  
-  // Register background message handler
-  FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
-  
-  // Initialize FCM notifications (after Firebase is initialized)
-  await NotificationService.initialize();
-  
-  // Setup foreground message handler
-  NotificationService.setupForegroundHandler();
+  try {
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+    Logger.success('Firebase initialized successfully');
+    
+    // Initialize Firebase Cloud Messaging
+    await _initializeFCM();
+  } catch (e, stackTrace) {
+    Logger.error('Firebase initialization failed', e, stackTrace);
+    Logger.warning('App will continue but Firebase features may not work.');
+  }
   
   runApp(const MyApp());
 }
 
-Future<void> _initializeFirebase() async {
+// Helper function to check if Firebase is initialized
+bool isFirebaseInitialized() {
   try {
-    // Check if Firebase is already initialized
-    if (Firebase.apps.isNotEmpty) {
-      debugPrint('✅ Firebase already initialized');
-      _firebaseInitialized = true;
-      return;
-    }
-    
-    // Initialize Firebase
-    await Firebase.initializeApp();
-    _firebaseInitialized = true;
-    debugPrint('✅ Firebase initialized successfully');
-    
-    // Verify initialization by checking if we can access Firebase app
-    final app = Firebase.app();
-    debugPrint('✅ Firebase app verified: ${app.name}');
-    
-  } catch (e, stackTrace) {
-    _firebaseInitialized = false;
-    debugPrint('❌ Firebase initialization error: $e');
-    debugPrint('Stack trace: $stackTrace');
-    debugPrint('');
-    
-    // Platform-specific error messages
-    if (Platform.isIOS) {
-      debugPrint('⚠️  FIREBASE SETUP REQUIRED FOR iOS:');
-      debugPrint('1. Ensure GoogleService-Info.plist exists at: ios/Runner/GoogleService-Info.plist');
-      debugPrint('2. Open ios/Runner.xcworkspace (NOT .xcodeproj) in Xcode');
-      debugPrint('3. Verify GoogleService-Info.plist is in the Runner folder in Xcode');
-      debugPrint('4. Select the file and check "Target Membership" → "Runner" is checked');
-      debugPrint('5. Clean build: flutter clean && cd ios && rm -rf Pods Podfile.lock && pod install && cd ..');
-      debugPrint('6. Rebuild: flutter run');
-    } else if (Platform.isAndroid) {
-      debugPrint('⚠️  FIREBASE SETUP REQUIRED FOR ANDROID:');
-      debugPrint('1. Ensure google-services.json exists at: android/app/google-services.json');
-      debugPrint('2. Verify the file is properly configured in build.gradle');
-    }
-    
-    debugPrint('');
-    debugPrint('App will continue but Firebase features may not work.');
+    return Firebase.apps.isNotEmpty;
+  } catch (e) {
+    return false;
   }
 }
 
-// Helper function to check if Firebase is initialized
-bool isFirebaseInitialized() => _firebaseInitialized;
-
 class MyApp extends StatelessWidget {
-  const MyApp({Key? key}) : super(key: key);
-
-  static const Color brandPrimary = Color(0xFF0097A7); // Teal-blue from logo
+  const MyApp({super.key});
 
   ThemeData _buildLightTheme() {
-    final base = ThemeData(useMaterial3: true, brightness: Brightness.light);
-    final scheme = ColorScheme.fromSeed(
-      seedColor: brandPrimary,
+    final colors = AppColors.light;
+    final base = ThemeData(
+      useMaterial3: true,
       brightness: Brightness.light,
-    ).copyWith(primary: brandPrimary, onPrimary: Colors.white);
+      scaffoldBackgroundColor: colors.background,
+    );
+    final scheme = ColorScheme.fromSeed(
+      seedColor: AppColors.brandPrimary,
+      brightness: Brightness.light,
+    ).copyWith(
+      primary: colors.primary,
+      onPrimary: colors.onPrimary,
+      surface: colors.surface,
+      onSurface: colors.textPrimary,
+      error: colors.error,
+    );
     return base.copyWith(
       colorScheme: scheme,
-      primaryColor: brandPrimary,
-      appBarTheme: const AppBarTheme(
-        backgroundColor: brandPrimary,
-        foregroundColor: Colors.white,
+      primaryColor: colors.primary,
+      appBarTheme: AppBarTheme(
+        backgroundColor: colors.primary,
+        foregroundColor: colors.onPrimary,
         elevation: 0,
-        iconTheme: IconThemeData(color: Colors.white),
+        iconTheme: IconThemeData(color: colors.onPrimary),
+      ),
+      cardTheme: CardThemeData(
+        color: colors.surface,
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
-          backgroundColor: brandPrimary,
-          foregroundColor: Colors.white,
+          backgroundColor: colors.primary,
+          foregroundColor: colors.onPrimary,
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
-          foregroundColor: brandPrimary,
-          side: const BorderSide(color: brandPrimary, width: 1.5),
+          foregroundColor: colors.primary,
+          side: BorderSide(color: colors.primary, width: 1.5),
         ),
       ),
       textButtonTheme: TextButtonThemeData(
-        style: TextButton.styleFrom(foregroundColor: brandPrimary),
+        style: TextButton.styleFrom(foregroundColor: colors.primary),
       ),
-      floatingActionButtonTheme: const FloatingActionButtonThemeData(
-        backgroundColor: brandPrimary,
-        foregroundColor: Colors.white,
+      floatingActionButtonTheme: FloatingActionButtonThemeData(
+        backgroundColor: colors.primary,
+        foregroundColor: colors.onPrimary,
       ),
+      dividerColor: colors.divider,
+      dividerTheme: DividerThemeData(color: colors.divider),
     );
   }
 
   ThemeData _buildDarkTheme() {
-    final base = ThemeData(useMaterial3: true, brightness: Brightness.dark);
-    final scheme = ColorScheme.fromSeed(
-      seedColor: brandPrimary,
+    final colors = AppColors.dark;
+    final base = ThemeData(
+      useMaterial3: true,
       brightness: Brightness.dark,
-    ).copyWith(primary: brandPrimary, onPrimary: Colors.white);
+      scaffoldBackgroundColor: colors.background,
+    );
+    final scheme = ColorScheme.fromSeed(
+      seedColor: AppColors.brandPrimary,
+      brightness: Brightness.dark,
+    ).copyWith(
+      primary: colors.primary,
+      onPrimary: colors.onPrimary,
+      surface: colors.surface,
+      onSurface: colors.textPrimary,
+      error: colors.error,
+    );
     return base.copyWith(
       colorScheme: scheme,
-      primaryColor: brandPrimary,
-      appBarTheme: const AppBarTheme(
-        backgroundColor: brandPrimary,
-        foregroundColor: Colors.white,
+      primaryColor: colors.primary,
+      appBarTheme: AppBarTheme(
+        backgroundColor: colors.primary,
+        foregroundColor: colors.onPrimary,
         elevation: 0,
-        iconTheme: IconThemeData(color: Colors.white),
+        iconTheme: IconThemeData(color: colors.onPrimary),
+      ),
+      cardTheme: CardThemeData(
+        color: colors.surface,
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
-          backgroundColor: brandPrimary,
-          foregroundColor: Colors.white,
+          backgroundColor: colors.primary,
+          foregroundColor: colors.onPrimary,
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
-          foregroundColor: brandPrimary,
-          side: const BorderSide(color: brandPrimary, width: 1.5),
+          foregroundColor: colors.primary,
+          side: BorderSide(color: colors.primary, width: 1.5),
         ),
       ),
       textButtonTheme: TextButtonThemeData(
-        style: TextButton.styleFrom(foregroundColor: brandPrimary),
+        style: TextButton.styleFrom(foregroundColor: colors.primary),
       ),
-      floatingActionButtonTheme: const FloatingActionButtonThemeData(
-        backgroundColor: brandPrimary,
-        foregroundColor: Colors.white,
+      floatingActionButtonTheme: FloatingActionButtonThemeData(
+        backgroundColor: colors.primary,
+        foregroundColor: colors.onPrimary,
       ),
+      dividerColor: colors.divider,
+      dividerTheme: DividerThemeData(color: colors.divider),
     );
   }
 

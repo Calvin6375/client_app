@@ -1,0 +1,163 @@
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:pretium/utils/logger.dart';
+
+/// Authentication service
+/// Handles all Firebase Authentication operations
+class AuthService {
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+
+  /// Get current user
+  User? get currentUser => _auth.currentUser;
+
+  /// Get current user ID
+  String? get currentUserId => _auth.currentUser?.uid;
+
+  /// Stream of auth state changes
+  Stream<User?> get authStateChanges => _auth.authStateChanges();
+
+  /// Stream of user changes
+  Stream<User?> get userChanges => _auth.userChanges();
+
+  /// Sign in with email and password
+  Future<UserCredential> signIn({
+    required String email,
+    required String password,
+  }) async {
+    try {
+      Logger.info('Signing in user: $email');
+      final credential = await _auth.signInWithEmailAndPassword(
+        email: email.trim(),
+        password: password,
+      );
+      Logger.success('User signed in successfully: ${credential.user?.uid}');
+      return credential;
+    } on FirebaseAuthException catch (e) {
+      Logger.error('Sign in failed', e);
+      rethrow;
+    } catch (e) {
+      Logger.error('Unexpected sign in error', e);
+      rethrow;
+    }
+  }
+
+  /// Sign up with email and password
+  Future<UserCredential> signUp({
+    required String email,
+    required String password,
+  }) async {
+    try {
+      // Log request body (mask password for security)
+      final requestBody = {
+        'email': email.trim(),
+        'password': '***${password.length > 0 ? '*' * (password.length > 3 ? password.length - 3 : 0) : ''}***', // Mask password
+        'passwordLength': password.length,
+      };
+      Logger.info('📤 Firebase Auth - Create User Request:');
+      Logger.info('   Request Body: $requestBody');
+      
+      final credential = await _auth.createUserWithEmailAndPassword(
+        email: email.trim(),
+        password: password,
+      );
+      
+      // Log response body
+      // Get provider data from user (list of providers)
+      final providerData = credential.user?.providerData
+          .map((info) => {
+                'providerId': info.providerId,
+                'uid': info.uid,
+                'email': info.email,
+                'displayName': info.displayName,
+                'photoURL': info.photoURL,
+              })
+          .toList();
+      
+      final responseBody = {
+        'uid': credential.user?.uid,
+        'email': credential.user?.email,
+        'emailVerified': credential.user?.emailVerified,
+        'displayName': credential.user?.displayName,
+        'photoURL': credential.user?.photoURL,
+        'phoneNumber': credential.user?.phoneNumber,
+        'creationTime': credential.user?.metadata.creationTime?.toIso8601String(),
+        'lastSignInTime': credential.user?.metadata.lastSignInTime?.toIso8601String(),
+        'isAnonymous': credential.user?.isAnonymous,
+        'providerData': providerData,
+        'additionalUserInfo': {
+          'isNewUser': credential.additionalUserInfo?.isNewUser,
+          'providerId': credential.additionalUserInfo?.providerId,
+          'username': credential.additionalUserInfo?.username,
+          'profile': credential.additionalUserInfo?.profile,
+        },
+      };
+      Logger.info('📥 Firebase Auth - Create User Response:');
+      Logger.info('   Response Body: $responseBody');
+      Logger.success('User signed up successfully: ${credential.user?.uid}');
+      return credential;
+    } on FirebaseAuthException catch (e) {
+      Logger.error('📥 Firebase Auth - Create User Error Response:');
+      Logger.error('   Error Code: ${e.code}');
+      Logger.error('   Error Message: ${e.message}');
+      Logger.error('   Error Details: ${e.toString()}');
+      rethrow;
+    } catch (e) {
+      Logger.error('📥 Firebase Auth - Create User Unexpected Error:');
+      Logger.error('   Error: $e');
+      rethrow;
+    }
+  }
+
+  /// Sign out
+  Future<void> signOut() async {
+    try {
+      Logger.info('Signing out user: ${currentUserId}');
+      await _auth.signOut();
+      Logger.success('User signed out successfully');
+    } catch (e) {
+      Logger.error('Sign out failed', e);
+      rethrow;
+    }
+  }
+
+  /// Send password reset email
+  Future<void> sendPasswordResetEmail(String email) async {
+    try {
+      Logger.info('Sending password reset email to: $email');
+      await _auth.sendPasswordResetEmail(email: email.trim());
+      Logger.success('Password reset email sent');
+    } on FirebaseAuthException catch (e) {
+      Logger.error('Password reset email failed', e);
+      rethrow;
+    } catch (e) {
+      Logger.error('Unexpected password reset error', e);
+      rethrow;
+    }
+  }
+
+  /// Get user-friendly error message
+  static String getErrorMessage(FirebaseAuthException e) {
+    switch (e.code) {
+      case 'user-not-found':
+        return 'No user found for that email.';
+      case 'wrong-password':
+        return 'Wrong password provided.';
+      case 'email-already-in-use':
+        return 'An account already exists for that email.';
+      case 'invalid-email':
+        return 'The email address is invalid.';
+      case 'weak-password':
+        return 'The password is too weak.';
+      case 'user-disabled':
+        return 'This account has been disabled.';
+      case 'too-many-requests':
+        return 'Too many requests. Please try again later.';
+      case 'operation-not-allowed':
+        return 'This operation is not allowed.';
+      case 'network-request-failed':
+        return 'Network error. Please check your connection.';
+      default:
+        return 'An error occurred: ${e.message ?? e.code}';
+    }
+  }
+}
+
