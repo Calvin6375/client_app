@@ -97,8 +97,17 @@ Future<void> main() async {
   runApp(const MyApp());
 }
 
+// Helper function to check if Firebase is initialized
+bool isFirebaseInitialized() {
+  try {
+    return Firebase.apps.isNotEmpty;
+  } catch (e) {
+    return false;
+  }
+}
+
 class MyApp extends StatelessWidget {
-  const MyApp({Key? key}) : super(key: key);
+  const MyApp({super.key});
 
   ThemeData _buildLightTheme() {
     final colors = AppColors.light;
@@ -115,7 +124,6 @@ class MyApp extends StatelessWidget {
       onPrimary: colors.onPrimary,
       surface: colors.surface,
       onSurface: colors.textPrimary,
-      background: colors.background,
       error: colors.error,
     );
     return base.copyWith(
@@ -173,7 +181,6 @@ class MyApp extends StatelessWidget {
       onPrimary: colors.onPrimary,
       surface: colors.surface,
       onSurface: colors.textPrimary,
-      background: colors.background,
       error: colors.error,
     );
     return base.copyWith(

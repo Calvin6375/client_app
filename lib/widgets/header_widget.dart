@@ -12,12 +12,7 @@ class HeaderWidget extends StatelessWidget {
   final AuthService _authService = AuthService();
 
   bool _isFirebaseInitialized() {
-    try {
-      Firebase.app();
-      return true;
-    } catch (e) {
-      return false;
-    }
+    return Firebase.apps.isNotEmpty;
   }
 
   Future<void> _showLogoutDialog(BuildContext context) async {

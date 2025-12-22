@@ -7,14 +7,11 @@ import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_database/firebase_database.dart';
-import 'package:cloud_functions/cloud_functions.dart';
 import 'package:pretium/features/topup/services/intasend_service.dart';
 import 'package:pretium/repositories/wallet_repository.dart';
 import 'package:pretium/repositories/user_repository.dart';
 import 'package:pretium/services/firebase_payment_service.dart';
 import 'package:pretium/services/order_service.dart';
-import 'dart:convert';
-import 'dart:io';
 
 // Top Up main screen composed of smaller widgets
 class TopUpPage extends StatefulWidget {

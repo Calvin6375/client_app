@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:pretium/models/transaction_details_model.dart';
 import 'package:pretium/repositories/wallet_repository.dart';
 import 'package:pretium/features/swap/services/rates_service.dart';
+import 'package:pretium/features/swap/widgets/currency_picker_bottom_sheet.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 
@@ -30,6 +31,14 @@ class _SendAmountScreenState extends State<SendAmountScreen> {
   double _toBalance = 0.0;
   double _rate = 1.0;
   bool _loadingBalances = true;
+
+  // Available currencies for Send Money
+  static const List<Currency> _availableCurrencies = [
+    Currency(code: 'USD', name: 'US Dollar', flagEmoji: '🇺🇸'),
+    Currency(code: 'KES', name: 'Kenyan Shilling', flagEmoji: '🇰🇪'),
+    Currency(code: 'NGN', name: 'Nigerian Naira', flagEmoji: '🇳🇬'),
+    Currency(code: 'USDT', name: 'Tether', flagEmoji: '₮'),
+  ];
 
   bool _isFirebaseInitialized() {
     try {
@@ -71,19 +80,31 @@ class _SendAmountScreenState extends State<SendAmountScreen> {
 
       setState(() => _loadingBalances = true);
 
-      // Load both wallets
+      // Load wallets based on currencies
       final fiatWallet = await _walletRepository.getWalletBalance(user.uid);
       final cryptoWallet = await _walletRepository.getCryptoWalletBalance(user.uid, 'USDT');
 
       if (!mounted) return;
 
       // Set balances based on current currencies
+      // For now, we only have USD fiat wallet and USDT crypto wallet
+      // KES and NGN balances would need to be fetched separately if available
       if (_fromCurrency == 'USD') {
         _fromBalance = fiatWallet?.balance ?? 0.0;
+      } else if (_fromCurrency == 'USDT') {
+        _fromBalance = cryptoWallet?.balance ?? 0.0;
+      } else {
+        // KES, NGN - for now show 0.00 (would need separate wallet balance calls)
+        _fromBalance = 0.0;
+      }
+
+      if (_toCurrency == 'USD') {
+        _toBalance = fiatWallet?.balance ?? 0.0;
+      } else if (_toCurrency == 'USDT') {
         _toBalance = cryptoWallet?.balance ?? 0.0;
       } else {
-        _fromBalance = cryptoWallet?.balance ?? 0.0;
-        _toBalance = fiatWallet?.balance ?? 0.0;
+        // KES, NGN - for now show 0.00 (would need separate wallet balance calls)
+        _toBalance = 0.0;
       }
 
       setState(() => _loadingBalances = false);
@@ -94,16 +115,36 @@ class _SendAmountScreenState extends State<SendAmountScreen> {
   }
 
   void _loadRate() {
-    _rate = _ratesService.getRate(_fromCurrency, _toCurrency);
+    // Calculate rate based on currency pair
+    // Always calculate through USDT as intermediary
+    _updateRate();
+    
     // Listen to live rate updates
     _ratesService.ratesStream.listen((map) {
       if (mounted) {
         setState(() {
-          _rate = _ratesService.getRate(_fromCurrency, _toCurrency);
+          _updateRate();
           _onAmountChanged(); // Recalculate received amount
         });
       }
     });
+  }
+
+  void _updateRate() {
+    // Calculate rate through USDT as intermediary
+    if (_fromCurrency == 'USDT' || _toCurrency == 'USDT') {
+      // Direct USDT pair
+      _rate = _ratesService.getRate(_fromCurrency, _toCurrency);
+    } else {
+      // Fiat-to-fiat: Calculate through USDT
+      // Example: KES -> USD = (KES -> USDT) * (USDT -> USD)
+      // RatesService already handles inverse rates, so we can call directly
+      
+      final fromToUsdt = _ratesService.getRate(_fromCurrency, 'USDT');
+      final usdtToTo = _ratesService.getRate('USDT', _toCurrency);
+      
+      _rate = fromToUsdt * usdtToTo;
+    }
   }
 
   void _onAmountChanged() {
@@ -132,10 +173,46 @@ class _SendAmountScreenState extends State<SendAmountScreen> {
       // Clear input
       _fromCtrl.clear();
       
-      // Reload rate
+      // Reload rate and balances
       _loadRate();
+      _loadBalances();
     });
     _onAmountChanged();
+  }
+
+  void _showCurrencyPicker(bool isFromCurrency) {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (context) => CurrencyPickerBottomSheet(
+        currencies: _availableCurrencies,
+        selectedCode: isFromCurrency ? _fromCurrency : _toCurrency,
+        onSelected: (currency) {
+          setState(() {
+            if (isFromCurrency) {
+              // Prevent selecting the same currency for both from and to
+              if (currency.code != _toCurrency) {
+                _fromCurrency = currency.code;
+                _fromCtrl.clear();
+                _loadBalances();
+                _loadRate();
+                _onAmountChanged();
+              }
+            } else {
+              // Prevent selecting the same currency for both from and to
+              if (currency.code != _fromCurrency) {
+                _toCurrency = currency.code;
+                _loadBalances();
+                _loadRate();
+                _onAmountChanged();
+              }
+            }
+          });
+        },
+      ),
+    );
   }
 
   @override
@@ -164,7 +241,7 @@ class _SendAmountScreenState extends State<SendAmountScreen> {
                   balance: _fromBalance,
                   loading: _loadingBalances,
                   controller: _fromCtrl,
-                  onCurrencyTap: () { /* TODO: Show currency picker */ },
+                  onCurrencyTap: () => _showCurrencyPicker(true),
                 ),
                 const SizedBox(height: 8),
                 Center(
@@ -172,7 +249,7 @@ class _SendAmountScreenState extends State<SendAmountScreen> {
                     icon: Icon(Icons.swap_vert, color: primaryColor, size: 32),
                     onPressed: _swapCurrencies,
                     style: IconButton.styleFrom(
-                      backgroundColor: primaryColor.withOpacity(0.1),
+                      backgroundColor: primaryColor.withValues(alpha: 0.1),
                       shape: const CircleBorder(),
                       padding: const EdgeInsets.all(12),
                     ),
@@ -185,13 +262,20 @@ class _SendAmountScreenState extends State<SendAmountScreen> {
                   balance: _toBalance,
                   loading: _loadingBalances,
                   amount: (double.tryParse(_fromCtrl.text) ?? 0) * _rate,
-                  onCurrencyTap: () { /* TODO: Show currency picker */ },
+                  onCurrencyTap: () => _showCurrencyPicker(false),
+                ),
+                const SizedBox(height: 16),
+                // Exchange rate display
+                _ExchangeRateDisplay(
+                  fromCurrency: _fromCurrency,
+                  toCurrency: _toCurrency,
+                  rate: _rate,
                 ),
                 const SizedBox(height: 24),
               ],
             ),
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 16),
           ElevatedButton(
             onPressed: widget.onNext,
             style: ElevatedButton.styleFrom(
@@ -206,6 +290,55 @@ class _SendAmountScreenState extends State<SendAmountScreen> {
             child: const Text(
               'Continue',
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ExchangeRateDisplay extends StatelessWidget {
+  final String fromCurrency;
+  final String toCurrency;
+  final double rate;
+
+  const _ExchangeRateDisplay({
+    required this.fromCurrency,
+    required this.toCurrency,
+    required this.rate,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final textColor = theme.colorScheme.onSurface.withValues(alpha: 0.6);
+    
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade50,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: Colors.grey.shade200,
+          width: 1,
+        ),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            Icons.info_outline,
+            size: 16,
+            color: textColor,
+          ),
+          const SizedBox(width: 8),
+          Text(
+            '1 $fromCurrency = ${rate.toStringAsFixed(4)} $toCurrency',
+            style: TextStyle(
+              fontSize: 14,
+              color: textColor,
+              fontWeight: FontWeight.w500,
             ),
           ),
         ],
@@ -242,7 +375,7 @@ class _SwapCurrencyCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.grey.withOpacity(0.1),
+            color: Colors.grey.withValues(alpha: 0.1),
             spreadRadius: 1,
             blurRadius: 10,
             offset: const Offset(0, 4),
@@ -311,27 +444,6 @@ class _SwapCurrencyCard extends StatelessWidget {
                 ),
             ],
           ),
-        ],
-      ),
-    );
-  }
-}
-
-class _TransactionDetailRow extends StatelessWidget {
-  final String label;
-  final String value;
-
-  const _TransactionDetailRow({required this.label, required this.value});
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8.0),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(label, style: const TextStyle(color: Colors.grey)),
-          Text(value, style: const TextStyle(fontWeight: FontWeight.w500)),
         ],
       ),
     );

@@ -9,6 +9,8 @@ import '/widgets/recent_transaction_header.dart';
 import '/widgets/placeholder_transactions.dart';
 
 class LandingPage extends StatelessWidget {
+  const LandingPage({super.key});
+  
   @override
   Widget build(BuildContext context) {
     // Return the dashboard directly to avoid nesting MaterialApp, so app-level routes work
@@ -17,6 +19,8 @@ class LandingPage extends StatelessWidget {
 }
 
 class DashboardScreen extends StatefulWidget {
+  const DashboardScreen({super.key});
+  
   @override
   State<DashboardScreen> createState() => _DashboardScreenState();
 }
@@ -105,7 +109,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   shape: BoxShape.circle,
                   boxShadow: [
                     BoxShadow(
-                      color: primary.withOpacity(0.2),
+                      color: primary.withValues(alpha: 0.2),
                       blurRadius: 6,
                       offset: const Offset(0, 2),
                     ),

@@ -26,12 +26,7 @@ class _WalletCardState extends State<WalletCard> {
   int _currentPage = 0;
   
   bool _isFirebaseInitialized() {
-    try {
-      Firebase.app();
-      return true;
-    } catch (e) {
-      return false;
-    }
+    return Firebase.apps.isNotEmpty;
   }
 
   @override
@@ -62,11 +57,13 @@ class _WalletCardState extends State<WalletCard> {
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) return;
       
-      if (!silent) setState(() { 
-        _loading = true; 
-        _fiatError = null;
-        _cryptoError = null;
-      });
+      if (!silent) {
+        setState(() { 
+          _loading = true; 
+          _fiatError = null;
+          _cryptoError = null;
+        });
+      }
       
       // Load both fiat (USD) and crypto (USDT) wallets
       final fiatWallet = await _walletRepository.getWalletBalance(user.uid);
@@ -77,19 +74,23 @@ class _WalletCardState extends State<WalletCard> {
         _fiatWallet = fiatWallet ?? Wallet(currencyCode: 'USD', balance: 0.0);
         _cryptoWallet = cryptoWallet ?? Wallet(currencyCode: 'USDT', balance: 0.0);
         _lastRefreshedAt = DateTime.now();
+        _fiatError = null; // Clear any previous errors
+        _cryptoError = null; // Clear any previous errors
       });
     } catch (e) {
+      // This should rarely happen now since fetchWalletBalance returns default wallet
       if (!mounted) return;
       setState(() { 
-        // Truncate error message to prevent overflow
+        // Only show error for unexpected exceptions (network issues, etc.)
         final errorMsg = e.toString();
         final truncatedError = errorMsg.length > 100 ? '${errorMsg.substring(0, 100)}...' : errorMsg;
         _fiatError = truncatedError;
         _cryptoError = truncatedError;
       });
     } finally {
-      if (!mounted) return;
-      if (!silent) setState(() { _loading = false; });
+      if (mounted && !silent) {
+        setState(() { _loading = false; });
+      }
     }
   }
 
@@ -167,7 +168,7 @@ class _WalletCardState extends State<WalletCard> {
                 borderRadius: BorderRadius.circular(4),
                 color: _currentPage == index 
                     ? primary 
-                    : primary.withOpacity(0.3),
+                    : primary.withValues(alpha: 0.3),
               ),
             );
           }),
@@ -211,7 +212,7 @@ class WalletCardWidget extends StatelessWidget {
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [
-            backgroundColor.withOpacity(0.95),
+            backgroundColor.withValues(alpha: 0.95),
             backgroundColor,
           ],
           begin: Alignment.topLeft,
@@ -220,7 +221,7 @@ class WalletCardWidget extends StatelessWidget {
         borderRadius: BorderRadius.circular(22),
         boxShadow: [
           BoxShadow(
-            color: backgroundColor.withOpacity(0.3),
+            color: backgroundColor.withValues(alpha: 0.3),
             blurRadius: 12,
             offset: const Offset(0, 4),
           ),
@@ -234,7 +235,7 @@ class WalletCardWidget extends StatelessWidget {
           Text(
             title,
             style: TextStyle(
-              color: colors.onPrimary.withOpacity(0.7),
+              color: colors.onPrimary.withValues(alpha: 0.7),
               fontSize: 14,
               fontWeight: FontWeight.w500,
               letterSpacing: 0.5,
@@ -284,7 +285,7 @@ class WalletCardWidget extends StatelessWidget {
             Text(
               'Updated ${TimeOfDay.fromDateTime(updatedAt!).format(context)}',
               style: TextStyle(
-                color: colors.onPrimary.withOpacity(0.7),
+                color: colors.onPrimary.withValues(alpha: 0.7),
                 fontSize: 12,
                 letterSpacing: 0.3,
               ),
@@ -313,9 +314,9 @@ class WalletCardWidget extends StatelessWidget {
                 icon: Icons.swap_horiz,
                 label: 'Swap',
                 onPressed: onSwap,
-                backgroundColor: colors.onPrimary.withOpacity(0.2),
+                backgroundColor: colors.onPrimary.withValues(alpha: 0.2),
                 foregroundColor: colors.onPrimary,
-                borderColor: colors.onPrimary.withOpacity(0.7),
+                borderColor: colors.onPrimary.withValues(alpha: 0.7),
               ),
             ],
           ),
