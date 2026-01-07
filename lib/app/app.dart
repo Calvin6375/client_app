@@ -5,6 +5,7 @@ import 'package:pretium/features/auth/screens/login_page.dart';
 import 'package:pretium/features/auth/screens/register_page.dart';
 import 'package:pretium/features/home/screens/landing_page.dart';
 import 'package:pretium/features/topup/screens/topup_page.dart';
+import 'package:pretium/features/wallet_verification/screens/wallet_verification_screen.dart';
 
 class PretiumApp extends StatelessWidget {
   @override
@@ -19,6 +20,7 @@ class PretiumApp extends StatelessWidget {
         RouteNames.register: (_) => const RegisterPage(),
         RouteNames.home: (_) => LandingPage(),
         RouteNames.topup: (_) => const TopUpPage(),
+        RouteNames.walletVerification: (_) => const WalletVerificationScreen(),
       },
     );
   }

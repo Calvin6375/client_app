@@ -12,6 +12,7 @@ import 'package:pretium/features/swap/screens/swap_page.dart';
 import 'package:pretium/app/route_names.dart';
 import 'package:pretium/utils/logger.dart';
 import 'package:pretium/core/constants/app_colors.dart';
+import 'package:pretium/features/wallet_verification/screens/wallet_verification_screen.dart';
 
 /// Background message handler (must be top-level function)
 @pragma('vm:entry-point')
@@ -240,6 +241,8 @@ class MyApp extends StatelessWidget {
         RouteNames.home: (context) => LandingPage(),
         RouteNames.topup: (context) => const TopUpPage(),
         RouteNames.swap: (context) => const SwapPage(),
+        RouteNames.walletVerification: (context) =>
+            const WalletVerificationScreen(),
       },
     );
   }
