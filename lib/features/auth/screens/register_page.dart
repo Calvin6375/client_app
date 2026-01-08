@@ -107,8 +107,23 @@ class _RegisterPageState extends State<RegisterPage> {
         password: password,
       );
 
-      // 2) Create user profile in Firestore
+      // 2) Wait for auth token to be ready (especially important on physical devices)
       final uid = credential.user!.uid;
+      Logger.info('⏳ Waiting for auth token to be ready...');
+      try {
+        // Force a token refresh to ensure it's available
+        await credential.user!.getIdToken(true);
+        Logger.info('✅ Auth token is ready');
+        
+        // Small delay to ensure auth state propagates to Firestore
+        // This is especially important on physical devices with network latency
+        await Future.delayed(const Duration(milliseconds: 500));
+        Logger.info('✅ Auth state propagation delay completed');
+      } catch (e) {
+        Logger.warning('⚠️ Token refresh warning: $e (continuing anyway)');
+      }
+
+      // 3) Create user profile in Firestore
       Logger.info('📤 Step 2: Creating user profile in Firestore...');
       await _userRepository.createUserProfile(
         uid: uid,

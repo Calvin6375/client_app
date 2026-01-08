@@ -7,4 +7,5 @@ class RouteNames {
   static const home = '/home';
   static const topup = '/topup';
   static const swap = '/swap';
+  static const walletVerification = '/wallet_verification';
 }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:pretium/features/send_money/screens/send_money_page.dart';
 import 'package:pretium/core/constants/app_colors.dart';
+import 'package:pretium/app/route_names.dart';
 
 class FinancialServices extends StatelessWidget {
   const FinancialServices({super.key});
@@ -51,9 +52,10 @@ class FinancialServices extends StatelessWidget {
           const SizedBox(height: 16),
           // First row with Send Money, Buy Goods, and Paybill
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              _buildServiceItem(
+              Expanded(
+                child: Center(
+                  child: _buildServiceItem(
                 context,
                 FontAwesomeIcons.paperPlane,
                 "Send Money",
@@ -63,31 +65,55 @@ class FinancialServices extends StatelessWidget {
                   );
                 },
               ),
-              _buildServiceItem(
+                ),
+              ),
+              Expanded(
+                child: Center(
+                  child: _buildServiceItem(
                 context,
                 FontAwesomeIcons.shoppingBasket,
                 "Buy Goods",
                 () => _showComingSoonDialog(context),
               ),
-              _buildServiceItem(
+                ),
+              ),
+              Expanded(
+                child: Center(
+                  child: _buildServiceItem(
                 context, 
                 FontAwesomeIcons.receipt, 
                 "Paybill",
                 () => _showComingSoonDialog(context),
+                  ),
+                ),
               ),
             ],
           ),
           const SizedBox(height: 16),
-          // Second row with just Airtime, centered
+          // Second row: Airtime (left) and Verify Wallet (center), keep 3-column grid
           Row(
-            mainAxisAlignment: MainAxisAlignment.start,
             children: [
-              _buildServiceItem(
+              Expanded(
+                child: Center(
+                  child: _buildServiceItem(
                 context, 
                 Icons.phone_android, 
                 "Airtime",
                 () => _showComingSoonDialog(context),
               ),
+                ),
+              ),
+              Expanded(
+                child: Center(
+                  child: _buildServiceItem(
+                    context,
+                    Icons.verified_user,
+                    "Verify Wallet",
+                    () => Navigator.of(context).pushNamed(RouteNames.walletVerification),
+                  ),
+                ),
+              ),
+              const Expanded(child: SizedBox.shrink()),
             ],
           ),
           const SizedBox(height: 8),
