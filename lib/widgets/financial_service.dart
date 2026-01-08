@@ -56,34 +56,34 @@ class FinancialServices extends StatelessWidget {
               Expanded(
                 child: Center(
                   child: _buildServiceItem(
-                    context,
-                    FontAwesomeIcons.paperPlane,
-                    "Send Money",
-                    () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute(builder: (context) => const SendMoneyPage()),
-                      );
-                    },
-                  ),
+                context,
+                FontAwesomeIcons.paperPlane,
+                "Send Money",
+                () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(builder: (context) => const SendMoneyPage()),
+                  );
+                },
+              ),
                 ),
               ),
               Expanded(
                 child: Center(
                   child: _buildServiceItem(
-                    context,
-                    FontAwesomeIcons.shoppingBasket,
-                    "Buy Goods",
-                    () => _showComingSoonDialog(context),
-                  ),
+                context,
+                FontAwesomeIcons.shoppingBasket,
+                "Buy Goods",
+                () => _showComingSoonDialog(context),
+              ),
                 ),
               ),
               Expanded(
                 child: Center(
                   child: _buildServiceItem(
-                    context, 
-                    FontAwesomeIcons.receipt, 
-                    "Paybill",
-                    () => _showComingSoonDialog(context),
+                context, 
+                FontAwesomeIcons.receipt, 
+                "Paybill",
+                () => _showComingSoonDialog(context),
                   ),
                 ),
               ),
@@ -96,11 +96,11 @@ class FinancialServices extends StatelessWidget {
               Expanded(
                 child: Center(
                   child: _buildServiceItem(
-                    context, 
-                    Icons.phone_android, 
-                    "Airtime",
-                    () => _showComingSoonDialog(context),
-                  ),
+                context, 
+                Icons.phone_android, 
+                "Airtime",
+                () => _showComingSoonDialog(context),
+              ),
                 ),
               ),
               Expanded(
