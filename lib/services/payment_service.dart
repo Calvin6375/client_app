@@ -1,5 +1,5 @@
 import 'package:cloud_functions/cloud_functions.dart';
-import 'package:pretium/models/payment_model.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:pretium/utils/logger.dart';
 
 /// Payment service that calls Cloud Functions
@@ -8,9 +8,46 @@ import 'package:pretium/utils/logger.dart';
 class PaymentService {
   // Use us-central1 region (default for Firebase Functions)
   // If your functions are deployed to a different region, change this
-  final FirebaseFunctions _functions = FirebaseFunctions.instanceFor(
+  // Note: We don't cache the instance to ensure fresh auth tokens
+  FirebaseFunctions get _functions => FirebaseFunctions.instanceFor(
     region: 'us-central1',
   );
+
+  /// Ensure user is authenticated and token is fresh before calling Cloud Function
+  Future<void> _ensureAuthenticated() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      throw FirebaseAuthException(
+        code: 'unauthenticated',
+        message: 'User must be logged in to create payments',
+      );
+    }
+    
+    // Force token refresh to ensure it's valid and propagated
+    try {
+      await user.getIdToken(true);
+      Logger.debug('✅ Auth token refreshed successfully');
+      Logger.debug('   User UID: ${user.uid}');
+      Logger.debug('   User email: ${user.email ?? 'N/A'}');
+    } catch (e) {
+      Logger.warning('⚠️ Token refresh warning: $e');
+      // Try getting token without force refresh
+      try {
+        await user.getIdToken();
+        Logger.debug('✅ Auth token retrieved (non-forced)');
+      } catch (e2) {
+        Logger.error('❌ Failed to get auth token', e2);
+        throw FirebaseAuthException(
+          code: 'unauthenticated',
+          message: 'Failed to get authentication token: $e2',
+        );
+      }
+    }
+    
+    // Longer delay to ensure token propagation on physical devices
+    // This is critical - the auth token needs to propagate through Firebase SDK
+    await Future.delayed(const Duration(milliseconds: 800));
+  }
 
   /// Create a payment via Cloud Function
   /// This calls the server-side createPayment function
@@ -26,10 +63,49 @@ class PaymentService {
     Map<String, dynamic>? metadata,
   }) async {
     try {
-      Logger.info('Creating payment via Cloud Function');
+      Logger.info('🚀 ===== CREATING PAYMENT VIA CLOUD FUNCTION =====');
       
-      final callable = _functions.httpsCallable('createPayment');
+      // Ensure user is authenticated and token is fresh
+      Logger.info('🔐 Verifying Firebase Auth...');
+      await _ensureAuthenticated();
       
+      // Verify user is still authenticated after delay
+      final currentUser = FirebaseAuth.instance.currentUser;
+      if (currentUser == null) {
+        throw FirebaseAuthException(
+          code: 'unauthenticated',
+          message: 'User authentication lost during token refresh',
+        );
+      }
+      
+      Logger.info('📤 Preparing Cloud Function call');
+      Logger.info('   Function: createPayment');
+      Logger.info('   Region: us-central1');
+      Logger.info('   User UID: ${currentUser.uid}');
+      Logger.info('   User Email: ${currentUser.email ?? "N/A"}');
+      
+      // Create a fresh Functions instance for each call to ensure fresh auth context
+      final functions = FirebaseFunctions.instanceFor(region: 'us-central1');
+      final callable = functions.httpsCallable(
+        'createPayment',
+        options: HttpsCallableOptions(
+          timeout: const Duration(seconds: 30),
+        ),
+      );
+      
+      Logger.info('📋 Request payload:');
+      Logger.info('   amount: $amount');
+      Logger.info('   currency: ${currency.toUpperCase()}');
+      Logger.info('   email: $email');
+      Logger.info('   firstName: $firstName');
+      Logger.info('   lastName: $lastName');
+      Logger.info('   phoneNumber: ${phoneNumber ?? "N/A"}');
+      Logger.info('   checkoutUrl: ${checkoutUrl ?? "N/A"}');
+      Logger.info('   intasendCheckoutId: ${intasendCheckoutId ?? "N/A"}');
+      Logger.info('');
+      Logger.info('📡 Sending request to Cloud Function...');
+      
+      final startTime = DateTime.now();
       final result = await callable.call({
         'amount': amount,
         'currency': currency.toUpperCase(),
@@ -42,10 +118,15 @@ class PaymentService {
         if (metadata != null) 'metadata': metadata,
       });
       
+      final duration = DateTime.now().difference(startTime);
+      Logger.success('✅ Cloud Function call completed in ${duration.inMilliseconds}ms');
+      
       final data = result.data as Map<String, dynamic>;
       
       // Debug: Log the full response to understand the structure
-      Logger.info('Cloud Function response: $data');
+      Logger.info('📥 Cloud Function response received:');
+      Logger.info('   Response keys: ${data.keys.toList()}');
+      Logger.debug('   Full response: $data');
       
       // Handle different response formats - check both camelCase and snake_case
       // The Cloud Function returns: { success: true, paymentId: "...", checkoutUrl: "...", data: {...} }
@@ -102,28 +183,65 @@ class PaymentService {
         'data': data,
       };
     } on FirebaseFunctionsException catch (e) {
-      Logger.error('Cloud Function error: ${e.code}', e);
+      Logger.error('❌ ===== CLOUD FUNCTION ERROR =====');
+      Logger.error('   Error code: ${e.code}');
+      Logger.error('   Error message: ${e.message ?? "No message"}');
+      Logger.error('   Error details: ${e.details}');
+      Logger.error('   Stack trace: ${e.stackTrace}');
       
-      // Provide more helpful error messages
+      // Provide more helpful error messages with diagnostics
       String errorMessage = e.message ?? 'Payment creation failed';
+      String diagnosticInfo = '';
+      
       if (e.code == 'not-found') {
         errorMessage = 'Payment function not found. Please ensure the Cloud Function "createPayment" is deployed.';
-        Logger.warning('The createPayment Cloud Function may not be deployed. Run: firebase deploy --only functions');
+        diagnosticInfo = 'The createPayment Cloud Function may not be deployed. Run: firebase deploy --only functions';
+        Logger.warning('⚠️ $diagnosticInfo');
       } else if (e.code == 'unauthenticated') {
-        errorMessage = 'Authentication required. Please log in and try again.';
+        errorMessage = 'Authentication failed. The request was rejected by Firebase.';
+        diagnosticInfo = '''
+❌ CRITICAL: Firebase Auth token validation failed!
+
+Possible causes:
+1. Firebase Auth token missing or invalid
+   - Ensure user is logged in
+   - Check if auth token refresh succeeded
+   - Verify user is authenticated before making the call
+
+2. Token expired or not refreshed
+   - Auth tokens expire periodically
+   - Ensure token refresh is working correctly
+
+Diagnostic steps:
+1. Check if user is logged in
+2. Verify Firebase Auth is initialized
+3. Check Firebase Console > Functions > Logs for detailed error
+4. Try logging out and logging back in
+        ''';
+        Logger.error(diagnosticInfo);
       } else if (e.code == 'permission-denied') {
         errorMessage = 'Permission denied. You may not have access to create payments.';
+        diagnosticInfo = 'Check Firestore security rules and Cloud Function permissions';
+        Logger.warning('⚠️ $diagnosticInfo');
       } else if (e.code == 'invalid-argument') {
         errorMessage = 'Invalid payment data: ${e.message ?? "Please check your input"}';
+        diagnosticInfo = 'Verify all required fields are provided and valid';
+        Logger.warning('⚠️ $diagnosticInfo');
       }
+      
+      Logger.error('❌ ====================================');
       
       return {
         'success': false,
         'error': errorMessage,
         'code': e.code,
+        'diagnostic': diagnosticInfo,
       };
-    } catch (e) {
-      Logger.error('Failed to create payment', e);
+    } catch (e, stackTrace) {
+      Logger.error('❌ ===== UNEXPECTED ERROR =====');
+      Logger.error('   Error: $e');
+      Logger.error('   Stack trace: $stackTrace');
+      Logger.error('❌ ============================');
       return {
         'success': false,
         'error': 'Unexpected error: $e',
