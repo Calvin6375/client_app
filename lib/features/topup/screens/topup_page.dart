@@ -22,9 +22,7 @@ class TopUpPage extends StatefulWidget {
 }
 
 class _TopUpPageState extends State<TopUpPage> {
-  final TextEditingController _amountCtrl = TextEditingController(
-    text: '1250.00',
-  );
+  final TextEditingController _amountCtrl = TextEditingController();
   final TextEditingController _emailCtrl = TextEditingController();
   final TextEditingController _firstNameCtrl = TextEditingController();
   final TextEditingController _lastNameCtrl = TextEditingController();
@@ -44,27 +42,6 @@ class _TopUpPageState extends State<TopUpPage> {
   static const String intaSendPublicKey ='ISPubKey_live_c2dbd636-a9a5-4a90-bdb8-dc7e7c7401a2';
   static const bool isTestMode = false;
 
-  // Currency symbols mapping
-  String _getCurrencySymbol(String currency) {
-    switch (currency) {
-      case 'USD':
-        return '\$';
-      case 'KES':
-        return 'KSh';
-      case 'UGX':
-        return 'USh';
-      case 'TZS':
-        return 'TSh';
-      case 'EUR':
-        return '€';
-      case 'GBP':
-        return '£';
-      case 'USDT':
-        return '₮';
-      default:
-        return currency; // Return currency code for crypto currencies
-    }
-  }
 
   bool _isFirebaseInitialized() {
     try {
@@ -79,6 +56,27 @@ class _TopUpPageState extends State<TopUpPage> {
   void initState() {
     super.initState();
     _loadWalletBalance();
+    _loadUserProfile();
+  }
+  
+  Future<void> _loadUserProfile() async {
+    if (!_isFirebaseInitialized()) return;
+    
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) return;
+      
+      final userProfile = await _userRepository.getUserProfile(user.uid);
+      if (userProfile != null && mounted) {
+        // Auto-fill user data from Firestore
+        _emailCtrl.text = userProfile.email;
+        _firstNameCtrl.text = userProfile.firstName;
+        _lastNameCtrl.text = userProfile.lastName;
+      }
+    } catch (e) {
+      debugPrint('Failed to load user profile on TopUpPage: $e');
+      // Continue without auto-filling if profile load fails
+    }
   }
 
   Future<void> _loadWalletBalance() async {
@@ -173,12 +171,18 @@ class _TopUpPageState extends State<TopUpPage> {
     print('Crypto balance: $_cryptoBalance');
     print('Selected currency: $_selectedCurrency');
 
-    if (_amountCtrl.text.isEmpty ||
-        _emailCtrl.text.isEmpty ||
+    if (_amountCtrl.text.isEmpty) {
+      print('❌ Validation failed: Missing amount');
+      _showError('Please enter an amount');
+      return;
+    }
+    
+    // Validate that user profile data is available
+    if (_emailCtrl.text.isEmpty ||
         _firstNameCtrl.text.isEmpty ||
         _lastNameCtrl.text.isEmpty) {
-      print('❌ Validation failed: Missing required fields');
-      _showError('Please fill in all required fields');
+      print('❌ Validation failed: User profile data missing');
+      _showError('User profile data is missing. Please ensure your profile is complete.');
       return;
     }
 
@@ -546,21 +550,20 @@ class _TopUpPageState extends State<TopUpPage> {
                 children: [
                   _SetAmountCard(
                     controller: _amountCtrl,
-                    currencySymbol: _getCurrencySymbol(_selectedCurrency),
+                    selectedCurrency: _selectedCurrency,
                     onQuickAdd: _applyQuick,
+                    onCurrencyChanged: (currency) {
+                      setState(() {
+                        _selectedCurrency = currency;
+                      });
+                    },
                   ),
                   const SizedBox(height: 16),
                   _FiatOptionCard(
                     emailController: _emailCtrl,
                     firstNameController: _firstNameCtrl,
                     lastNameController: _lastNameCtrl,
-                    selectedCurrency: _selectedCurrency,
                     isProcessing: _isProcessingPayment,
-                    onCurrencyChanged: (currency) {
-                      setState(() {
-                        _selectedCurrency = currency;
-                      });
-                    },
                     onPaymentPressed: _processIntaSendPayment,
                   ),
                   const SizedBox(height: 16),
@@ -678,18 +681,42 @@ class _BalanceHeader extends StatelessWidget {
 
 class _SetAmountCard extends StatelessWidget {
   final TextEditingController controller;
-  final String currencySymbol;
+  final String selectedCurrency;
   final void Function(double) onQuickAdd;
+  final void Function(String) onCurrencyChanged;
+  
+  // Currency symbols mapping
+  String _getCurrencySymbol(String currency) {
+    switch (currency) {
+      case 'USD':
+        return '\$';
+      case 'KES':
+        return 'KSh';
+      case 'UGX':
+        return 'USh';
+      case 'TZS':
+        return 'TSh';
+      case 'EUR':
+        return '€';
+      case 'GBP':
+        return '£';
+      default:
+        return currency;
+    }
+  }
+  
   const _SetAmountCard({
     required this.controller,
-    required this.currencySymbol,
+    required this.selectedCurrency,
     required this.onQuickAdd,
+    required this.onCurrencyChanged,
   });
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final primary = theme.colorScheme.primary;
+    final currencySymbol = _getCurrencySymbol(selectedCurrency);
 
     return Card(
       elevation: 0,
@@ -710,17 +737,41 @@ class _SetAmountCard extends StatelessWidget {
             ),
             const SizedBox(height: 16),
             Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
+              crossAxisAlignment: CrossAxisAlignment.baseline,
+              textBaseline: TextBaseline.alphabetic,
               children: [
-                Text(
-                  currencySymbol,
-                  style: TextStyle(
-                    fontSize: 24,
-                    color: Colors.grey[800],
-                    fontWeight: FontWeight.w600,
+                // Currency selector dropdown
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: Colors.grey[300]!),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: DropdownButton<String>(
+                    value: selectedCurrency,
+                    underline: const SizedBox.shrink(),
+                    isDense: true,
+                    items: ['USD', 'KES', 'UGX', 'TZS', 'EUR', 'GBP']
+                        .map((currency) => DropdownMenuItem(
+                              value: currency,
+                              child: Text(
+                                currency,
+                                style: const TextStyle(
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.grey,
+                                ),
+                              ),
+                            ))
+                        .toList(),
+                    onChanged: (value) {
+                      if (value != null) {
+                        onCurrencyChanged(value);
+                      }
+                    },
                   ),
                 ),
-                const SizedBox(width: 6),
+                const SizedBox(width: 8),
                 Expanded(
                   child: TextField(
                     controller: controller,
@@ -728,8 +779,8 @@ class _SetAmountCard extends StatelessWidget {
                       decimal: true,
                     ),
                     style: const TextStyle(
-                      fontSize: 32,
-                      fontWeight: FontWeight.bold,
+                      fontSize: 20,
+                      fontWeight: FontWeight.w600,
                     ),
                     decoration: const InputDecoration(
                       border: InputBorder.none,
@@ -745,7 +796,7 @@ class _SetAmountCard extends StatelessWidget {
               runSpacing: 8,
               children: [5, 10, 25, 50].map((e) {
                 return ActionChip(
-                  label: Text('${currencySymbol}${e.toStringAsFixed(0)}'),
+                  label: Text('$currencySymbol${e.toStringAsFixed(0)}'),
                   onPressed: () => onQuickAdd(e.toDouble()),
                   backgroundColor: primary.withOpacity(0.08),
                   labelStyle: TextStyle(
@@ -766,18 +817,14 @@ class _FiatOptionCard extends StatelessWidget {
   final TextEditingController emailController;
   final TextEditingController firstNameController;
   final TextEditingController lastNameController;
-  final String selectedCurrency;
   final bool isProcessing;
-  final void Function(String) onCurrencyChanged;
   final VoidCallback onPaymentPressed;
 
   const _FiatOptionCard({
     required this.emailController,
     required this.firstNameController,
     required this.lastNameController,
-    required this.selectedCurrency,
     required this.isProcessing,
-    required this.onCurrencyChanged,
     required this.onPaymentPressed,
   });
 
@@ -811,77 +858,6 @@ class _FiatOptionCard extends StatelessWidget {
             ),
             const SizedBox(height: 16),
 
-            // Email field
-            TextField(
-              controller: emailController,
-              keyboardType: TextInputType.emailAddress,
-              decoration: InputDecoration(
-                labelText: 'Email Address',
-                hintText: 'Enter your email',
-                prefixIcon: const Icon(Icons.email_outlined),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-            ),
-            const SizedBox(height: 12),
-
-            // First name and Last name row
-            Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: firstNameController,
-                    decoration: InputDecoration(
-                      labelText: 'First Name',
-                      hintText: 'Enter first name',
-                      prefixIcon: const Icon(Icons.person_outline),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: TextField(
-                    controller: lastNameController,
-                    decoration: InputDecoration(
-                      labelText: 'Last Name',
-                      hintText: 'Enter last name',
-                      prefixIcon: const Icon(Icons.person_outline),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-
-            // Currency selector
-            DropdownButtonFormField<String>(
-              value: selectedCurrency,
-              decoration: InputDecoration(
-                labelText: 'Currency',
-                prefixIcon: const Icon(Icons.monetization_on_outlined),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-              items: ['USD', 'KES', 'UGX', 'TZS', 'EUR', 'GBP']
-                  .map(
-                    (currency) => DropdownMenuItem(
-                      value: currency,
-                      child: Text(currency),
-                    ),
-                  )
-                  .toList(),
-              onChanged: (value) => onCurrencyChanged(value ?? 'USD'),
-            ),
-            const SizedBox(height: 16),
-
             // IntaSend checkout button
             SizedBox(
               width: double.infinity,
@@ -908,7 +884,7 @@ class _FiatOptionCard extends StatelessWidget {
                       )
                     : const Icon(Icons.payment),
                 label: Text(
-                  isProcessing ? 'Processing...' : 'Pay with IntaSend',
+                  isProcessing ? 'Processing...' : 'TopUp',
                 ),
               ),
             ),

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:confetti/confetti.dart';
 import 'package:pretium/features/swap/services/rates_service.dart';
+import 'package:pretium/features/swap/widgets/currency_picker_bottom_sheet.dart';
 import 'package:pretium/repositories/wallet_repository.dart';
 import 'package:pretium/services/order_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -110,7 +111,8 @@ class _SwapPageState extends State<SwapPage> {
     // Set initial currency from parameter or default
     if (widget.initialFromCurrency != null) {
       _fromCurrency = widget.initialFromCurrency!;
-      _toCurrency = _fromCurrency == 'USD' ? 'USDT' : 'USD';
+      // Default to USDT if from currency is fiat, otherwise default to USD
+      _toCurrency = _fromCurrency == 'USDT' ? 'USD' : 'USDT';
     }
     
     _rate = _rates.getRate(_fromCurrency, _toCurrency);
@@ -141,21 +143,27 @@ class _SwapPageState extends State<SwapPage> {
 
       setState(() => _loadingBalances = true);
 
-      // Load both wallets
-      final fiatWallet = await _walletRepository.getWalletBalance(user.uid);
-      final cryptoWallet = await _walletRepository.getCryptoWalletBalance(user.uid, 'USDT');
-
-      if (!mounted) return;
-
-      // Set balances based on current currencies
-      if (_fromCurrency == 'USD') {
+      // Load balance for "from" currency
+      if (_fromCurrency == 'USDT') {
+        final cryptoWallet = await _walletRepository.getCryptoWalletBalance(user.uid, 'USDT');
+        _fromBalance = cryptoWallet?.balance ?? 0.0;
+      } else {
+        // Load fiat wallet for the currency (USD, KES, NGN, GHS)
+        final fiatWallet = await _walletRepository.getWalletBalance(user.uid, currency: _fromCurrency);
         _fromBalance = fiatWallet?.balance ?? 0.0;
+      }
+
+      // Load balance for "to" currency
+      if (_toCurrency == 'USDT') {
+        final cryptoWallet = await _walletRepository.getCryptoWalletBalance(user.uid, 'USDT');
         _toBalance = cryptoWallet?.balance ?? 0.0;
       } else {
-        _fromBalance = cryptoWallet?.balance ?? 0.0;
+        // Load fiat wallet for the currency (USD, KES, NGN, GHS)
+        final fiatWallet = await _walletRepository.getWalletBalance(user.uid, currency: _toCurrency);
         _toBalance = fiatWallet?.balance ?? 0.0;
       }
 
+      if (!mounted) return;
       setState(() => _loadingBalances = false);
     } catch (e) {
       if (!mounted) return;
@@ -234,6 +242,37 @@ class _SwapPageState extends State<SwapPage> {
     );
   }
 
+  void _showCurrencyPicker(BuildContext context, bool isFromCurrency) {
+    final availableCurrencies = [
+      const Currency(code: 'USD', name: 'US Dollar', flagEmoji: '🇺🇸'),
+      const Currency(code: 'KES', name: 'Kenyan Shilling', flagEmoji: '🇰🇪'),
+      const Currency(code: 'NGN', name: 'Nigerian Naira', flagEmoji: '🇳🇬'),
+      const Currency(code: 'GHS', name: 'Ghanaian Cedi', flagEmoji: '🇬🇭'),
+      const Currency(code: 'USDT', name: 'Tether', flagEmoji: '₮'),
+    ];
+    
+    showModalBottomSheet(
+      context: context,
+      builder: (context) => CurrencyPickerBottomSheet(
+        currencies: availableCurrencies,
+        selectedCode: isFromCurrency ? _fromCurrency : _toCurrency,
+        onSelected: (currency) {
+          setState(() {
+            if (isFromCurrency) {
+              _fromCurrency = currency.code;
+              // Don't auto-select - let user choose the other currency
+            } else {
+              _toCurrency = currency.code;
+              // Don't auto-select - let user choose the other currency
+            }
+            _rate = _rates.getRate(_fromCurrency, _toCurrency);
+            _loadBalances();
+          });
+        },
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -256,6 +295,8 @@ class _SwapPageState extends State<SwapPage> {
             loadingBalances: _loadingBalances,
             onSwapCurrencies: _swapCurrencies,
             onNext: _nextStep,
+            onFromCurrencyTap: () => _showCurrencyPicker(context, true),
+            onToCurrencyTap: () => _showCurrencyPicker(context, false),
           ),
           _SwapConfirmationScreen(
             fromAmount: double.tryParse(_fromCtrl.text) ?? 0,
@@ -283,6 +324,8 @@ class _SwapInputScreen extends StatelessWidget {
   final double rate;
   final bool loadingBalances;
   final VoidCallback onSwapCurrencies;
+  final VoidCallback onFromCurrencyTap;
+  final VoidCallback onToCurrencyTap;
 
   const _SwapInputScreen({
     required this.onNext,
@@ -294,60 +337,154 @@ class _SwapInputScreen extends StatelessWidget {
     required this.rate,
     required this.loadingBalances,
     required this.onSwapCurrencies,
+    required this.onFromCurrencyTap,
+    required this.onToCurrencyTap,
   });
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final primaryColor = theme.colorScheme.primary;
+    final fromAmount = double.tryParse(fromCtrl.text) ?? 0;
+    final toAmount = fromAmount * rate;
+    // Calculate fee (e.g., 0.5% of the swap amount)
+    final fee = fromAmount * 0.005;
+    final totalFromAmount = fromAmount + fee;
 
-    return ListView(
-      padding: const EdgeInsets.all(16.0),
+    return Column(
       children: [
-        _SwapCurrencyCard(
-          label: 'You Send',
-          currency: fromCurrency,
-          balance: fromBalance,
-          loading: loadingBalances,
-          controller: fromCtrl,
-          onCurrencyTap: () { /* TODO: Show currency picker */ },
-        ),
-        const SizedBox(height: 8),
-        Center(
-          child: IconButton(
-            icon: Icon(Icons.swap_vert, color: primaryColor, size: 32),
-            onPressed: onSwapCurrencies,
-            style: IconButton.styleFrom(
-              backgroundColor: primaryColor.withOpacity(0.1),
-              shape: const CircleBorder(),
-              padding: const EdgeInsets.all(12),
-            ),
+        Expanded(
+          child: ListView(
+            padding: const EdgeInsets.all(16.0),
+            children: [
+              const SizedBox(height: 8),
+              _SwapCurrencyCard(
+                label: 'You Send',
+                currency: fromCurrency,
+                balance: fromBalance,
+                loading: loadingBalances,
+                controller: fromCtrl,
+                onCurrencyTap: onFromCurrencyTap,
+              ),
+              const SizedBox(height: 8),
+              Center(
+                child: IconButton(
+                  icon: Icon(Icons.swap_vert, color: primaryColor, size: 32),
+                  onPressed: onSwapCurrencies,
+                  style: IconButton.styleFrom(
+                    backgroundColor: primaryColor.withOpacity(0.1),
+                    shape: const CircleBorder(),
+                    padding: const EdgeInsets.all(12),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              _SwapCurrencyCard(
+                label: 'You Receive',
+                currency: toCurrency,
+                balance: toBalance,
+                loading: loadingBalances,
+                amount: toAmount,
+                onCurrencyTap: onToCurrencyTap,
+              ),
+              const SizedBox(height: 24),
+              // Fees component
+              if (fromAmount > 0)
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.grey.withOpacity(0.1),
+                        spreadRadius: 1,
+                        blurRadius: 10,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'Network Fee',
+                            style: TextStyle(
+                              color: Colors.grey[600],
+                              fontSize: 14,
+                            ),
+                          ),
+                          Text(
+                            '${fee.toStringAsFixed(5)} $fromCurrency',
+                            style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'Total',
+                            style: TextStyle(
+                              color: Colors.grey[600],
+                              fontSize: 14,
+                            ),
+                          ),
+                          Text(
+                            '${totalFromAmount.toStringAsFixed(5)} $fromCurrency',
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+            ],
           ),
         ),
-        const SizedBox(height: 8),
-        _SwapCurrencyCard(
-          label: 'You Receive',
-          currency: toCurrency,
-          balance: toBalance,
-          loading: loadingBalances,
-          // Calculate received amount based on rate
-          amount: (double.tryParse(fromCtrl.text) ?? 0) * rate,
-          onCurrencyTap: () { /* TODO: Show currency picker */ },
-        ),
-        const SizedBox(height: 24),
-        ElevatedButton(
-          onPressed: onNext,
-          style: ElevatedButton.styleFrom(
-            padding: const EdgeInsets.symmetric(vertical: 16),
-            backgroundColor: primaryColor,
-            foregroundColor: Colors.white,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(30),
-            ),
+        // Button at bottom
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            boxShadow: [
+              BoxShadow(
+                color: Colors.grey.withOpacity(0.1),
+                spreadRadius: 1,
+                blurRadius: 10,
+                offset: const Offset(0, -2),
+              ),
+            ],
           ),
-          child: const Text(
-            'Confirm and Swap',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          child: SafeArea(
+            child: SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: fromAmount > 0 ? onNext : null,
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  backgroundColor: primaryColor,
+                  foregroundColor: Colors.white,
+                  disabledBackgroundColor: Colors.grey[300],
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                child: const Text(
+                  'Confirm and Swap',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+              ),
+            ),
           ),
         ),
       ],
@@ -422,12 +559,27 @@ class _SwapCurrencyCard extends StatelessWidget {
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Row(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      // TODO: Add currency icon
-                      const Icon(Icons.currency_bitcoin, size: 20),
-                      const SizedBox(width: 8),
-                      Text(currency, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                      const Icon(Icons.keyboard_arrow_down, size: 20),
+                      Icon(
+                        currency == 'USD' ? Icons.attach_money : Icons.currency_bitcoin,
+                        size: 20,
+                        color: Colors.grey[700],
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        currency,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      Icon(
+                        Icons.keyboard_arrow_down,
+                        size: 20,
+                        color: Colors.grey[700],
+                      ),
                     ],
                   ),
                 ),
@@ -459,26 +611,6 @@ class _SwapCurrencyCard extends StatelessWidget {
   }
 }
 
-class _TransactionDetailRow extends StatelessWidget {
-  final String label;
-  final String value;
-
-  const _TransactionDetailRow({required this.label, required this.value});
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8.0),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(label, style: const TextStyle(color: Colors.grey)),
-          Text(value, style: const TextStyle(fontWeight: FontWeight.w500)),
-        ],
-      ),
-    );
-  }
-}
 
 class _SwapConfirmationScreen extends StatelessWidget {
   final VoidCallback onNext;
