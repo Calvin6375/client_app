@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:pretium/features/send_money/screens/send_money_page.dart';
 import 'package:pretium/core/constants/app_colors.dart';
-import 'package:pretium/app/route_names.dart';
 
 class FinancialServices extends StatelessWidget {
   const FinancialServices({super.key});
@@ -10,146 +9,127 @@ class FinancialServices extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = AppColors.getThemeColors(context);
-    return Container(
-      padding: EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: colors.surface,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: colors.shadow,
-            spreadRadius: 5,
-            blurRadius: 18,
-            offset: const Offset(0, 8),
-          ),
-          BoxShadow(
-            color: colors.shadowLight,
-            spreadRadius: 4,
-            blurRadius: 20,
-            offset: const Offset(0, 10),
-          ),
-        ],
-      ),
-      child: Column(
-        children: [
-          Row(
-            children: [
-              Text(
-                "Financial Services",
-                style: TextStyle(fontWeight: FontWeight.bold),
+    
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Header with country selector - centered
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(
+              "Financial Services",
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: colors.textPrimary,
               ),
-              Spacer(),
-              Text(
-                "Kenya",
-                style: TextStyle(color: Theme.of(context).colorScheme.primary),
-              ),
-              Icon(
-                Icons.keyboard_arrow_down,
-                color: Theme.of(context).colorScheme.primary,
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          // First row with Send Money, Buy Goods, and Paybill
-          Row(
-            children: [
-              Expanded(
-                child: Center(
-                  child: _buildServiceItem(
-                context,
-                FontAwesomeIcons.paperPlane,
-                "Send Money",
-                () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(builder: (context) => const SendMoneyPage()),
-                  );
-                },
-              ),
-                ),
-              ),
-              Expanded(
-                child: Center(
-                  child: _buildServiceItem(
-                context,
-                FontAwesomeIcons.shoppingBasket,
-                "Buy Goods",
-                () => _showComingSoonDialog(context),
-              ),
-                ),
-              ),
-              Expanded(
-                child: Center(
-                  child: _buildServiceItem(
-                context, 
-                FontAwesomeIcons.receipt, 
-                "Paybill",
-                () => _showComingSoonDialog(context),
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          // Second row: Airtime (left) and Verify Wallet (center), keep 3-column grid
-          Row(
-            children: [
-              Expanded(
-                child: Center(
-                  child: _buildServiceItem(
-                context, 
-                Icons.phone_android, 
-                "Airtime",
-                () => _showComingSoonDialog(context),
-              ),
-                ),
-              ),
-              Expanded(
-                child: Center(
-                  child: _buildServiceItem(
-                    context,
-                    Icons.verified_user,
-                    "Verify Wallet",
-                    () => Navigator.of(context).pushNamed(RouteNames.walletVerification),
-                  ),
-                ),
-              ),
-              const Expanded(child: SizedBox.shrink()),
-            ],
-          ),
-          const SizedBox(height: 8),
-        ],
-      ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 40),
+        // Single horizontal row of 4 large rounded rectangle buttons - centered
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            _buildServiceButton(
+              context,
+              FontAwesomeIcons.paperPlane,
+              "Send Money",
+              true, // isFontAwesome
+              () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(builder: (context) => const SendMoneyPage()),
+                );
+              },
+            ),
+            const SizedBox(width: 16),
+            _buildServiceButton(
+              context,
+              FontAwesomeIcons.shoppingBasket,
+              "Buy Goods",
+              true, // isFontAwesome
+              () => _showComingSoonDialog(context),
+            ),
+            const SizedBox(width: 16),
+            _buildServiceButton(
+              context,
+              FontAwesomeIcons.receipt,
+              "Paybill",
+              true, // isFontAwesome
+              () => _showComingSoonDialog(context),
+            ),
+            const SizedBox(width: 16),
+            _buildServiceButton(
+              context,
+              Icons.phone_android,
+              "Airtime",
+              false, // isFontAwesome
+              () => _showComingSoonDialog(context),
+            ),
+          ],
+        ),
+      ],
     );
   }
 
-  // Pass BuildContext so we can access Theme.of(context)
-  Widget _buildServiceItem(BuildContext context, IconData icon, String label, [VoidCallback? onTap]) {
+  // Build larger rounded rectangle button for services - matching reference design
+  Widget _buildServiceButton(BuildContext context, IconData icon, String label, bool isFontAwesome, [VoidCallback? onTap]) {
+    final colors = AppColors.getThemeColors(context);
+    final primary = Theme.of(context).colorScheme.primary;
+    // Use the same primary turquoise color as the Fiat Wallet button
+    final containerColor = primary;
+    
     return GestureDetector(
       onTap: onTap,
       child: Column(
-      children: [
-        CircleAvatar(
-          backgroundColor: Theme.of(
-            context,
-          ).colorScheme.primary.withOpacity(0.1),
-          radius: 25,
-          child:
-              icon.runtimeType == IconData
+        mainAxisAlignment: MainAxisAlignment.center,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 75,
+            height: 90,
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
+              color: containerColor,
+              borderRadius: BorderRadius.circular(18),
+              boxShadow: [
+                BoxShadow(
+                  color: colors.shadowLight,
+                  blurRadius: 8,
+                  offset: const Offset(0, 3),
+                ),
+              ],
+            ),
+            child: Center(
+              child: isFontAwesome
                   ? FaIcon(
-                    icon,
-                    color: Theme.of(context).colorScheme.primary,
-                    size: 20,
-                  )
+                      icon,
+                      color: colors.onPrimary,
+                      size: 36,
+                    )
                   : Icon(
-                    icon,
-                    color: Theme.of(context).colorScheme.primary,
-                    size: 20,
-                  ),
-        ),
-        SizedBox(height: 8),
-        Text(label, style: TextStyle(fontSize: 12)),
-      ],
-    ),);
+                      icon,
+                      color: colors.onPrimary,
+                      size: 36,
+                    ),
+            ),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w500,
+              color: colors.textPrimary,
+            ),
+            textAlign: TextAlign.center,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
+      ),
+    );
   }
 
   void _showComingSoonDialog(BuildContext context) {

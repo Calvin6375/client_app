@@ -27,11 +27,28 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen> {
   int _selectedIndex = 0;
+  int _selectedTab = 0; // For pill-shaped tabs: 0 = Fiat, 1 = Crypto
+  final GlobalKey<State<WalletCard>> _walletCardKey = GlobalKey<State<WalletCard>>();
 
   void _onItemTapped(int index) {
     setState(() {
       _selectedIndex = index;
     });
+  }
+  
+  Future<void> _handleRefresh() async {
+    // Refresh wallet balance when user pulls down
+    final walletCardState = _walletCardKey.currentState;
+    if (walletCardState != null) {
+      // Call the refreshBalance method using dynamic dispatch
+      try {
+        await (walletCardState as dynamic).refreshBalance(forceRefresh: true);
+      } catch (e) {
+        // If method doesn't exist, ignore
+      }
+    }
+    // Add a small delay for better UX
+    await Future.delayed(const Duration(milliseconds: 500));
   }
 
   @override
@@ -39,7 +56,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final colors = AppColors.getThemeColors(context);
     final primary = Theme.of(context).colorScheme.primary;
     return Scaffold(
-      backgroundColor: primary,
+      backgroundColor: colors.background,
       body: Column(
         children: [
           Container(
@@ -53,33 +70,39 @@ class _DashboardScreenState extends State<DashboardScreen> {
             child: HeaderWidget(),
           ),
           Expanded(
-            child: Container(
-              decoration: BoxDecoration(
-                color: colors.background,
-                borderRadius: const BorderRadius.only(
-                  topLeft: Radius.circular(0),
-                  topRight: Radius.circular(0),
-                ),
-              ),
+            child: RefreshIndicator(
+              onRefresh: _handleRefresh,
+              color: primary,
               child: ListView(
-                padding: EdgeInsets.zero,
+                padding: const EdgeInsets.symmetric(horizontal: 20),
                 children: [
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 20),
-                    child: Column(
-                      children: [
-                        const SizedBox(height: 20),
-                        const WalletCard(),
-                        const SizedBox(height: 24),
-                        const FinancialServices(),
-                        const SizedBox(height: 24),
-                        const RecentTransactionsHeader(),
-                        const PlaceholderTransactions(),
-                      ],
-                    ),
+                  const SizedBox(height: 24),
+                  // Pill-shaped tab navigation - moved above circular balance
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      _buildPillTab('Fiat Wallet', 0),
+                      const SizedBox(width: 12),
+                      _buildPillTab('Crypto Wallet', 1),
+                    ],
                   ),
-                ],
-              ),
+                  const SizedBox(height: 32),
+                  // Large circular wallet display
+                  WalletCard(
+                    key: _walletCardKey,
+                    selectedTab: _selectedTab,
+                  ),
+                const SizedBox(height: 56),
+                // Financial Services grid
+                const FinancialServices(),
+                const SizedBox(height: 40),
+                // Recent Transactions
+                const RecentTransactionsHeader(),
+                const SizedBox(height: 16),
+                const PlaceholderTransactions(),
+                const SizedBox(height: 24),
+              ],
+            ),
             ),
           ),
         ],
@@ -125,6 +148,39 @@ class _DashboardScreenState extends State<DashboardScreen> {
               onPressed: () => _onItemTapped(2),
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPillTab(String label, int index) {
+    final primary = Theme.of(context).colorScheme.primary;
+    final colors = AppColors.getThemeColors(context);
+    final isSelected = _selectedTab == index;
+    
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _selectedTab = index;
+        });
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 12),
+        decoration: BoxDecoration(
+          color: isSelected ? primary : Colors.transparent,
+          borderRadius: BorderRadius.circular(30),
+          border: isSelected ? null : Border.all(
+            color: primary,
+            width: 1.5,
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: isSelected ? colors.onPrimary : primary,
+            fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+            fontSize: 15,
+          ),
         ),
       ),
     );
