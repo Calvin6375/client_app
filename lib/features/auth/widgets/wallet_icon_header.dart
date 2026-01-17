@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:pretium/core/constants/app_colors.dart';
 
 class WalletIconHeader extends StatelessWidget {
   final Color color;
@@ -6,12 +7,13 @@ class WalletIconHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AppColors.getThemeColors(context);
     return Transform.translate(
       offset: const Offset(0, 50),
       child: Container(
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
-          color: const Color.fromARGB(255, 210, 213, 212),
+          color: colors.background, // Use theme background color to match screen
           borderRadius: BorderRadius.circular(17),
         ),
         child: Image.asset(
