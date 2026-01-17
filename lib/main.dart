@@ -12,7 +12,9 @@ import 'package:pretium/features/swap/screens/swap_page.dart';
 import 'package:pretium/app/route_names.dart';
 import 'package:pretium/utils/logger.dart';
 import 'package:pretium/core/constants/app_colors.dart';
+import 'package:pretium/core/theme/theme_provider.dart';
 import 'package:pretium/features/wallet_verification/screens/wallet_verification_screen.dart';
+import 'package:provider/provider.dart';
 
 /// Background message handler (must be top-level function)
 @pragma('vm:entry-point')
@@ -122,23 +124,26 @@ class MyApp extends StatelessWidget {
       brightness: Brightness.light,
     ).copyWith(
       primary: colors.primary,
-      onPrimary: colors.onPrimary,
+      onPrimary: Colors.white,
+      secondary: colors.success,
       surface: colors.surface,
       onSurface: colors.textPrimary,
+      background: colors.background,
       error: colors.error,
     );
     return base.copyWith(
       colorScheme: scheme,
       primaryColor: colors.primary,
       appBarTheme: AppBarTheme(
-        backgroundColor: colors.primary,
-        foregroundColor: colors.onPrimary,
+        backgroundColor: Colors.transparent, // Transparent for glassmorphism
+        foregroundColor: colors.textPrimary,
         elevation: 0,
-        iconTheme: IconThemeData(color: colors.onPrimary),
+        iconTheme: IconThemeData(color: colors.textPrimary),
       ),
       cardTheme: CardThemeData(
         color: colors.surface,
-        elevation: 0,
+        elevation: 2,
+        shadowColor: Colors.black.withOpacity(0.1),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(16),
         ),
@@ -146,13 +151,21 @@ class MyApp extends StatelessWidget {
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
           backgroundColor: colors.primary,
-          foregroundColor: colors.onPrimary,
+          foregroundColor: Colors.white,
+          elevation: 2,
+          shadowColor: colors.primary.withOpacity(0.3),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
           foregroundColor: colors.primary,
           side: BorderSide(color: colors.primary, width: 1.5),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
         ),
       ),
       textButtonTheme: TextButtonThemeData(
@@ -160,10 +173,27 @@ class MyApp extends StatelessWidget {
       ),
       floatingActionButtonTheme: FloatingActionButtonThemeData(
         backgroundColor: colors.primary,
-        foregroundColor: colors.onPrimary,
+        foregroundColor: Colors.white,
+        elevation: 4,
       ),
       dividerColor: colors.divider,
       dividerTheme: DividerThemeData(color: colors.divider),
+      inputDecorationTheme: InputDecorationTheme(
+        filled: true,
+        fillColor: colors.inputBackground,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: colors.inputBorder),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: colors.inputBorder),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: colors.inputBorderFocused, width: 2),
+        ),
+      ),
     );
   }
 
@@ -180,22 +210,25 @@ class MyApp extends StatelessWidget {
     ).copyWith(
       primary: colors.primary,
       onPrimary: colors.onPrimary,
+      secondary: colors.success,
       surface: colors.surface,
       onSurface: colors.textPrimary,
+      background: colors.background,
       error: colors.error,
     );
     return base.copyWith(
       colorScheme: scheme,
       primaryColor: colors.primary,
       appBarTheme: AppBarTheme(
-        backgroundColor: colors.primary,
-        foregroundColor: colors.onPrimary,
+        backgroundColor: Colors.transparent, // Transparent for dark theme
+        foregroundColor: colors.textPrimary,
         elevation: 0,
-        iconTheme: IconThemeData(color: colors.onPrimary),
+        iconTheme: IconThemeData(color: colors.textPrimary),
       ),
       cardTheme: CardThemeData(
         color: colors.surface,
         elevation: 0,
+        shadowColor: Colors.black.withOpacity(0.3),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(16),
         ),
@@ -204,12 +237,20 @@ class MyApp extends StatelessWidget {
         style: ElevatedButton.styleFrom(
           backgroundColor: colors.primary,
           foregroundColor: colors.onPrimary,
+          elevation: 2,
+          shadowColor: colors.primary.withOpacity(0.3),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
           foregroundColor: colors.primary,
           side: BorderSide(color: colors.primary, width: 1.5),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
         ),
       ),
       textButtonTheme: TextButtonThemeData(
@@ -218,32 +259,56 @@ class MyApp extends StatelessWidget {
       floatingActionButtonTheme: FloatingActionButtonThemeData(
         backgroundColor: colors.primary,
         foregroundColor: colors.onPrimary,
+        elevation: 4,
       ),
       dividerColor: colors.divider,
       dividerTheme: DividerThemeData(color: colors.divider),
+      inputDecorationTheme: InputDecorationTheme(
+        filled: true,
+        fillColor: colors.inputBackground,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: colors.inputBorder),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: colors.inputBorder),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: colors.inputBorderFocused, width: 2),
+        ),
+      ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'TruePay',
-      debugShowCheckedModeBanner: false,
-      theme: _buildDarkTheme(), // Default to dark fintech theme
-      darkTheme: _buildDarkTheme(),
-      themeMode: ThemeMode.dark, // Force dark mode to match landing page
-      initialRoute: RouteNames.splash,
-      routes: {
-        RouteNames.splash: (context) => const SplashPage(),
-        RouteNames.splashPage1: (context) => const SplashPage1(),
-        RouteNames.login: (context) => const LoginPage(),
-        RouteNames.register: (context) => const RegisterPage(),
-        RouteNames.home: (context) => LandingPage(),
-        RouteNames.topup: (context) => const TopUpPage(),
-        RouteNames.swap: (context) => const SwapPage(),
-        RouteNames.walletVerification: (context) =>
-            const WalletVerificationScreen(),
-      },
+    return ChangeNotifierProvider(
+      create: (_) => ThemeProvider(),
+      child: Consumer<ThemeProvider>(
+        builder: (context, themeProvider, _) {
+          return MaterialApp(
+            title: 'TruePay',
+            debugShowCheckedModeBanner: false,
+            theme: _buildLightTheme(), // Light theme with glassmorphism
+            darkTheme: _buildDarkTheme(), // Dark fintech theme
+            themeMode: themeProvider.themeMode, // Dynamic theme mode
+            initialRoute: RouteNames.splash,
+            routes: {
+              RouteNames.splash: (context) => const SplashPage(),
+              RouteNames.splashPage1: (context) => const SplashPage1(),
+              RouteNames.login: (context) => const LoginPage(),
+              RouteNames.register: (context) => const RegisterPage(),
+              RouteNames.home: (context) => LandingPage(),
+              RouteNames.topup: (context) => const TopUpPage(),
+              RouteNames.swap: (context) => const SwapPage(),
+              RouteNames.walletVerification: (context) =>
+                  const WalletVerificationScreen(),
+            },
+          );
+        },
+      ),
     );
   }
 }

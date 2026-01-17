@@ -77,12 +77,29 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 children: [
                   const SizedBox(height: 16),
-                  // Segmented control style - wallet toggle with dark container
+                  // Segmented control style - wallet toggle with glassmorphism container
                   Container(
                     padding: const EdgeInsets.all(4),
                     decoration: BoxDecoration(
-                      color: AppColors.surfaceDark, // Dark slate #1E293B container
+                      color: Theme.of(context).brightness == Brightness.dark
+                          ? AppColors.surfaceDark // Dark slate #1E293B for dark mode
+                          : Colors.white.withOpacity(0.9), // Light background for toggle container
                       borderRadius: BorderRadius.circular(16),
+                      border: Theme.of(context).brightness == Brightness.light
+                          ? Border.all(
+                              color: const Color(0xFFE5E7EB), // Soft gray border
+                              width: 1,
+                            )
+                          : null,
+                      boxShadow: Theme.of(context).brightness == Brightness.light
+                          ? [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.04),
+                                blurRadius: 8,
+                                offset: const Offset(0, 2),
+                              ),
+                            ]
+                          : null,
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
@@ -116,13 +133,26 @@ class _DashboardScreenState extends State<DashboardScreen> {
       ),
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
-          color: AppColors.backgroundDeepNavy, // Deep navy #0F172A
+          color: Theme.of(context).brightness == Brightness.light
+              ? Colors.white.withOpacity(0.95) // Clean white background
+              : colors.background, // Dark background for dark mode
           border: Border(
             top: BorderSide(
-              color: AppColors.surfaceDark.withValues(alpha: 0.5), // Subtle top border
+              color: Theme.of(context).brightness == Brightness.dark
+                  ? AppColors.surfaceVariantDark // Subtle top border for dark
+                  : const Color(0xFFE5E7EB), // Soft gray border for light mode
               width: 1,
             ),
           ),
+          boxShadow: Theme.of(context).brightness == Brightness.light
+              ? [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.04),
+                    blurRadius: 8,
+                    offset: const Offset(0, -2),
+                  ),
+                ]
+              : null,
         ),
         child: BottomAppBar(
           color: Colors.transparent,
@@ -136,8 +166,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
               icon: const Icon(Icons.account_balance_wallet),
               iconSize: 26,
               color: _selectedIndex == 0 
-                  ? AppColors.brandCyan // Vibrant cyan #00D4FF when active
-                  : AppColors.textTertiary, // Slate-500 #64748B when inactive
+                  ? primary // Theme-aware primary color when active
+                  : colors.textTertiary, // Theme-aware tertiary when inactive
               onPressed: () => _onItemTapped(0),
             ),
             GestureDetector(
@@ -149,26 +179,32 @@ class _DashboardScreenState extends State<DashboardScreen> {
               },
               child: Container(
                 decoration: BoxDecoration(
-                  color: AppColors.brandCyan, // Vibrant cyan #00D4FF - primary CTA
+                  color: primary, // Theme-aware primary color
                   shape: BoxShape.circle,
                   boxShadow: [
                     BoxShadow(
-                      color: AppColors.brandCyan.withValues(alpha: 0.3), // Cyan glow
+                      color: primary.withValues(alpha: 0.3), // Theme-aware glow
                       blurRadius: 12,
                       offset: const Offset(0, 4),
                     ),
                   ],
                 ),
                 padding: const EdgeInsets.all(12),
-                child: FaIcon(FontAwesomeIcons.paperPlane, color: AppColors.backgroundDeepNavy, size: 22), // Deep navy icon for contrast
+                child: FaIcon(
+                  FontAwesomeIcons.paperPlane,
+                  color: Theme.of(context).brightness == Brightness.dark
+                      ? AppColors.backgroundDeepNavy // Deep navy icon for dark mode
+                      : Colors.white, // White icon for light mode
+                  size: 22,
+                ),
               ),
             ),
             IconButton(
               icon: const Icon(Icons.receipt_long),
               iconSize: 26,
               color: _selectedIndex == 2 
-                  ? AppColors.brandCyan // Vibrant cyan #00D4FF when active
-                  : AppColors.textTertiary, // Slate-500 #64748B when inactive
+                  ? primary // Theme-aware primary color when active
+                  : colors.textTertiary, // Theme-aware tertiary when inactive
               onPressed: () => _onItemTapped(2),
             ),
           ],
@@ -180,6 +216,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Widget _buildPillTab(String label, int index) {
     final colors = AppColors.getThemeColors(context);
+    final primary = Theme.of(context).colorScheme.primary;
     final isSelected = _selectedTab == index;
     
     return Expanded(
@@ -193,7 +230,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
           decoration: BoxDecoration(
             color: isSelected 
-                ? AppColors.brandCyan // Vibrant cyan #00D4FF when selected (accent)
+                ? primary // Uniform primary color (teal/green from financial icons)
                 : Colors.transparent, // Transparent when unselected
             borderRadius: BorderRadius.circular(12),
           ),
@@ -202,8 +239,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
             textAlign: TextAlign.center,
             style: TextStyle(
               color: isSelected 
-                  ? AppColors.backgroundDeepNavy // Deep navy text on cyan background
-                  : AppColors.textSecondaryCool, // Cool gray #94A3B8 when unselected
+                  ? (Theme.of(context).brightness == Brightness.dark
+                      ? AppColors.backgroundDeepNavy // Deep navy text on teal for dark mode
+                      : Colors.white) // White text on teal for light mode
+                  : colors.textSecondary, // Theme-aware secondary text when unselected
               fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
               fontSize: 14,
             ),

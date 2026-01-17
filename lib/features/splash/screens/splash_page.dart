@@ -83,12 +83,22 @@ class _SplashPageState extends State<SplashPage>
     final colors = AppColors.getThemeColors(context);
     final primary = Theme.of(context).colorScheme.primary;
 
-    // Dark navy background matching login page
+    // Theme-aware background
     return Scaffold(
-      backgroundColor: AppColors.backgroundDeepNavy, // Deep navy #0F172A
+      backgroundColor: colors.background, // Theme-aware background
       body: Container(
-        decoration: const BoxDecoration(
-          color: AppColors.backgroundDeepNavy, // Deep navy background
+        decoration: BoxDecoration(
+          color: colors.background, // Theme-aware background
+          gradient: Theme.of(context).brightness == Brightness.light
+              ? LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    const Color(0xFFF5F7FA), // Light blue-gray
+                    const Color(0xFFE8F5E9).withOpacity(0.3), // Very light teal tint
+                  ],
+                )
+              : null, // No gradient for dark mode
         ),
         child: SafeArea(
           child: Center(
@@ -203,16 +213,42 @@ class _SplashPageState extends State<SplashPage>
   }
 
   Widget _buildServiceIcon(IconData icon, Color color, AppThemeColors colors) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    
     return Container(
       width: 48,
       height: 48,
       decoration: BoxDecoration(
-        color: AppColors.surfaceDark.withOpacity(0.5), // Dark slate with some transparency
+        color: isDark
+            ? AppColors.surfaceDark.withOpacity(0.5) // Dark slate with transparency for dark mode
+            : Colors.white.withOpacity(0.7), // Translucent white for glassmorphism in light mode
         shape: BoxShape.circle,
+        border: isDark
+            ? null
+            : Border.all(
+                color: Colors.white.withOpacity(0.5),
+                width: 1,
+              ),
+        boxShadow: isDark
+            ? null
+            : [
+                // Glassmorphism shadows for light mode
+                BoxShadow(
+                  color: Colors.white.withOpacity(0.8),
+                  blurRadius: 10,
+                  offset: const Offset(-2, -2),
+                  spreadRadius: -1,
+                ),
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.05),
+                  blurRadius: 8,
+                  offset: const Offset(2, 2),
+                ),
+              ],
       ),
       child: Icon(
         icon,
-        color: AppColors.brandPrimary, // Dark teal icons
+        color: AppColors.brandPrimary, // Dark teal icons (works for both themes)
         size: 24,
       ),
     );
