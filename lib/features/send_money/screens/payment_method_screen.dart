@@ -16,6 +16,7 @@ class _PaymentMethodScreenState extends State<PaymentMethodScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AppColors.getThemeColors(context);
     return Column(
       children: [
         Padding(
@@ -25,7 +26,7 @@ class _PaymentMethodScreenState extends State<PaymentMethodScreen> {
             style: TextStyle(
               fontSize: 24,
               fontWeight: FontWeight.bold,
-              color: AppColors.textPrimaryLight,
+              color: colors.textPrimary, // Theme-aware text
             ),
           ),
         ),
@@ -33,7 +34,7 @@ class _PaymentMethodScreenState extends State<PaymentMethodScreen> {
           child: ListView(
             padding: const EdgeInsets.symmetric(horizontal: 16.0),
             children: [
-              _buildSectionHeader('True Pay to True pay transfer'),
+              _buildSectionHeader(context, 'True Pay to True pay transfer'),
               _PaymentOptionCard(
                 icon: Icons.send_to_mobile,
                 title: 'True Pay to True pay transfer',
@@ -41,7 +42,7 @@ class _PaymentMethodScreenState extends State<PaymentMethodScreen> {
                 isSelected: _selectedMethod == PaymentMethod.truePay,
                 onTap: () => setState(() => _selectedMethod = PaymentMethod.truePay),
               ),
-              _buildSectionHeader('Fast and easy transfer'),
+              _buildSectionHeader(context, 'Fast and easy transfer'),
               _PaymentOptionCard(
                 icon: Icons.phone_android,
                 title: 'Mobile Money',
@@ -49,7 +50,7 @@ class _PaymentMethodScreenState extends State<PaymentMethodScreen> {
                 isSelected: _selectedMethod == PaymentMethod.mobileMoney,
                 onTap: () => setState(() => _selectedMethod = PaymentMethod.mobileMoney),
               ),
-              _buildSectionHeader('Low cost transfer'),
+              _buildSectionHeader(context, 'Low cost transfer'),
               _PaymentOptionCard(
                 icon: Icons.account_balance,
                 title: 'Transfer to Bank Account',
@@ -62,32 +63,33 @@ class _PaymentMethodScreenState extends State<PaymentMethodScreen> {
         ),
         Padding(
           padding: const EdgeInsets.all(16.0),
-          child: ElevatedButton(
-            onPressed: () => widget.onNext(_selectedMethod),
-            style: ElevatedButton.styleFrom(
-              padding: const EdgeInsets.symmetric(vertical: 16),
-              backgroundColor: AppColors.brandPrimary,
-              foregroundColor: AppColors.backgroundDeepNavy,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
+            child: ElevatedButton(
+              onPressed: () => widget.onNext(_selectedMethod),
+              style: ElevatedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                backgroundColor: Theme.of(context).colorScheme.primary,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                minimumSize: const Size(double.infinity, 50),
               ),
-              minimumSize: const Size(double.infinity, 50),
-            ),
-            child: Text(
-              'Continue',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: AppColors.backgroundDeepNavy,
+              child: Text(
+                'Continue',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
               ),
             ),
-          ),
         ),
       ],
     );
   }
 
-  Widget _buildSectionHeader(String title) {
+  Widget _buildSectionHeader(BuildContext context, String title) {
+    final colors = AppColors.getThemeColors(context);
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 16.0),
       child: Text(
@@ -95,7 +97,7 @@ class _PaymentMethodScreenState extends State<PaymentMethodScreen> {
         style: TextStyle(
           fontSize: 16,
           fontWeight: FontWeight.w500,
-          color: AppColors.textSecondaryCool,
+          color: colors.textSecondary, // Theme-aware text
         ),
       ),
     );
@@ -119,24 +121,42 @@ class _PaymentOptionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final primaryColor = theme.colorScheme.primary;
+    final colors = AppColors.getThemeColors(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primaryColor = Theme.of(context).colorScheme.primary;
 
     return GestureDetector(
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: AppColors.surfaceDark, // Dark slate card
+          color: isDark 
+              ? colors.surface // Dark slate for dark mode
+              : Colors.white.withOpacity(0.9), // Translucent white for light mode
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
-            color: isSelected ? AppColors.brandPrimary : AppColors.surfaceVariantDark,
+            color: isSelected 
+                ? primaryColor 
+                : (isDark ? colors.surfaceVariant : const Color(0xFFE5E7EB)),
             width: isSelected ? 2 : 1,
           ),
+          boxShadow: isDark
+              ? null
+              : [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.04),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
         ),
         child: Row(
           children: [
-            Icon(icon, size: 32, color: isSelected ? AppColors.brandPrimary : AppColors.textSecondaryCool),
+            Icon(
+              icon,
+              size: 32,
+              color: isSelected ? primaryColor : colors.textTertiary,
+            ),
             const SizedBox(width: 16),
             Expanded(
               child: Column(
@@ -147,7 +167,7 @@ class _PaymentOptionCard extends StatelessWidget {
                     style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
-                      color: AppColors.textPrimaryLight,
+                      color: colors.textPrimary, // Theme-aware text
                     ),
                   ),
                   if (subtitle.isNotEmpty)
@@ -155,7 +175,7 @@ class _PaymentOptionCard extends StatelessWidget {
                       padding: const EdgeInsets.only(top: 4.0),
                       child: Text(
                         subtitle,
-                        style: TextStyle(color: AppColors.textSecondaryCool),
+                        style: TextStyle(color: colors.textSecondary),
                       ),
                     ),
                 ],

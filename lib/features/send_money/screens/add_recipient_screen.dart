@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:pretium/core/constants/app_colors.dart';
 
 class AddRecipientScreen extends StatefulWidget {
   const AddRecipientScreen({super.key});
@@ -12,12 +13,17 @@ class _AddRecipientScreenState extends State<AddRecipientScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AppColors.getThemeColors(context);
     return Scaffold(
+      backgroundColor: colors.background, // Theme-aware background
       appBar: AppBar(
-        title: const Text('Add Recipients'),
+        title: Text(
+          'Add Recipients',
+          style: TextStyle(color: colors.textPrimary),
+        ),
         backgroundColor: Colors.transparent,
         elevation: 0,
-        foregroundColor: Colors.black87,
+        iconTheme: IconThemeData(color: colors.textPrimary),
       ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
@@ -47,14 +53,17 @@ class _AddRecipientScreenState extends State<AddRecipientScreen> {
                 },
                 style: ElevatedButton.styleFrom(
                   minimumSize: const Size(double.infinity, 56),
-                  backgroundColor: Colors.grey.shade300,
-                  foregroundColor: Colors.grey.shade700,
+                  backgroundColor: Theme.of(context).colorScheme.primary,
+                  foregroundColor: Colors.white,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
                   elevation: 0,
                 ),
-                child: const Text('Save Changes', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                child: const Text(
+                  'Save Changes',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                ),
               ),
               const SizedBox(height: 16),
             ],
@@ -65,18 +74,44 @@ class _AddRecipientScreenState extends State<AddRecipientScreen> {
   }
 
   Widget _buildTextField({required String label}) {
+    final colors = AppColors.getThemeColors(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: TextStyle(color: Colors.grey.shade700, fontWeight: FontWeight.w500)),
+        Text(
+          label,
+          style: TextStyle(
+            color: colors.textSecondary,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
         const SizedBox(height: 8),
         TextFormField(
+          style: TextStyle(color: colors.textPrimary),
           decoration: InputDecoration(
             filled: true,
-            fillColor: Colors.grey.shade100,
+            fillColor: isDark 
+                ? AppColors.surfaceDark 
+                : Colors.white.withOpacity(0.9),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide.none,
+              borderSide: BorderSide(
+                color: isDark ? colors.surfaceVariant : const Color(0xFFE5E7EB),
+              ),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(
+                color: isDark ? colors.surfaceVariant : const Color(0xFFE5E7EB),
+              ),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(
+                color: Theme.of(context).colorScheme.primary,
+                width: 2,
+              ),
             ),
           ),
         ),
@@ -85,18 +120,44 @@ class _AddRecipientScreenState extends State<AddRecipientScreen> {
   }
 
   Widget _buildDropdownField({required String label, required List<String> items}) {
+    final colors = AppColors.getThemeColors(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: TextStyle(color: Colors.grey.shade700, fontWeight: FontWeight.w500)),
+        Text(
+          label,
+          style: TextStyle(
+            color: colors.textSecondary,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
         const SizedBox(height: 8),
         DropdownButtonFormField<String>(
+          style: TextStyle(color: colors.textPrimary),
           decoration: InputDecoration(
             filled: true,
-            fillColor: Colors.grey.shade100,
+            fillColor: isDark 
+                ? AppColors.surfaceDark 
+                : Colors.white.withOpacity(0.9),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide.none,
+              borderSide: BorderSide(
+                color: isDark ? colors.surfaceVariant : const Color(0xFFE5E7EB),
+              ),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(
+                color: isDark ? colors.surfaceVariant : const Color(0xFFE5E7EB),
+              ),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(
+                color: Theme.of(context).colorScheme.primary,
+                width: 2,
+              ),
             ),
           ),
           items: items.map((String value) {

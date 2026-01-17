@@ -140,14 +140,15 @@ class _SendMoneyPageState extends State<SendMoneyPage> {
     final colors = AppColors.getThemeColors(context);
     
     return Scaffold(
-      backgroundColor: AppColors.backgroundDeepNavy, // Deep navy background
+      backgroundColor: colors.background, // Theme-aware background
       appBar: AppBar(
-        backgroundColor: Colors.transparent, // Transparent for dark theme
+        backgroundColor: Colors.transparent, // Transparent AppBar
         elevation: 0,
-        title: Text('Send Money', style: TextStyle(color: AppColors.textPrimaryLight)),
+        title: Text('Send Money', style: TextStyle(color: colors.textPrimary)),
+        iconTheme: IconThemeData(color: colors.textPrimary),
         leading: _step != SendMoneyStep.amount
             ? IconButton(
-                icon: Icon(Icons.arrow_back, color: AppColors.textPrimaryLight),
+                icon: Icon(Icons.arrow_back, color: colors.textPrimary),
                 onPressed: _previousStep,
               )
             : null,

@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:pretium/services/auth_service.dart';
 import 'package:pretium/repositories/user_repository.dart';
 import 'package:pretium/utils/logger.dart';
+import 'package:pretium/core/constants/app_colors.dart';
 import '../widgets/custom_text_field.dart';
 import '../widgets/phone_number_field.dart';
 import '../widgets/register_header.dart';
@@ -176,7 +177,9 @@ class _RegisterPageState extends State<RegisterPage> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AppColors.getThemeColors(context);
     return Scaffold(
+      backgroundColor: colors.background, // Theme-aware background
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 24.0),
