@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:pretium/core/constants/app_colors.dart';
 import 'package:pretium/features/send_money/screens/add_recipient_screen.dart';
 
 enum RecipientType { people, mySelf }
@@ -18,15 +19,20 @@ class _RecipientSelectionScreenState extends State<RecipientSelectionScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final primaryColor = theme.colorScheme.primary;
+    final colors = AppColors.getThemeColors(context);
 
     return Padding(
       padding: const EdgeInsets.all(16.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          Text(
             'Where would you send the money?',
-            style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+            style: TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+              color: colors.textPrimary, // Theme-aware text
+            ),
           ),
           const SizedBox(height: 24),
           _RecipientOptionCard(
@@ -56,11 +62,14 @@ class _RecipientSelectionScreenState extends State<RecipientSelectionScreen> {
               backgroundColor: primaryColor,
               foregroundColor: Colors.white,
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(30),
+                borderRadius: BorderRadius.circular(12),
               ),
               minimumSize: const Size(double.infinity, 50),
             ),
-            child: const Text('Continue', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            child: const Text(
+              'Continue',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
           ),
         ],
       ),
@@ -87,39 +96,59 @@ class _RecipientOptionCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final primaryColor = theme.colorScheme.primary;
+    final colors = AppColors.getThemeColors(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return GestureDetector(
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: isDark 
+              ? AppColors.surfaceDark // Dark slate for dark mode
+              : Colors.white.withOpacity(0.9), // Translucent white for light mode
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
-            color: isSelected ? primaryColor : Colors.grey.shade300,
+            color: isSelected 
+                ? primaryColor 
+                : (isDark ? colors.surfaceVariant : const Color(0xFFE5E7EB)),
             width: isSelected ? 2 : 1,
           ),
-          boxShadow: isSelected
-              ? [
+          boxShadow: isDark
+              ? null
+              : [
                   BoxShadow(
-                    color: primaryColor.withOpacity(0.1),
-                    spreadRadius: 2,
-                    blurRadius: 10,
+                    color: Colors.black.withValues(alpha: 0.04),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
                   ),
-                ]
-              : [],
+                ],
         ),
         child: Row(
           children: [
-            Icon(icon, size: 32, color: isSelected ? primaryColor : Colors.grey.shade600),
+            Icon(
+              icon,
+              size: 32,
+              color: isSelected ? primaryColor : colors.textTertiary,
+            ),
             const SizedBox(width: 16),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                  Text(
+                    title,
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: colors.textPrimary,
+                    ),
+                  ),
                   const SizedBox(height: 4),
-                  Text(subtitle, style: TextStyle(color: Colors.grey.shade600)),
+                  Text(
+                    subtitle,
+                    style: TextStyle(color: colors.textSecondary),
+                  ),
                 ],
               ),
             ),

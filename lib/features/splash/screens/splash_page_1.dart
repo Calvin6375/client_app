@@ -139,12 +139,42 @@ class _SplashPage1State extends State<SplashPage1> {
     final primary = Theme.of(context).colorScheme.primary;
     final colors = AppColors.getThemeColors(context);
 
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        CircleAvatar(
-          radius: 55,
-          backgroundColor: primary.withOpacity(0.1),
+        Container(
+          width: 110,
+          height: 110,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: isDark
+                ? primary.withOpacity(0.1) // Subtle background for dark mode
+                : Colors.white.withOpacity(0.7), // Translucent white for glassmorphism
+            border: isDark
+                ? null
+                : Border.all(
+                    color: Colors.white.withOpacity(0.5),
+                    width: 1,
+                  ),
+            boxShadow: isDark
+                ? null
+                : [
+                    // Glassmorphism shadows for light mode
+                    BoxShadow(
+                      color: Colors.white.withOpacity(0.8),
+                      blurRadius: 15,
+                      offset: const Offset(-3, -3),
+                      spreadRadius: -1,
+                    ),
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.06),
+                      blurRadius: 10,
+                      offset: const Offset(3, 3),
+                    ),
+                  ],
+          ),
           child: Icon(
             icon,
             color: primary,

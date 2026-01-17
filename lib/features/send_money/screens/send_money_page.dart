@@ -138,16 +138,21 @@ class _SendMoneyPageState extends State<SendMoneyPage> {
   @override
   Widget build(BuildContext context) {
     final colors = AppColors.getThemeColors(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primary = Theme.of(context).colorScheme.primary;
     
     return Scaffold(
-      backgroundColor: AppColors.backgroundDeepNavy, // Deep navy background
+      backgroundColor: colors.background, // Theme-aware background
       appBar: AppBar(
-        backgroundColor: Colors.transparent, // Transparent for dark theme
+        backgroundColor: isDark
+            ? Colors.transparent  // Transparent for dark mode
+            : primary.withValues(alpha: 0.08), // Light mint tint (8% opacity) for light mode
         elevation: 0,
-        title: Text('Send Money', style: TextStyle(color: AppColors.textPrimaryLight)),
+        title: Text('Send Money', style: TextStyle(color: colors.textPrimary)),
+        iconTheme: IconThemeData(color: colors.textPrimary),
         leading: _step != SendMoneyStep.amount
             ? IconButton(
-                icon: Icon(Icons.arrow_back, color: AppColors.textPrimaryLight),
+                icon: Icon(Icons.arrow_back, color: colors.textPrimary),
                 onPressed: _previousStep,
               )
             : null,

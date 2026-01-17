@@ -54,23 +54,23 @@ class LightColors implements AppThemeColors {
   @override
   Color get onPrimary => Colors.white;
 
-  // Background Colors
+  // Background Colors - Light theme with subtle mint/teal tint
   @override
-  Color get background => const Color(0xFFF2F5F8); // Light gray background
+  Color get background => const Color(0xFFF0FDFA); // Very light mint/teal tint (#F0FDFA)
   @override
-  Color get surface => Colors.white;
+  Color get surface => Colors.white.withOpacity(0.95); // Almost white with slight opacity
   @override
-  Color get surfaceVariant => const Color(0xFFF5F5F5);
+  Color get surfaceVariant => const Color(0xFFF8FAFC); // Off-white (#F8FAFC)
 
-  // Text Colors
+  // Text Colors - Light theme
   @override
-  Color get textPrimary => const Color(0xFF1A1A1A); // Almost black
+  Color get textPrimary => const Color(0xFF1F2937); // Dark gray for readability
   @override
-  Color get textSecondary => const Color(0xFF666666); // Medium gray
+  Color get textSecondary => const Color(0xFF6B7280); // Medium gray
   @override
-  Color get textTertiary => const Color(0xFF999999); // Light gray
+  Color get textTertiary => const Color(0xFF9CA3AF); // Light gray
   @override
-  Color get textDisabled => const Color(0xFFCCCCCC);
+  Color get textDisabled => const Color(0xFFD1D5DB);
 
   // Border Colors
   @override
@@ -114,15 +114,15 @@ class LightColors implements AppThemeColors {
   @override
   Color get iconDisabled => const Color(0xFFCCCCCC);
 
-  // Input Colors
+  // Input Colors - Light theme with glassmorphism
   @override
-  Color get inputBackground => Colors.white;
+  Color get inputBackground => Colors.white.withOpacity(0.95); // Slightly translucent
   @override
-  Color get inputBorder => const Color(0xFFE0E0E0);
+  Color get inputBorder => const Color(0xFFE5E7EB); // Light border
   @override
-  Color get inputBorderFocused => AppColors.brandPrimary;
+  Color get inputBorderFocused => AppColors.brandPrimary; // Teal focus border
   @override
-  Color get inputPlaceholder => const Color(0xFF999999);
+  Color get inputPlaceholder => const Color(0xFF9CA3AF); // Light gray placeholder
 }
 
 /// Dark Mode Color Palette - TruePay landing page dark fintech theme

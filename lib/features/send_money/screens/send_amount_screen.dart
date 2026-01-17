@@ -247,10 +247,10 @@ class _SendAmountScreenState extends State<SendAmountScreen> {
                 const SizedBox(height: 8),
                 Center(
                   child: IconButton(
-                    icon: Icon(Icons.swap_vert, color: AppColors.brandPrimary, size: 32),
+                    icon: Icon(Icons.swap_vert, color: primaryColor, size: 32),
                     onPressed: _swapCurrencies,
                     style: IconButton.styleFrom(
-                      backgroundColor: AppColors.brandPrimary.withValues(alpha: 0.15),
+                      backgroundColor: primaryColor.withValues(alpha: 0.15),
                       shape: const CircleBorder(),
                       padding: const EdgeInsets.all(12),
                     ),
@@ -281,19 +281,19 @@ class _SendAmountScreenState extends State<SendAmountScreen> {
             onPressed: widget.onNext,
             style: ElevatedButton.styleFrom(
               padding: const EdgeInsets.symmetric(vertical: 16),
-              backgroundColor: AppColors.brandPrimary, // Dark teal button
-              foregroundColor: AppColors.backgroundDeepNavy, // Dark navy text
+              backgroundColor: primaryColor,
+              foregroundColor: Colors.white,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),
               ),
               minimumSize: const Size(double.infinity, 50),
             ),
-            child: Text(
+            child: const Text(
               'Continue',
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
-                color: AppColors.backgroundDeepNavy,
+                color: Colors.white,
               ),
             ),
           ),
@@ -317,16 +317,30 @@ class _ExchangeRateDisplay extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = AppColors.getThemeColors(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
-        color: AppColors.surfaceDark, // Dark slate card
+        color: isDark 
+            ? colors.surface // Dark slate for dark mode
+            : Colors.white.withOpacity(0.9), // Translucent white for light mode
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: AppColors.surfaceVariantDark,
+            color: isDark 
+                ? colors.surfaceVariant
+              : const Color(0xFFE5E7EB),
           width: 1,
         ),
+        boxShadow: isDark
+            ? null
+            : [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.04),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+              ],
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -334,14 +348,14 @@ class _ExchangeRateDisplay extends StatelessWidget {
           Icon(
             Icons.info_outline,
             size: 16,
-            color: AppColors.textSecondaryCool,
+            color: colors.textSecondary,
           ),
           const SizedBox(width: 8),
           Text(
             '1 $fromCurrency = ${rate.toStringAsFixed(4)} $toCurrency',
             style: TextStyle(
               fontSize: 14,
-              color: AppColors.textSecondaryCool,
+              color: colors.textSecondary,
               fontWeight: FontWeight.w500,
             ),
           ),
@@ -373,20 +387,30 @@ class _SwapCurrencyCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = AppColors.getThemeColors(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppColors.surfaceDark, // Dark slate card #1E293B
+        color: isDark 
+            ? colors.surface // Dark slate for dark mode
+            : Colors.white.withOpacity(0.9), // Translucent white for light mode
         borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.3),
-            spreadRadius: 1,
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
+        border: isDark 
+            ? null
+            : Border.all(
+                color: const Color(0xFFE5E7EB),
+                width: 1,
+              ),
+        boxShadow: isDark
+            ? null
+            : [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.04),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+              ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -396,7 +420,7 @@ class _SwapCurrencyCard extends StatelessWidget {
             children: [
               Text(
                 label,
-                style: TextStyle(color: AppColors.textSecondaryCool),
+                style: TextStyle(color: colors.textSecondary),
               ),
               if (loading)
                 SizedBox(
@@ -404,13 +428,13 @@ class _SwapCurrencyCard extends StatelessWidget {
                   height: 16,
                   child: CircularProgressIndicator(
                     strokeWidth: 2,
-                    color: AppColors.brandPrimary,
+                    color: Theme.of(context).colorScheme.primary,
                   ),
                 )
               else
                 Text(
                   'Balance: ${balance.toStringAsFixed(2)}',
-                  style: TextStyle(color: AppColors.textSecondaryCool),
+                  style: TextStyle(color: colors.textSecondary),
                 ),
             ],
           ),
@@ -422,23 +446,27 @@ class _SwapCurrencyCard extends StatelessWidget {
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   decoration: BoxDecoration(
-                    color: AppColors.backgroundDeepNavy,
+                    color: isDark 
+                        ? colors.background 
+                        : Colors.white.withOpacity(0.95),
                     borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: AppColors.surfaceVariantDark),
+                    border: Border.all(
+                      color: isDark ? AppColors.surfaceVariantDark : const Color(0xFFE5E7EB),
+                    ),
                   ),
                   child: Row(
                     children: [
-                      Icon(Icons.public, size: 20, color: AppColors.textPrimaryLight),
+                      Icon(Icons.public, size: 20, color: colors.textPrimary),
                       const SizedBox(width: 8),
                       Text(
                         currency,
                         style: TextStyle(
                           fontWeight: FontWeight.bold,
                           fontSize: 16,
-                          color: AppColors.textPrimaryLight,
+                          color: colors.textPrimary,
                         ),
                       ),
-                      Icon(Icons.keyboard_arrow_down, size: 20, color: AppColors.textPrimaryLight),
+                      Icon(Icons.keyboard_arrow_down, size: 20, color: colors.textPrimary),
                     ],
                   ),
                 ),
@@ -453,12 +481,12 @@ class _SwapCurrencyCard extends StatelessWidget {
                     style: TextStyle(
                       fontSize: 28,
                       fontWeight: FontWeight.bold,
-                      color: AppColors.textPrimaryLight,
+                      color: colors.textPrimary,
                     ),
                     decoration: InputDecoration(
                       border: InputBorder.none,
                       hintText: '0.00',
-                      hintStyle: TextStyle(color: AppColors.textTertiary),
+                      hintStyle: TextStyle(color: colors.textSecondary),
                     ),
                   ),
                 )
@@ -468,7 +496,7 @@ class _SwapCurrencyCard extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 28,
                     fontWeight: FontWeight.bold,
-                    color: AppColors.textPrimaryLight,
+                    color: colors.textPrimary,
                   ),
                 ),
             ],

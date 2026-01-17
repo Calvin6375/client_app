@@ -203,27 +203,32 @@ class _SwapPageState extends State<SwapPage> {
     await showDialog(
       context: context,
       builder: (context) {
-        return Stack(
+            final colors = AppColors.getThemeColors(context);
+            final isDark = Theme.of(context).brightness == Brightness.dark;
+            final primary = Theme.of(context).colorScheme.primary;
+            return Stack(
           alignment: Alignment.topCenter,
           children: [
             AlertDialog(
-              backgroundColor: AppColors.surfaceDark, // Dark slate card
+              backgroundColor: isDark 
+                  ? AppColors.surfaceDark 
+                  : Colors.white.withOpacity(0.9), // Translucent white for light mode
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
               title: Center(
                 child: Text(
                   'Swap Successful',
-                  style: TextStyle(color: AppColors.textPrimaryLight),
+                  style: TextStyle(color: colors.textPrimary),
                 ),
               ),
               content: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.check_circle, color: AppColors.brandPrimary, size: 80),
+                  Icon(Icons.check_circle, color: primary, size: 80),
                   const SizedBox(height: 16),
                   Text(
                     'Check history for all transactions.',
                     textAlign: TextAlign.center,
-                    style: TextStyle(color: AppColors.textSecondaryCool),
+                    style: TextStyle(color: colors.textSecondary),
                   ),
                 ],
               ),
@@ -236,8 +241,8 @@ class _SwapPageState extends State<SwapPage> {
                       setState(() => _step = _SwapStep.input);
                     },
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.brandPrimary,
-                      foregroundColor: AppColors.backgroundDeepNavy,
+                      backgroundColor: primary,
+                      foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(vertical: 16),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
@@ -248,7 +253,7 @@ class _SwapPageState extends State<SwapPage> {
                       style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
-                        color: AppColors.backgroundDeepNavy,
+                        color: Colors.white,
                       ),
                     ),
                   ),
@@ -317,15 +322,21 @@ class _SwapPageState extends State<SwapPage> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AppColors.getThemeColors(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primary = Theme.of(context).colorScheme.primary;
     return Scaffold(
-      backgroundColor: AppColors.backgroundDeepNavy, // Deep navy background
+      backgroundColor: colors.background, // Theme-aware background
       appBar: AppBar(
-        backgroundColor: Colors.transparent, // Transparent for dark theme
+        backgroundColor: isDark
+            ? Colors.transparent  // Transparent for dark mode
+            : primary.withValues(alpha: 0.08), // Light mint tint (8% opacity) for light mode
         elevation: 0,
-        title: Text('Swap', style: TextStyle(color: AppColors.textPrimaryLight)),
+        title: Text('Swap', style: TextStyle(color: colors.textPrimary)),
+        iconTheme: IconThemeData(color: colors.textPrimary),
         leading: _step == _SwapStep.confirmation
             ? IconButton(
-                icon: Icon(Icons.arrow_back, color: AppColors.textPrimaryLight),
+                icon: Icon(Icons.arrow_back, color: colors.textPrimary),
                 onPressed: _previousStep,
               )
             : null,
@@ -464,10 +475,10 @@ class _SwapInputScreenState extends State<_SwapInputScreen> {
               const SizedBox(height: 8),
               Center(
                 child: IconButton(
-                  icon: Icon(Icons.swap_vert, color: AppColors.brandPrimary, size: 32),
+                  icon: Icon(Icons.swap_vert, color: primaryColor, size: 32),
                   onPressed: widget.onSwapCurrencies,
                   style: IconButton.styleFrom(
-                    backgroundColor: AppColors.brandPrimary.withOpacity(0.15),
+                    backgroundColor: primaryColor.withOpacity(0.15),
                     shape: const CircleBorder(),
                     padding: const EdgeInsets.all(12),
                   ),
@@ -492,65 +503,10 @@ class _SwapInputScreenState extends State<_SwapInputScreen> {
               const SizedBox(height: 24),
               // Fees component
               if (fromAmount > 0)
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: AppColors.surfaceDark, // Dark slate card
-                    borderRadius: BorderRadius.circular(16),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.3),
-                        spreadRadius: 1,
-                        blurRadius: 10,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
-                  ),
-                  child: Column(
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            'Network Fee',
-                            style: TextStyle(
-                              color: AppColors.textSecondaryCool,
-                              fontSize: 14,
-                            ),
-                          ),
-                          Text(
-                            '${fee.toStringAsFixed(5)} ${widget.fromCurrency}',
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w500,
-                              color: AppColors.textPrimaryLight,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            'Total',
-                            style: TextStyle(
-                              color: AppColors.textSecondaryCool,
-                              fontSize: 14,
-                            ),
-                          ),
-                          Text(
-                            '${totalFromAmount.toStringAsFixed(5)} ${widget.fromCurrency}',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                              color: AppColors.textPrimaryLight,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
+                _FeesCard(
+                  fee: fee,
+                  totalAmount: totalFromAmount,
+                  currency: widget.fromCurrency,
                 ),
             ],
           ),
@@ -559,15 +515,16 @@ class _SwapInputScreenState extends State<_SwapInputScreen> {
         Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: AppColors.backgroundDeepNavy,
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.3),
-                spreadRadius: 1,
-                blurRadius: 10,
-                offset: const Offset(0, -2),
-              ),
-            ],
+            color: AppColors.getThemeColors(context).background,
+            boxShadow: Theme.of(context).brightness == Brightness.light
+                ? [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.04),
+                      blurRadius: 8,
+                      offset: const Offset(0, -2),
+                    ),
+                  ]
+                : null,
           ),
           child: SafeArea(
             child: SizedBox(
@@ -576,9 +533,9 @@ class _SwapInputScreenState extends State<_SwapInputScreen> {
                 onPressed: fromAmount > 0 ? widget.onNext : null,
                 style: ElevatedButton.styleFrom(
                   padding: const EdgeInsets.symmetric(vertical: 16),
-                  backgroundColor: fromAmount > 0 ? AppColors.brandPrimary : AppColors.textTertiary,
-                  foregroundColor: AppColors.backgroundDeepNavy,
-                  disabledBackgroundColor: AppColors.textTertiary,
+                  backgroundColor: fromAmount > 0 ? primaryColor : AppColors.getThemeColors(context).textTertiary,
+                  foregroundColor: Colors.white,
+                  disabledBackgroundColor: AppColors.getThemeColors(context).textTertiary,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
@@ -588,7 +545,7 @@ class _SwapInputScreenState extends State<_SwapInputScreen> {
                   style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
-                    color: AppColors.backgroundDeepNavy,
+                    color: Colors.white,
                   ),
                 ),
               ),
@@ -621,19 +578,30 @@ class _SwapCurrencyCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AppColors.getThemeColors(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppColors.surfaceDark, // Dark slate card #1E293B
+        color: isDark 
+            ? colors.surface // Dark slate for dark mode
+            : Colors.white.withOpacity(0.9), // Translucent white for light mode
         borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.3),
-            spreadRadius: 1,
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
+        border: isDark 
+            ? null
+            : Border.all(
+                color: const Color(0xFFE5E7EB),
+                width: 1,
+              ),
+        boxShadow: isDark
+            ? null
+            : [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.04),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+              ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -641,20 +609,20 @@ class _SwapCurrencyCard extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(label, style: TextStyle(color: AppColors.textSecondaryCool)),
+              Text(label, style: TextStyle(color: colors.textSecondary)),
               if (loading)
                 SizedBox(
                   width: 16,
                   height: 16,
                   child: CircularProgressIndicator(
                     strokeWidth: 2,
-                    color: AppColors.brandPrimary,
+                    color: Theme.of(context).colorScheme.primary,
                   ),
                 )
               else
                 Text(
                   'Balance: ${balance.toStringAsFixed(2)}',
-                  style: TextStyle(color: AppColors.textSecondaryCool),
+                  style: TextStyle(color: colors.textSecondary),
                 ),
             ],
           ),
@@ -666,9 +634,13 @@ class _SwapCurrencyCard extends StatelessWidget {
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   decoration: BoxDecoration(
-                    color: AppColors.backgroundDeepNavy,
+                    color: isDark 
+                        ? colors.background 
+                        : Colors.white.withOpacity(0.95),
                     borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: AppColors.surfaceVariantDark),
+                    border: Border.all(
+                      color: isDark ? colors.surfaceVariant : const Color(0xFFE5E7EB),
+                    ),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
@@ -676,7 +648,7 @@ class _SwapCurrencyCard extends StatelessWidget {
                       Icon(
                         currency == 'USD' ? Icons.attach_money : Icons.currency_bitcoin,
                         size: 20,
-                        color: AppColors.textPrimaryLight,
+                        color: colors.textPrimary,
                       ),
                       const SizedBox(width: 6),
                       Text(
@@ -684,14 +656,14 @@ class _SwapCurrencyCard extends StatelessWidget {
                         style: TextStyle(
                           fontWeight: FontWeight.bold,
                           fontSize: 16,
-                          color: AppColors.textPrimaryLight,
+                          color: colors.textPrimary,
                         ),
                       ),
                       const SizedBox(width: 4),
                       Icon(
                         Icons.keyboard_arrow_down,
                         size: 20,
-                        color: AppColors.textPrimaryLight,
+                        color: colors.textPrimary,
                       ),
                     ],
                   ),
@@ -707,12 +679,12 @@ class _SwapCurrencyCard extends StatelessWidget {
                     style: TextStyle(
                       fontSize: 28,
                       fontWeight: FontWeight.bold,
-                      color: AppColors.textPrimaryLight,
+                      color: colors.textPrimary,
                     ),
                     decoration: InputDecoration(
                       border: InputBorder.none,
                       hintText: '0.00',
-                      hintStyle: TextStyle(color: AppColors.textTertiary),
+                      hintStyle: TextStyle(color: colors.textSecondary),
                     ),
                   ),
                 )
@@ -722,7 +694,7 @@ class _SwapCurrencyCard extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 28,
                     fontWeight: FontWeight.bold,
-                    color: AppColors.textPrimaryLight,
+                    color: colors.textPrimary,
                   ),
                 ),
             ],
@@ -753,6 +725,9 @@ class _SwapConfirmationScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AppColors.getThemeColors(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primary = Theme.of(context).colorScheme.primary;
     return Padding(
       padding: const EdgeInsets.all(16.0),
       child: Column(
@@ -762,28 +737,37 @@ class _SwapConfirmationScreen extends StatelessWidget {
             style: TextStyle(
               fontSize: 24,
               fontWeight: FontWeight.bold,
-              color: AppColors.textPrimaryLight,
+              color: colors.textPrimary,
             ),
           ),
           const SizedBox(height: 24),
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: AppColors.surfaceDark, // Dark slate card
+              color: isDark 
+                  ? colors.surface 
+                  : Colors.white.withOpacity(0.9),
               borderRadius: BorderRadius.circular(16),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.3),
-                  spreadRadius: 1,
-                  blurRadius: 10,
-                  offset: const Offset(0, 4),
-                ),
-              ],
+              border: isDark 
+                  ? null
+                  : Border.all(color: const Color(0xFFE5E7EB)),
+              boxShadow: isDark
+                  ? null
+                  : [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.04),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
             ),
             child: Column(
               children: [
                 _DetailItem(label: 'From', amount: fromAmount, currency: fromCurrency),
-                Divider(height: 32, color: AppColors.surfaceVariantDark),
+                Divider(
+                  height: 32,
+                  color: isDark ? colors.surfaceVariant : const Color(0xFFE5E7EB),
+                ),
                 _DetailItem(label: 'To', amount: toAmount, currency: toCurrency, isReceiving: true),
               ],
             ),
@@ -793,8 +777,8 @@ class _SwapConfirmationScreen extends StatelessWidget {
             onPressed: onNext,
             style: ElevatedButton.styleFrom(
               padding: const EdgeInsets.symmetric(vertical: 16),
-              backgroundColor: AppColors.brandPrimary,
-              foregroundColor: AppColors.backgroundDeepNavy,
+              backgroundColor: primary,
+              foregroundColor: Colors.white,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),
               ),
@@ -805,9 +789,93 @@ class _SwapConfirmationScreen extends StatelessWidget {
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
-                color: AppColors.backgroundDeepNavy,
+                color: Colors.white,
               ),
             ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _FeesCard extends StatelessWidget {
+  final double fee;
+  final double totalAmount;
+  final String currency;
+
+  const _FeesCard({
+    required this.fee,
+    required this.totalAmount,
+    required this.currency,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = AppColors.getThemeColors(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: isDark 
+            ? AppColors.surfaceDark 
+            : Colors.white.withOpacity(0.9),
+        borderRadius: BorderRadius.circular(16),
+        border: isDark 
+            ? null
+            : Border.all(color: const Color(0xFFE5E7EB)),
+        boxShadow: isDark
+            ? null
+            : [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.04),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+      ),
+      child: Column(
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Network Fee',
+                style: TextStyle(
+                  color: colors.textSecondary,
+                  fontSize: 14,
+                ),
+              ),
+              Text(
+                '${fee.toStringAsFixed(5)} $currency',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                  color: colors.textPrimary,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Total',
+                style: TextStyle(
+                  color: colors.textSecondary,
+                  fontSize: 14,
+                ),
+              ),
+              Text(
+                '${totalAmount.toStringAsFixed(5)} $currency',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: colors.textPrimary,
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -828,6 +896,8 @@ class _ExchangeRateDisplay extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AppColors.getThemeColors(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     // Handle invalid or zero rates
     final isValidRate = rate > 0 && rate.isFinite;
     final displayRate = isValidRate ? rate : 0.0;
@@ -835,12 +905,23 @@ class _ExchangeRateDisplay extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
-        color: AppColors.surfaceDark, // Dark slate card
+        color: isDark 
+            ? AppColors.surfaceDark 
+            : Colors.white.withOpacity(0.9),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: AppColors.surfaceVariantDark,
+                    color: isDark ? colors.surfaceVariant : const Color(0xFFE5E7EB),
           width: 1,
         ),
+        boxShadow: isDark
+            ? null
+            : [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.04),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+              ],
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -848,7 +929,7 @@ class _ExchangeRateDisplay extends StatelessWidget {
           Icon(
             Icons.info_outline,
             size: 16,
-            color: AppColors.textSecondaryCool,
+            color: colors.textSecondary,
           ),
           const SizedBox(width: 8),
           Text(
@@ -857,7 +938,7 @@ class _ExchangeRateDisplay extends StatelessWidget {
                 : 'Loading rate...',
             style: TextStyle(
               fontSize: 14,
-              color: AppColors.textSecondaryCool,
+              color: colors.textSecondary,
               fontWeight: FontWeight.w500,
             ),
           ),
@@ -882,12 +963,13 @@ class _DetailItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AppColors.getThemeColors(context);
     return Row(
       children: [
         Text(
           label,
           style: TextStyle(
-            color: AppColors.textSecondaryCool,
+            color: colors.textSecondary,
             fontSize: 16,
           ),
         ),
@@ -897,19 +979,19 @@ class _DetailItem extends StatelessWidget {
           style: TextStyle(
             fontSize: 20,
             fontWeight: FontWeight.bold,
-            color: AppColors.textPrimaryLight,
+            color: colors.textPrimary,
           ),
         ),
         const SizedBox(width: 8),
         // TODO: Add currency icon
-        Icon(Icons.currency_bitcoin, size: 20, color: AppColors.textPrimaryLight),
+        Icon(Icons.currency_bitcoin, size: 20, color: colors.textPrimary),
         const SizedBox(width: 4),
         Text(
           currency,
           style: TextStyle(
             fontSize: 16,
             fontWeight: FontWeight.w500,
-            color: AppColors.textPrimaryLight,
+            color: colors.textPrimary,
           ),
         ),
       ],

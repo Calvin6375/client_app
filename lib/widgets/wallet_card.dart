@@ -374,37 +374,56 @@ class WalletCardWidget extends StatelessWidget {
             height: circleSize,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              // Very subtle professional shadows - no heavy glow
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.6), // Outer shadow
-                  blurRadius: 30,
-                  offset: const Offset(0, 8),
-                  spreadRadius: 0,
-                ),
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.4), // Inner shadow hint
-                  blurRadius: 20,
-                  offset: const Offset(0, -2),
-                  spreadRadius: -5,
-                ),
-              ],
+              // Theme-aware shadows - enhanced glassmorphism for light mode
+              boxShadow: Theme.of(context).brightness == Brightness.dark
+                  ? [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.6), // Outer shadow for dark
+                        blurRadius: 30,
+                        offset: const Offset(0, 8),
+                        spreadRadius: 0,
+                      ),
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.4), // Inner shadow hint
+                        blurRadius: 20,
+                        offset: const Offset(0, -2),
+                        spreadRadius: -5,
+                      ),
+                    ]
+                  : [
+                      // Subtle shadow - soft and diffused (matching image)
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.06), // Very subtle shadow
+                        blurRadius: 24,
+                        offset: const Offset(0, 4),
+                        spreadRadius: 0,
+                      ),
+                    ],
             ),
             child: Container(
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 gradient: RadialGradient(
-                  colors: [
-                    AppColors.surfaceDark, // Slate-800 center #1E293B
-                    AppColors.surfaceDark.withValues(alpha: 0.95),
-                    AppColors.backgroundDeepNavy, // Deep navy edge #0F172A
-                  ],
-                  stops: const [0.0, 0.7, 1.0],
+                  colors: Theme.of(context).brightness == Brightness.dark
+                      ? [
+                          AppColors.surfaceDark, // Slate-800 center #1E293B
+                          AppColors.surfaceDark.withValues(alpha: 0.95),
+                          AppColors.backgroundDeepNavy, // Deep navy edge #0F172A
+                        ]
+                      : [
+                          // Soft gradient: light teal center to white edge (matching image)
+                          const Color(0xFFE0F7FA), // Light teal center (#E0F7FA)
+                          const Color(0xFFF0FDFA), // Very light mint
+                          Colors.white, // Almost white edge
+                        ],
+                  stops: const [0.0, 0.6, 1.0],
                 ),
-                // Metallic silver border for premium look
+                // Border adapts to theme - very subtle for light mode
                 border: Border.all(
-                  color: Colors.grey.withValues(alpha: 0.3), // Silver-metallic border
-                  width: 1.5,
+                  color: Theme.of(context).brightness == Brightness.dark
+                      ? Colors.grey.withValues(alpha: 0.3) // Silver-metallic border for dark
+                      : Colors.white.withValues(alpha: 0.4), // Very subtle white border
+                  width: 1,
                 ),
               ),
               child: Column(
@@ -416,7 +435,7 @@ class WalletCardWidget extends StatelessWidget {
                     child: Text(
                       currency.toUpperCase(), // Uppercase for professional look
                       style: TextStyle(
-                        color: AppColors.textSecondaryCool, // Light gray #94A3B8
+                        color: colors.textSecondary, // Theme-aware secondary text
                         fontSize: 14,
                         fontWeight: FontWeight.w500,
                         letterSpacing: 1.2, // Increased letter spacing for premium feel
@@ -450,20 +469,20 @@ class WalletCardWidget extends StatelessWidget {
                       ),
                     )
                   else
-                    // Primary balance - large, bold, pure white for high contrast
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 32),
-                      child: Text(
-                        balance.toStringAsFixed(2),
-                        style: TextStyle(
-                          fontSize: 42,
-                          color: AppColors.textPrimaryLight, // Pure white #FFFFFF
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 1.0,
+                        // Primary balance - large, bold, theme-aware color
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 32),
+                          child: Text(
+                            balance.toStringAsFixed(2),
+                            style: TextStyle(
+                              fontSize: 42,
+                              color: colors.textPrimary, // Theme-aware primary text
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 1.0,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
                         ),
-                        textAlign: TextAlign.center,
-                      ),
-                    ),
                   
                   const SizedBox(height: 16),
                   
@@ -472,27 +491,42 @@ class WalletCardWidget extends StatelessWidget {
                     mainAxisAlignment: MainAxisAlignment.center,
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-                      // Top Up Button - professional flat design
+                      // Top Up Button - glassmorphism design for light mode
                       _CircularActionButton(
                         icon: Icons.add_circle_outline,
                         label: 'Top Up',
                         onPressed: onTopUp,
-                        backgroundColor: AppColors.surfaceBorder, // Dark gray #2D3748
-                        foregroundColor: AppColors.textTertiaryLight, // Light gray #E2E8F0
-                        labelColor: AppColors.textTertiaryLight,
+                        backgroundColor: Theme.of(context).brightness == Brightness.dark
+                            ? AppColors.surfaceBorder // Dark gray #2D3748 for dark mode
+                            : colors.primary, // Uniform primary color (teal/green from financial icons)
+                        foregroundColor: Theme.of(context).brightness == Brightness.dark
+                            ? AppColors.textTertiaryLight // Light gray for dark mode
+                            : Colors.white, // White icon for light mode on teal
+                        labelColor: Theme.of(context).brightness == Brightness.dark
+                            ? AppColors.textTertiaryLight
+                            : Colors.black, // Black label text for visibility in light mode
                         isCompact: true,
                       ),
                       
                       const SizedBox(width: 20),
                       
-                      // Swap Button - professional flat design with border
+                      // Swap Button - glassmorphism design with border
                       _CircularActionButton(
                         icon: Icons.swap_horiz,
                         label: 'Swap',
                         onPressed: onSwap,
-                        backgroundColor: Colors.transparent,
-                        foregroundColor: AppColors.textTertiaryLight, // Light gray #E2E8F0
-                        borderColor: Colors.grey.withValues(alpha: 0.4), // Subtle border
+                        backgroundColor: Theme.of(context).brightness == Brightness.dark
+                            ? Colors.transparent
+                            : Colors.white.withOpacity(0.9), // Light background for light mode
+                        foregroundColor: Theme.of(context).brightness == Brightness.dark
+                            ? AppColors.textTertiaryLight // Light gray for dark mode
+                            : colors.primary, // Uniform primary color (teal/green) for icon
+                        borderColor: Theme.of(context).brightness == Brightness.dark
+                            ? Colors.grey.withValues(alpha: 0.4) // Subtle border for dark
+                            : const Color(0xFFE5E7EB), // Light gray border for light mode
+                        labelColor: Theme.of(context).brightness == Brightness.dark
+                            ? AppColors.textTertiaryLight
+                            : colors.textPrimary,
                         isCompact: true,
                       ),
                     ],
@@ -535,6 +569,8 @@ class _CircularActionButton extends StatelessWidget {
     final buttonSize = isCompact ? 48.0 : 64.0;
     final iconSize = isCompact ? 22.0 : 28.0;
     final fontSize = isCompact ? 11.0 : 13.0;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final colors = AppColors.getThemeColors(context);
     
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -548,13 +584,22 @@ class _CircularActionButton extends StatelessWidget {
             border: borderColor != null
                 ? Border.all(color: borderColor!, width: 2)
                 : null,
-            boxShadow: [
-              BoxShadow(
-                color: AppColors.getThemeColors(context).shadow,
-                blurRadius: 8,
-                offset: const Offset(0, 2),
-              ),
-            ],
+            boxShadow: isDark
+                ? [
+                    BoxShadow(
+                      color: colors.shadow,
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                  ]
+                : [
+                    // Subtle shadow for light mode buttons
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.04),
+                      blurRadius: 6,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
           ),
           child: IconButton(
             onPressed: onPressed,

@@ -68,6 +68,8 @@ class _RecipientDetailsScreenState extends State<RecipientDetailsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AppColors.getThemeColors(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Padding(
       padding: const EdgeInsets.all(16.0),
       child: Form(
@@ -80,7 +82,7 @@ class _RecipientDetailsScreenState extends State<RecipientDetailsScreen> {
               style: TextStyle(
                 fontSize: 24,
                 fontWeight: FontWeight.bold,
-                color: AppColors.textPrimaryLight,
+                color: colors.textPrimary, // Theme-aware text
               ),
             ),
             const SizedBox(height: 24),
@@ -103,8 +105,8 @@ class _RecipientDetailsScreenState extends State<RecipientDetailsScreen> {
               onPressed: widget.onNext,
               style: ElevatedButton.styleFrom(
                 minimumSize: const Size(double.infinity, 50),
-                backgroundColor: AppColors.brandPrimary,
-                foregroundColor: AppColors.backgroundDeepNavy,
+                backgroundColor: Theme.of(context).colorScheme.primary,
+                foregroundColor: isDark ? colors.onPrimary : Colors.white,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
@@ -114,7 +116,7 @@ class _RecipientDetailsScreenState extends State<RecipientDetailsScreen> {
                 style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
-                  color: AppColors.backgroundDeepNavy,
+                  color: isDark ? colors.onPrimary : Colors.white,
                 ),
               ),
             ),
@@ -128,25 +130,36 @@ class _RecipientDetailsScreenState extends State<RecipientDetailsScreen> {
     required String label,
     required TextEditingController controller,
   }) {
+    final colors = AppColors.getThemeColors(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return TextFormField(
       controller: controller,
-      style: TextStyle(color: AppColors.textPrimaryLight),
+      style: TextStyle(color: colors.textPrimary),
       decoration: InputDecoration(
         labelText: label,
-        labelStyle: TextStyle(color: AppColors.textSecondaryCool),
+        labelStyle: TextStyle(color: colors.textSecondary),
         filled: true,
-        fillColor: AppColors.surfaceDark,
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: AppColors.surfaceVariantDark),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: AppColors.surfaceVariantDark),
-        ),
+        fillColor: isDark 
+            ? colors.surface
+            : Colors.white.withOpacity(0.9), // Translucent white for light mode
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: BorderSide(
+              color: isDark ? colors.surfaceVariant : const Color(0xFFE5E7EB),
+            ),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: BorderSide(
+              color: isDark ? colors.surfaceVariant : const Color(0xFFE5E7EB),
+            ),
+          ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: AppColors.brandPrimary, width: 2),
+          borderSide: BorderSide(
+            color: Theme.of(context).colorScheme.primary,
+            width: 2,
+          ),
         ),
       ),
     );

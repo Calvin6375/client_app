@@ -68,11 +68,15 @@ class HeaderWidget extends StatelessWidget {
       onTap: () => _showLogoutDialog(context),
       borderRadius: BorderRadius.circular(20),
       child: CircleAvatar(
-        backgroundColor: colors.onPrimary,
+        backgroundColor: Theme.of(context).brightness == Brightness.dark
+            ? colors.onPrimary // White for dark mode
+            : primary.withOpacity(0.1), // Light teal background for light mode
         child: Text(
           initial,
           style: TextStyle(
-            color: primary,
+            color: Theme.of(context).brightness == Brightness.dark
+                ? primary // Teal text on white for dark mode
+                : primary, // Teal text on light background for light mode
             fontSize: 18,
             fontWeight: FontWeight.bold,
           ),
@@ -96,7 +100,7 @@ class HeaderWidget extends StatelessWidget {
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.w600, // Medium weight - professional
-                color: AppColors.textPrimaryLight, // Pure white #FFFFFF
+                color: AppColors.getThemeColors(context).textPrimary, // Theme-aware text color
               ),
               textAlign: TextAlign.left,
             ),
@@ -120,7 +124,7 @@ class HeaderWidget extends StatelessWidget {
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.w600, // Medium weight - professional
-                color: AppColors.textPrimaryLight, // Pure white #FFFFFF
+                color: AppColors.getThemeColors(context).textPrimary, // Theme-aware text color
               ),
               textAlign: TextAlign.left,
             ),
@@ -155,7 +159,7 @@ class HeaderWidget extends StatelessWidget {
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
-                color: colors.onPrimary,
+                color: colors.textPrimary, // Black text for visibility in light mode
               ),
               textAlign: TextAlign.left,
             ),
@@ -187,7 +191,7 @@ class HeaderWidget extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
-                    color: colors.onPrimary,
+                    color: colors.textPrimary, // Theme-aware primary text
                   ),
                   textAlign: TextAlign.left,
                 ),
@@ -233,7 +237,7 @@ class HeaderWidget extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
-                  color: colors.onPrimary,
+                  color: colors.textPrimary, // Black text for visibility in light mode
                 ),
                 textAlign: TextAlign.left,
               ),
@@ -243,7 +247,7 @@ class HeaderWidget extends StatelessWidget {
                 IconButton(
                   icon: Icon(
                     Icons.notifications_outlined,
-                    color: colors.onPrimary,
+                    color: colors.textPrimary, // Theme-aware icon color
                     size: 28,
                   ),
                   onPressed: () {},

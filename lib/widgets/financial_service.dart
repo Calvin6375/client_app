@@ -22,7 +22,7 @@ class FinancialServices extends StatelessWidget {
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.w600, // Medium weight - professional
-                color: AppColors.textPrimaryLight, // Pure white #FFFFFF
+                color: colors.textPrimary, // Theme-aware primary text
               ),
             ),
           ],
@@ -73,11 +73,14 @@ class FinancialServices extends StatelessWidget {
     );
   }
 
-  // Build compact professional dark card button for services - banking-grade style
+  // Build compact card button with glassmorphism for light mode
   Widget _buildServiceButton(BuildContext context, IconData icon, String label, bool isFontAwesome, [VoidCallback? onTap]) {
     final colors = AppColors.getThemeColors(context);
-    // Professional dark card background - slightly raised
-    final containerColor = AppColors.surfaceDark; // Slate-800 #1E293B
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    // Theme-aware container color
+    final containerColor = isDark 
+        ? AppColors.surfaceDark // Dark slate #1E293B for dark mode
+        : Colors.white; // Clean white for light mode
     
     return Expanded(
       child: GestureDetector(
@@ -92,25 +95,40 @@ class FinancialServices extends StatelessWidget {
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
                 color: containerColor,
-                borderRadius: BorderRadius.circular(14), // Less rounded - more serious (14px instead of 16px)
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.3), // Professional shadow
-                    blurRadius: 8,
-                    offset: const Offset(0, 3),
-                  ),
-                ],
+                borderRadius: BorderRadius.circular(14),
+                border: isDark 
+                    ? null
+                    : Border.all(
+                        color: const Color(0xFFE5E7EB), // Soft gray border
+                        width: 1,
+                      ),
+                boxShadow: isDark
+                    ? [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.3),
+                          blurRadius: 8,
+                          offset: const Offset(0, 3),
+                        ),
+                      ]
+                    : [
+                        // Minimal shadow for light mode
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.04),
+                          blurRadius: 6,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
               ),
               child: Center(
                 child: isFontAwesome
                     ? FaIcon(
                         icon,
-                        color: AppColors.brandCyan, // Vibrant cyan #00D4FF - icon is the light source
+                        color: colors.primary, // Theme-aware primary color
                         size: 24,
                       )
                     : Icon(
                         icon,
-                        color: AppColors.brandCyan, // Vibrant cyan #00D4FF - icon is the light source
+                        color: colors.primary, // Theme-aware primary color
                         size: 24,
                       ),
               ),
@@ -121,7 +139,7 @@ class FinancialServices extends StatelessWidget {
               style: TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w500,
-                color: AppColors.textSecondaryCool, // Cool gray #94A3B8
+                color: colors.textSecondary, // Theme-aware secondary text
               ),
               textAlign: TextAlign.center,
               maxLines: 2,
