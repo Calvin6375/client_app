@@ -9,15 +9,16 @@ class WalletIconHeader extends StatelessWidget {
     return Transform.translate(
       offset: const Offset(0, 50),
       child: Container(
-        padding: const EdgeInsets.all(15),
+        padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
           color: const Color.fromARGB(255, 210, 213, 212),
           borderRadius: BorderRadius.circular(17),
         ),
-        child: Icon(
-          Icons.account_balance_wallet_rounded,
-          size: 35,
-          color: color,
+        child: Image.asset(
+          'assets/images/icon_2.png',
+          width: 80,
+          height: 80,
+          fit: BoxFit.contain,
         ),
       ),
     );

@@ -8,10 +8,13 @@ class WalletVerificationScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = AppColors.getThemeColors(context);
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primary = Theme.of(context).colorScheme.primary;
     return Scaffold(
       backgroundColor: colors.background, // Theme-aware background
       appBar: AppBar(
-        backgroundColor: Colors.transparent, // Transparent AppBar
+        backgroundColor: isDark
+            ? Colors.transparent  // Transparent for dark mode
+            : primary.withValues(alpha: 0.08), // Light mint tint (8% opacity) for light mode
         elevation: 0,
         title: Text(
           'Wallet Verification',

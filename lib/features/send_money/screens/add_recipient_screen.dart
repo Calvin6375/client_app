@@ -14,6 +14,8 @@ class _AddRecipientScreenState extends State<AddRecipientScreen> {
   @override
   Widget build(BuildContext context) {
     final colors = AppColors.getThemeColors(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primary = Theme.of(context).colorScheme.primary;
     return Scaffold(
       backgroundColor: colors.background, // Theme-aware background
       appBar: AppBar(
@@ -21,7 +23,9 @@ class _AddRecipientScreenState extends State<AddRecipientScreen> {
           'Add Recipients',
           style: TextStyle(color: colors.textPrimary),
         ),
-        backgroundColor: Colors.transparent,
+        backgroundColor: isDark
+            ? Colors.transparent  // Transparent for dark mode
+            : primary.withValues(alpha: 0.08), // Light mint tint (8% opacity) for light mode
         elevation: 0,
         iconTheme: IconThemeData(color: colors.textPrimary),
       ),
