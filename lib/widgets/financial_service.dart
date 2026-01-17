@@ -21,16 +21,16 @@ class FinancialServices extends StatelessWidget {
               "Financial Services",
               style: TextStyle(
                 fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: colors.textPrimary,
+                fontWeight: FontWeight.w600, // Medium weight - professional
+                color: AppColors.textPrimaryLight, // Pure white #FFFFFF
               ),
             ),
           ],
         ),
-        const SizedBox(height: 40),
-        // Single horizontal row of 4 large rounded rectangle buttons - centered
+        const SizedBox(height: 16),
+        // Single horizontal row of 4 compact rounded rectangle buttons - fits on one screen
         Row(
-          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             _buildServiceButton(
               context,
@@ -43,7 +43,7 @@ class FinancialServices extends StatelessWidget {
                 );
               },
             ),
-            const SizedBox(width: 16),
+            const SizedBox(width: 12),
             _buildServiceButton(
               context,
               FontAwesomeIcons.shoppingBasket,
@@ -51,7 +51,7 @@ class FinancialServices extends StatelessWidget {
               true, // isFontAwesome
               () => _showComingSoonDialog(context),
             ),
-            const SizedBox(width: 16),
+            const SizedBox(width: 12),
             _buildServiceButton(
               context,
               FontAwesomeIcons.receipt,
@@ -59,7 +59,7 @@ class FinancialServices extends StatelessWidget {
               true, // isFontAwesome
               () => _showComingSoonDialog(context),
             ),
-            const SizedBox(width: 16),
+            const SizedBox(width: 12),
             _buildServiceButton(
               context,
               Icons.phone_android,
@@ -73,61 +73,62 @@ class FinancialServices extends StatelessWidget {
     );
   }
 
-  // Build larger rounded rectangle button for services - matching reference design
+  // Build compact professional dark card button for services - banking-grade style
   Widget _buildServiceButton(BuildContext context, IconData icon, String label, bool isFontAwesome, [VoidCallback? onTap]) {
     final colors = AppColors.getThemeColors(context);
-    final primary = Theme.of(context).colorScheme.primary;
-    // Use the same primary turquoise color as the Fiat Wallet button
-    final containerColor = primary;
+    // Professional dark card background - slightly raised
+    final containerColor = AppColors.surfaceDark; // Slate-800 #1E293B
     
-    return GestureDetector(
-      onTap: onTap,
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 75,
-            height: 90,
-            padding: const EdgeInsets.all(18),
-            decoration: BoxDecoration(
-              color: containerColor,
-              borderRadius: BorderRadius.circular(18),
-              boxShadow: [
-                BoxShadow(
-                  color: colors.shadowLight,
-                  blurRadius: 8,
-                  offset: const Offset(0, 3),
-                ),
-              ],
+    return Expanded(
+      child: GestureDetector(
+        onTap: onTap,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 64,
+              height: 64,
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: containerColor,
+                borderRadius: BorderRadius.circular(14), // Less rounded - more serious (14px instead of 16px)
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.3), // Professional shadow
+                    blurRadius: 8,
+                    offset: const Offset(0, 3),
+                  ),
+                ],
+              ),
+              child: Center(
+                child: isFontAwesome
+                    ? FaIcon(
+                        icon,
+                        color: AppColors.brandCyan, // Vibrant cyan #00D4FF - icon is the light source
+                        size: 24,
+                      )
+                    : Icon(
+                        icon,
+                        color: AppColors.brandCyan, // Vibrant cyan #00D4FF - icon is the light source
+                        size: 24,
+                      ),
+              ),
             ),
-            child: Center(
-              child: isFontAwesome
-                  ? FaIcon(
-                      icon,
-                      color: colors.onPrimary,
-                      size: 36,
-                    )
-                  : Icon(
-                      icon,
-                      color: colors.onPrimary,
-                      size: 36,
-                    ),
+            const SizedBox(height: 8),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w500,
+                color: AppColors.textSecondaryCool, // Cool gray #94A3B8
+              ),
+              textAlign: TextAlign.center,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
             ),
-          ),
-          const SizedBox(height: 10),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w500,
-              color: colors.textPrimary,
-            ),
-            textAlign: TextAlign.center,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

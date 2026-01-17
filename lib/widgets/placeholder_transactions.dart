@@ -1,10 +1,59 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:pretium/core/constants/app_colors.dart';
+import 'package:pretium/models/transaction_model.dart';
+import 'package:pretium/services/transactions_service.dart';
 
-class PlaceholderTransactions extends StatelessWidget {
+class PlaceholderTransactions extends StatefulWidget {
   const PlaceholderTransactions({super.key});
+
+  @override
+  State<PlaceholderTransactions> createState() => _PlaceholderTransactionsState();
+}
+
+class _PlaceholderTransactionsState extends State<PlaceholderTransactions> {
+  final TransactionsService _transactionsService = TransactionsService();
+  TransactionsResponse? _transactionsResponse;
+  bool _isLoading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadTransactions();
+  }
+
+  Future<void> _loadTransactions() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      setState(() {
+        _isLoading = false;
+      });
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
+
+    try {
+      final response = await _transactionsService.getTransactions(limit: 5);
+      if (mounted) {
+        setState(() {
+          _transactionsResponse = response;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = e.toString();
+          _isLoading = false;
+        });
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -14,69 +63,63 @@ class PlaceholderTransactions extends StatelessWidget {
       return const _SkeletonList();
     }
 
-    final txQuery =
-        FirebaseFirestore.instance
-            .collection('users')
-            .doc(user.uid)
-            .collection('transactions')
-            .orderBy('createdAt', descending: true)
-            .limit(5)
-            .snapshots();
+    if (_isLoading) {
+      return const _SkeletonList();
+    }
 
-    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-      stream: txQuery,
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const _SkeletonList();
-        }
-        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-          return const _EmptyTransactions();
-        }
+    if (_error != null) {
+      return _ErrorTransactions(error: _error!, onRetry: _loadTransactions);
+    }
 
-        final docs = snapshot.data!.docs;
-        return Column(
-          children:
-              docs.map((doc) {
-                final data = doc.data();
-                final title = (data['title'] ?? 'Transaction') as String;
-                final subtitle = (data['subtitle'] ?? '') as String;
-                final amountRaw = data['amount'];
-                double amount = 0.0;
-                if (amountRaw is num) amount = amountRaw.toDouble();
-                if (amountRaw is String)
-                  amount = double.tryParse(amountRaw) ?? 0.0;
-                final isDebit = (data['type'] ?? 'debit') == 'debit';
+    if (_transactionsResponse == null || 
+        _transactionsResponse!.transactions.isEmpty) {
+      return const _EmptyTransactions();
+    }
 
-                final colors = AppColors.getThemeColors(context);
-                return ListTile(
-                  leading: CircleAvatar(
-                    backgroundColor: colors.infoLight,
-                    child: Icon(
-                      isDebit ? Icons.call_made : Icons.call_received,
-                      color: colors.primary,
-                    ),
-                  ),
-                  title: Text(
-                    title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  subtitle: Text(
-                    subtitle,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  trailing: Text(
-                    (isDebit ? '-' : '+') + 'KES ' + amount.toStringAsFixed(2),
-                    style: TextStyle(
-                      color: isDebit ? colors.error : colors.success,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                );
-              }).toList(),
+    final transactions = _transactionsResponse!.transactions;
+    final colors = AppColors.getThemeColors(context);
+
+    return Column(
+      children: transactions.map((transaction) {
+        final title = transaction.title ?? 
+                     (transaction.isDebit ? 'Sent' : 'Received') ?? 
+                     'Transaction';
+        final subtitle = transaction.subtitle ?? 
+                        transaction.description ?? 
+                        (transaction.currency ?? '');
+        final amount = transaction.amount;
+        final currency = transaction.currency ?? 'KES';
+        final isDebit = transaction.isDebit;
+
+        return ListTile(
+          leading: CircleAvatar(
+            backgroundColor: colors.infoLight,
+            child: Icon(
+              isDebit ? Icons.call_made : Icons.call_received,
+              color: colors.primary,
+            ),
+          ),
+          title: Text(
+            title,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(color: colors.textPrimary),
+          ),
+          subtitle: Text(
+            subtitle,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(color: colors.textSecondary),
+          ),
+          trailing: Text(
+            '${isDebit ? '-' : '+'}$currency ${amount.toStringAsFixed(2)}',
+            style: TextStyle(
+              color: isDebit ? colors.error : colors.success,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
         );
-      },
+      }).toList(),
     );
   }
 }
@@ -118,6 +161,34 @@ class _EmptyTransactions extends StatelessWidget {
       child: Text(
         'No recent transactions',
         style: TextStyle(color: colors.textSecondary),
+      ),
+    );
+  }
+}
+
+class _ErrorTransactions extends StatelessWidget {
+  final String error;
+  final VoidCallback onRetry;
+  
+  const _ErrorTransactions({required this.error, required this.onRetry});
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = AppColors.getThemeColors(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 16.0),
+      child: Column(
+        children: [
+          Text(
+            'Failed to load transactions',
+            style: TextStyle(color: colors.error),
+          ),
+          const SizedBox(height: 8),
+          TextButton(
+            onPressed: onRetry,
+            child: const Text('Retry'),
+          ),
+        ],
       ),
     );
   }

@@ -3,6 +3,7 @@ import 'package:pretium/models/transaction_details_model.dart';
 import 'package:pretium/repositories/wallet_repository.dart';
 import 'package:pretium/features/swap/services/rates_service.dart';
 import 'package:pretium/features/swap/widgets/currency_picker_bottom_sheet.dart';
+import 'package:pretium/core/constants/app_colors.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 
@@ -225,8 +226,8 @@ class _SendAmountScreenState extends State<SendAmountScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final primaryColor = theme.colorScheme.primary;
+    final colors = AppColors.getThemeColors(context);
+    final primaryColor = Theme.of(context).colorScheme.primary;
 
     return Padding(
       padding: const EdgeInsets.all(16.0),
@@ -246,10 +247,10 @@ class _SendAmountScreenState extends State<SendAmountScreen> {
                 const SizedBox(height: 8),
                 Center(
                   child: IconButton(
-                    icon: Icon(Icons.swap_vert, color: primaryColor, size: 32),
+                    icon: Icon(Icons.swap_vert, color: AppColors.brandPrimary, size: 32),
                     onPressed: _swapCurrencies,
                     style: IconButton.styleFrom(
-                      backgroundColor: primaryColor.withValues(alpha: 0.1),
+                      backgroundColor: AppColors.brandPrimary.withValues(alpha: 0.15),
                       shape: const CircleBorder(),
                       padding: const EdgeInsets.all(12),
                     ),
@@ -280,16 +281,20 @@ class _SendAmountScreenState extends State<SendAmountScreen> {
             onPressed: widget.onNext,
             style: ElevatedButton.styleFrom(
               padding: const EdgeInsets.symmetric(vertical: 16),
-              backgroundColor: primaryColor,
-              foregroundColor: Colors.white,
+              backgroundColor: AppColors.brandPrimary, // Dark teal button
+              foregroundColor: AppColors.backgroundDeepNavy, // Dark navy text
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(30),
+                borderRadius: BorderRadius.circular(12),
               ),
               minimumSize: const Size(double.infinity, 50),
             ),
-            child: const Text(
+            child: Text(
               'Continue',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: AppColors.backgroundDeepNavy,
+              ),
             ),
           ),
         ],
@@ -311,16 +316,15 @@ class _ExchangeRateDisplay extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final textColor = theme.colorScheme.onSurface.withValues(alpha: 0.6);
+    final colors = AppColors.getThemeColors(context);
     
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
-        color: Colors.grey.shade50,
+        color: AppColors.surfaceDark, // Dark slate card
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: Colors.grey.shade200,
+          color: AppColors.surfaceVariantDark,
           width: 1,
         ),
       ),
@@ -330,14 +334,14 @@ class _ExchangeRateDisplay extends StatelessWidget {
           Icon(
             Icons.info_outline,
             size: 16,
-            color: textColor,
+            color: AppColors.textSecondaryCool,
           ),
           const SizedBox(width: 8),
           Text(
             '1 $fromCurrency = ${rate.toStringAsFixed(4)} $toCurrency',
             style: TextStyle(
               fontSize: 14,
-              color: textColor,
+              color: AppColors.textSecondaryCool,
               fontWeight: FontWeight.w500,
             ),
           ),
@@ -368,14 +372,16 @@ class _SwapCurrencyCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AppColors.getThemeColors(context);
+    
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppColors.surfaceDark, // Dark slate card #1E293B
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.grey.withValues(alpha: 0.1),
+            color: Colors.black.withValues(alpha: 0.3),
             spreadRadius: 1,
             blurRadius: 10,
             offset: const Offset(0, 4),
@@ -388,17 +394,23 @@ class _SwapCurrencyCard extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(label, style: const TextStyle(color: Colors.grey)),
+              Text(
+                label,
+                style: TextStyle(color: AppColors.textSecondaryCool),
+              ),
               if (loading)
-                const SizedBox(
+                SizedBox(
                   width: 16,
                   height: 16,
-                  child: CircularProgressIndicator(strokeWidth: 2),
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: AppColors.brandPrimary,
+                  ),
                 )
               else
                 Text(
                   'Balance: ${balance.toStringAsFixed(2)}',
-                  style: const TextStyle(color: Colors.grey),
+                  style: TextStyle(color: AppColors.textSecondaryCool),
                 ),
             ],
           ),
@@ -410,15 +422,23 @@ class _SwapCurrencyCard extends StatelessWidget {
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   decoration: BoxDecoration(
-                    color: Colors.grey.shade100,
+                    color: AppColors.backgroundDeepNavy,
                     borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: AppColors.surfaceVariantDark),
                   ),
                   child: Row(
                     children: [
-                      const Icon(Icons.public, size: 20),
+                      Icon(Icons.public, size: 20, color: AppColors.textPrimaryLight),
                       const SizedBox(width: 8),
-                      Text(currency, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                      const Icon(Icons.keyboard_arrow_down, size: 20),
+                      Text(
+                        currency,
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                          color: AppColors.textPrimaryLight,
+                        ),
+                      ),
+                      Icon(Icons.keyboard_arrow_down, size: 20, color: AppColors.textPrimaryLight),
                     ],
                   ),
                 ),
@@ -430,17 +450,26 @@ class _SwapCurrencyCard extends StatelessWidget {
                     controller: controller,
                     textAlign: TextAlign.end,
                     keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
-                    decoration: const InputDecoration(
+                    style: TextStyle(
+                      fontSize: 28,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.textPrimaryLight,
+                    ),
+                    decoration: InputDecoration(
                       border: InputBorder.none,
                       hintText: '0.00',
+                      hintStyle: TextStyle(color: AppColors.textTertiary),
                     ),
                   ),
                 )
               else
                 Text(
                   amount?.toStringAsFixed(2) ?? '0.00',
-                  style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+                  style: TextStyle(
+                    fontSize: 28,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.textPrimaryLight,
+                  ),
                 ),
             ],
           ),

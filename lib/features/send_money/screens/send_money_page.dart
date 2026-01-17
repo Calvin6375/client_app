@@ -5,6 +5,7 @@ import 'package:pretium/features/send_money/screens/review_details_screen.dart';
 import 'package:pretium/features/send_money/screens/recipient_details_screen.dart';
 import 'package:pretium/models/transaction_details_model.dart';
 import 'package:pretium/services/order_service.dart';
+import 'package:pretium/core/constants/app_colors.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 enum SendMoneyStep { amount, payment, recipientDetails, review }
@@ -136,11 +137,19 @@ class _SendMoneyPageState extends State<SendMoneyPage> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AppColors.getThemeColors(context);
+    
     return Scaffold(
+      backgroundColor: AppColors.backgroundDeepNavy, // Deep navy background
       appBar: AppBar(
-        title: const Text('Send Money'),
+        backgroundColor: Colors.transparent, // Transparent for dark theme
+        elevation: 0,
+        title: Text('Send Money', style: TextStyle(color: AppColors.textPrimaryLight)),
         leading: _step != SendMoneyStep.amount
-            ? IconButton(icon: const Icon(Icons.arrow_back), onPressed: _previousStep)
+            ? IconButton(
+                icon: Icon(Icons.arrow_back, color: AppColors.textPrimaryLight),
+                onPressed: _previousStep,
+              )
             : null,
       ),
       body: _buildCurrentStep(),

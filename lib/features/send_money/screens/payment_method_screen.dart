@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:pretium/core/constants/app_colors.dart';
 
 enum PaymentMethod { truePay, mobileMoney, bank }
 
@@ -17,11 +18,15 @@ class _PaymentMethodScreenState extends State<PaymentMethodScreen> {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        const Padding(
-          padding: EdgeInsets.all(16.0),
+        Padding(
+          padding: const EdgeInsets.all(16.0),
           child: Text(
             'Choose your transfer type',
-            style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+            style: TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+              color: AppColors.textPrimaryLight,
+            ),
           ),
         ),
         Expanded(
@@ -61,14 +66,21 @@ class _PaymentMethodScreenState extends State<PaymentMethodScreen> {
             onPressed: () => widget.onNext(_selectedMethod),
             style: ElevatedButton.styleFrom(
               padding: const EdgeInsets.symmetric(vertical: 16),
-              backgroundColor: Theme.of(context).colorScheme.primary,
-              foregroundColor: Colors.white,
+              backgroundColor: AppColors.brandPrimary,
+              foregroundColor: AppColors.backgroundDeepNavy,
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(30),
+                borderRadius: BorderRadius.circular(12),
               ),
               minimumSize: const Size(double.infinity, 50),
             ),
-            child: const Text('Continue', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            child: Text(
+              'Continue',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: AppColors.backgroundDeepNavy,
+              ),
+            ),
           ),
         ),
       ],
@@ -78,7 +90,14 @@ class _PaymentMethodScreenState extends State<PaymentMethodScreen> {
   Widget _buildSectionHeader(String title) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 16.0),
-      child: Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500)),
+      child: Text(
+        title,
+        style: TextStyle(
+          fontSize: 16,
+          fontWeight: FontWeight.w500,
+          color: AppColors.textSecondaryCool,
+        ),
+      ),
     );
   }
 }
@@ -108,26 +127,36 @@ class _PaymentOptionCard extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: AppColors.surfaceDark, // Dark slate card
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
-            color: isSelected ? primaryColor : Colors.grey.shade300,
+            color: isSelected ? AppColors.brandPrimary : AppColors.surfaceVariantDark,
             width: isSelected ? 2 : 1,
           ),
         ),
         child: Row(
           children: [
-            Icon(icon, size: 32, color: Colors.grey.shade600),
+            Icon(icon, size: 32, color: isSelected ? AppColors.brandPrimary : AppColors.textSecondaryCool),
             const SizedBox(width: 16),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                  Text(
+                    title,
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.textPrimaryLight,
+                    ),
+                  ),
                   if (subtitle.isNotEmpty)
                     Padding(
                       padding: const EdgeInsets.only(top: 4.0),
-                      child: Text(subtitle, style: TextStyle(color: Colors.grey.shade600)),
+                      child: Text(
+                        subtitle,
+                        style: TextStyle(color: AppColors.textSecondaryCool),
+                      ),
                     ),
                 ],
               ),

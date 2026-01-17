@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:pretium/core/constants/app_colors.dart';
 
 class SplashPage1 extends StatefulWidget {
   const SplashPage1({super.key});
@@ -12,7 +13,7 @@ class _SplashPage1State extends State<SplashPage1> {
   int _currentPage = 0;
 
   void _nextPage() {
-    if (_currentPage < 2) {
+    if (_currentPage < 3) {
       _controller.nextPage(
         duration: const Duration(milliseconds: 300),
         curve: Curves.easeInOut,
@@ -27,8 +28,11 @@ class _SplashPage1State extends State<SplashPage1> {
 
   @override
   Widget build(BuildContext context) {
+    final primary = Theme.of(context).colorScheme.primary;
+    final colors = AppColors.getThemeColors(context);
+    
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: colors.background,
       body: SafeArea(
         child: Stack(
           children: [
@@ -39,19 +43,24 @@ class _SplashPage1State extends State<SplashPage1> {
               },
               children: [
                 _buildPage(
-                  icon: Icons.credit_card,
-                  title: 'Direct Pay',
-                  subtitle: 'Pay with crypto across Africa effortlessly',
+                  icon: Icons.swap_horiz,
+                  title: 'True Exchange Rates',
+                  subtitle: 'Get the best USD to KES rates with zero hidden fees',
                 ),
                 _buildPage(
                   icon: Icons.account_balance_wallet,
-                  title: 'Accept Payments',
-                  subtitle: 'Accept stablecoin payments hassle-free',
+                  title: 'Crypto On & Off-Ramp',
+                  subtitle: 'Buy/sell 500+ cryptos instantly to M-Pesa or bank',
                 ),
                 _buildPage(
-                  icon: Icons.receipt_long,
-                  title: 'Pay Bills',
-                  subtitle: 'Pay for utility services and earn rewards',
+                  icon: Icons.verified_user,
+                  title: 'Instant Wallet Verification',
+                  subtitle: 'Secure scam, risk, and address checks in seconds',
+                ),
+                _buildPage(
+                  icon: Icons.phone_android,
+                  title: 'Safe & Instant',
+                  subtitle: 'Bank-level security, verified wallets, instant payouts',
                 ),
               ],
             ),
@@ -64,7 +73,10 @@ class _SplashPage1State extends State<SplashPage1> {
                     context,
                   ).pushReplacementNamed('/login'); // or your desired route
                 },
-                child: const Text('Skip', style: TextStyle(color: Colors.grey)),
+                child: Text(
+                  'Skip',
+                  style: TextStyle(color: colors.textSecondary),
+                ),
               ),
             ),
             Positioned(
@@ -74,7 +86,7 @@ class _SplashPage1State extends State<SplashPage1> {
               right: 0,
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
-                children: List.generate(3, (index) {
+                children: List.generate(4, (index) {
                   return AnimatedContainer(
                     duration: const Duration(milliseconds: 300),
                     margin: const EdgeInsets.symmetric(horizontal: 4),
@@ -84,8 +96,8 @@ class _SplashPage1State extends State<SplashPage1> {
                     decoration: BoxDecoration(
                       color:
                           index == _currentPage
-                              ? Theme.of(context).colorScheme.primary
-                              : Colors.grey.withOpacity(0.3),
+                              ? primary
+                              : colors.textTertiary.withOpacity(0.3),
                       borderRadius: BorderRadius.circular(4),
                     ),
                   );
@@ -99,17 +111,17 @@ class _SplashPage1State extends State<SplashPage1> {
               child: ElevatedButton(
                 onPressed: _nextPage,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Theme.of(context).colorScheme.primary,
+                  backgroundColor: primary,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
                   minimumSize: const Size.fromHeight(48),
                 ),
                 child: Text(
-                  _currentPage == 2
+                  _currentPage == 3
                       ? 'Get Started'
                       : 'Next', // Change text based on page
-                  style: const TextStyle(color: Colors.white),
+                  style: TextStyle(color: colors.onPrimary),
                 ),
               ),
             ),
@@ -124,28 +136,45 @@ class _SplashPage1State extends State<SplashPage1> {
     required String title,
     required String subtitle,
   }) {
+    final primary = Theme.of(context).colorScheme.primary;
+    final colors = AppColors.getThemeColors(context);
+
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         CircleAvatar(
           radius: 55,
-          backgroundColor: const Color.fromARGB(255, 210, 213, 212),
+          backgroundColor: primary.withOpacity(0.1),
           child: Icon(
             icon,
-            color: Theme.of(context).colorScheme.primary,
-            size: 60, // Increased icon size from 40 to 60
+            color: primary,
+            size: 60,
           ),
         ),
         const SizedBox(height: 32),
-        Text(
-          title,
-          style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 32),
+          child: Text(
+            title,
+            style: TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+              color: colors.textPrimary,
+            ),
+            textAlign: TextAlign.center,
+          ),
         ),
         const SizedBox(height: 12),
-        Text(
-          subtitle,
-          style: const TextStyle(color: Colors.grey),
-          textAlign: TextAlign.center,
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 48),
+          child: Text(
+            subtitle,
+            style: TextStyle(
+              fontSize: 16,
+              color: colors.textSecondary,
+            ),
+            textAlign: TextAlign.center,
+          ),
         ),
       ],
     );
