@@ -66,7 +66,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               right: 16,
               bottom: 12,
             ),
-            color: primary,
+            color: Colors.transparent, // Transparent for professional dark look
             child: HeaderWidget(),
           ),
           Expanded(
@@ -76,23 +76,30 @@ class _DashboardScreenState extends State<DashboardScreen> {
               child: ListView(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 children: [
-                  const SizedBox(height: 24),
-                  // Pill-shaped tab navigation - moved above circular balance
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      _buildPillTab('Fiat Wallet', 0),
-                      const SizedBox(width: 12),
-                      _buildPillTab('Crypto Wallet', 1),
-                    ],
+                  const SizedBox(height: 16),
+                  // Segmented control style - wallet toggle with dark container
+                  Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: BoxDecoration(
+                      color: AppColors.surfaceDark, // Dark slate #1E293B container
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        _buildPillTab('Fiat Wallet', 0),
+                        const SizedBox(width: 4),
+                        _buildPillTab('Crypto Wallet', 1),
+                      ],
+                    ),
                   ),
-                  const SizedBox(height: 32),
+                  const SizedBox(height: 20),
                   // Large circular wallet display
                   WalletCard(
                     key: _walletCardKey,
                     selectedTab: _selectedTab,
                   ),
-                const SizedBox(height: 56),
+                const SizedBox(height: 20),
                 // Financial Services grid
                 const FinancialServices(),
                 const SizedBox(height: 40),
@@ -107,16 +114,30 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
         ],
       ),
-      bottomNavigationBar: BottomAppBar(
-        shape: const CircularNotchedRectangle(),
-        notchMargin: 8.0,
-        child: Row(
+      bottomNavigationBar: Container(
+        decoration: BoxDecoration(
+          color: AppColors.backgroundDeepNavy, // Deep navy #0F172A
+          border: Border(
+            top: BorderSide(
+              color: AppColors.surfaceDark.withValues(alpha: 0.5), // Subtle top border
+              width: 1,
+            ),
+          ),
+        ),
+        child: BottomAppBar(
+          color: Colors.transparent,
+          elevation: 0,
+          shape: const CircularNotchedRectangle(),
+          notchMargin: 8.0,
+          child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceAround,
           children: <Widget>[
             IconButton(
               icon: const Icon(Icons.account_balance_wallet),
-              iconSize: 28,
-              color: _selectedIndex == 0 ? primary : colors.iconSecondary,
+              iconSize: 26,
+              color: _selectedIndex == 0 
+                  ? AppColors.brandCyan // Vibrant cyan #00D4FF when active
+                  : AppColors.textTertiary, // Slate-500 #64748B when inactive
               onPressed: () => _onItemTapped(0),
             ),
             GestureDetector(
@@ -128,58 +149,64 @@ class _DashboardScreenState extends State<DashboardScreen> {
               },
               child: Container(
                 decoration: BoxDecoration(
-                  color: primary,
+                  color: AppColors.brandCyan, // Vibrant cyan #00D4FF - primary CTA
                   shape: BoxShape.circle,
                   boxShadow: [
                     BoxShadow(
-                      color: primary.withValues(alpha: 0.2),
-                      blurRadius: 6,
-                      offset: const Offset(0, 2),
+                      color: AppColors.brandCyan.withValues(alpha: 0.3), // Cyan glow
+                      blurRadius: 12,
+                      offset: const Offset(0, 4),
                     ),
                   ],
                 ),
                 padding: const EdgeInsets.all(12),
-                child: FaIcon(FontAwesomeIcons.paperPlane, color: colors.onPrimary, size: 24),
+                child: FaIcon(FontAwesomeIcons.paperPlane, color: AppColors.backgroundDeepNavy, size: 22), // Deep navy icon for contrast
               ),
             ),
             IconButton(
               icon: const Icon(Icons.receipt_long),
-              color: _selectedIndex == 2 ? primary : colors.iconSecondary,
+              iconSize: 26,
+              color: _selectedIndex == 2 
+                  ? AppColors.brandCyan // Vibrant cyan #00D4FF when active
+                  : AppColors.textTertiary, // Slate-500 #64748B when inactive
               onPressed: () => _onItemTapped(2),
             ),
           ],
+          ),
         ),
       ),
     );
   }
 
   Widget _buildPillTab(String label, int index) {
-    final primary = Theme.of(context).colorScheme.primary;
     final colors = AppColors.getThemeColors(context);
     final isSelected = _selectedTab == index;
     
-    return GestureDetector(
-      onTap: () {
-        setState(() {
-          _selectedTab = index;
-        });
-      },
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 12),
-        decoration: BoxDecoration(
-          color: isSelected ? primary : Colors.transparent,
-          borderRadius: BorderRadius.circular(30),
-          border: isSelected ? null : Border.all(
-            color: primary,
-            width: 1.5,
+    return Expanded(
+      child: GestureDetector(
+        onTap: () {
+          setState(() {
+            _selectedTab = index;
+          });
+        },
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+          decoration: BoxDecoration(
+            color: isSelected 
+                ? AppColors.brandCyan // Vibrant cyan #00D4FF when selected (accent)
+                : Colors.transparent, // Transparent when unselected
+            borderRadius: BorderRadius.circular(12),
           ),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            color: isSelected ? colors.onPrimary : primary,
-            fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
-            fontSize: 15,
+          child: Text(
+            label,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: isSelected 
+                  ? AppColors.backgroundDeepNavy // Deep navy text on cyan background
+                  : AppColors.textSecondaryCool, // Cool gray #94A3B8 when unselected
+              fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+              fontSize: 14,
+            ),
           ),
         ),
       ),

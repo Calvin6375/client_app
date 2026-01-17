@@ -12,6 +12,7 @@ import 'package:pretium/repositories/wallet_repository.dart';
 import 'package:pretium/repositories/user_repository.dart';
 import 'package:pretium/services/firebase_payment_service.dart';
 import 'package:pretium/services/order_service.dart';
+import 'package:pretium/core/constants/app_colors.dart';
 
 // Top Up main screen composed of smaller widgets
 class TopUpPage extends StatefulWidget {
@@ -497,29 +498,26 @@ class _TopUpPageState extends State<TopUpPage> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final primary = theme.colorScheme.primary;
-
     return Scaffold(
-      backgroundColor: primary,
+      backgroundColor: AppColors.backgroundDeepNavy, // Deep navy #0F172A
       appBar: AppBar(
-        backgroundColor: primary,
+        backgroundColor: Colors.transparent, // Transparent for dark theme
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.white),
+          icon: Icon(Icons.arrow_back, color: AppColors.textPrimaryLight),
           onPressed: () => Navigator.of(context).pop(),
         ),
-        title: const Text('Topup', style: TextStyle(color: Colors.white)),
+        title: Text('Topup', style: TextStyle(color: AppColors.textPrimaryLight)),
         actions: [
           IconButton(
             icon: Icon(
               _hideBalance ? Icons.visibility_off : Icons.visibility,
-              color: Colors.white70,
+              color: AppColors.textSecondaryCool,
             ),
             onPressed: () => setState(() => _hideBalance = !_hideBalance),
           ),
           IconButton(
-            icon: const Icon(Icons.more_horiz, color: Colors.white70),
+            icon: Icon(Icons.more_horiz, color: AppColors.textSecondaryCool),
             onPressed: () {},
           ),
         ],
@@ -538,9 +536,9 @@ class _TopUpPageState extends State<TopUpPage> {
           ),
           Expanded(
             child: Container(
-              decoration: const BoxDecoration(
-                color: Color(0xFFF2F5F8),
-                borderRadius: BorderRadius.only(
+              decoration: BoxDecoration(
+                color: AppColors.backgroundDeepNavy, // Deep navy background
+                borderRadius: const BorderRadius.only(
                   topLeft: Radius.circular(16),
                   topRight: Radius.circular(16),
                 ),
@@ -597,14 +595,14 @@ class _BalanceHeader extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('Balance', style: TextStyle(color: Colors.white70)),
+        Text('Balance', style: TextStyle(color: AppColors.textSecondaryCool)),
         const SizedBox(height: 12),
         if (isLoading)
-          const SizedBox(
+          SizedBox(
             height: 28,
             width: 28,
             child: CircularProgressIndicator(
-              color: Colors.white,
+              color: AppColors.brandPrimary,
               strokeWidth: 2,
             ),
           )
@@ -620,8 +618,8 @@ class _BalanceHeader extends StatelessWidget {
                   children: [
                     Text(
                       hidden ? '\$ ••••' : '\$${fiatBalance.toStringAsFixed(2)}',
-                      style: const TextStyle(
-                        color: Colors.white,
+                      style: TextStyle(
+                        color: AppColors.textPrimaryLight,
                         fontSize: 22,
                         fontWeight: FontWeight.bold,
                       ),
@@ -630,7 +628,7 @@ class _BalanceHeader extends StatelessWidget {
                     Text(
                       'USD',
                       style: TextStyle(
-                        color: Colors.white.withOpacity(0.7),
+                        color: AppColors.textSecondaryCool,
                         fontSize: 11,
                         fontWeight: FontWeight.w500,
                       ),
@@ -643,7 +641,7 @@ class _BalanceHeader extends StatelessWidget {
                 margin: const EdgeInsets.symmetric(horizontal: 12),
                 width: 1,
                 height: 45,
-                color: Colors.white.withOpacity(0.5),
+                color: AppColors.surfaceVariantDark,
               ),
               // Crypto Balance (USDT)
               Expanded(
@@ -654,8 +652,8 @@ class _BalanceHeader extends StatelessWidget {
                   children: [
                     Text(
                       hidden ? 'USDT ••••' : 'USDT ${cryptoBalance.toStringAsFixed(2)}',
-                      style: const TextStyle(
-                        color: Colors.white,
+                      style: TextStyle(
+                        color: AppColors.textPrimaryLight,
                         fontSize: 22,
                         fontWeight: FontWeight.bold,
                       ),
@@ -664,7 +662,7 @@ class _BalanceHeader extends StatelessWidget {
                     Text(
                       'USDT',
                       style: TextStyle(
-                        color: Colors.white.withOpacity(0.7),
+                        color: AppColors.textSecondaryCool,
                         fontSize: 11,
                         fontWeight: FontWeight.w500,
                       ),
@@ -714,26 +712,28 @@ class _SetAmountCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final primary = theme.colorScheme.primary;
     final currencySymbol = _getCurrencySymbol(selectedCurrency);
-
+    
     return Card(
       elevation: 0,
+      color: AppColors.surfaceDark, // Dark slate card #1E293B
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
+            Text(
               'Set amount',
-              style: TextStyle(fontWeight: FontWeight.w600),
+              style: TextStyle(
+                fontWeight: FontWeight.w600,
+                color: AppColors.textPrimaryLight,
+              ),
             ),
             const SizedBox(height: 4),
             Text(
               'How much would you like to top up?',
-              style: TextStyle(color: Colors.grey[600]),
+              style: TextStyle(color: AppColors.textSecondaryCool),
             ),
             const SizedBox(height: 16),
             Row(
@@ -744,22 +744,27 @@ class _SetAmountCard extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   decoration: BoxDecoration(
-                    border: Border.all(color: Colors.grey[300]!),
+                    border: Border.all(color: AppColors.surfaceVariantDark),
                     borderRadius: BorderRadius.circular(8),
+                    color: AppColors.backgroundDeepNavy,
                   ),
                   child: DropdownButton<String>(
                     value: selectedCurrency,
                     underline: const SizedBox.shrink(),
                     isDense: true,
+                    dropdownColor: AppColors.surfaceDark,
+                    style: TextStyle(
+                      color: AppColors.textPrimaryLight,
+                    ),
                     items: ['USD', 'KES', 'UGX', 'TZS', 'EUR', 'GBP']
                         .map((currency) => DropdownMenuItem(
                               value: currency,
                               child: Text(
                                 currency,
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontSize: 20,
                                   fontWeight: FontWeight.w600,
-                                  color: Colors.grey,
+                                  color: AppColors.textPrimaryLight,
                                 ),
                               ),
                             ))
@@ -778,13 +783,15 @@ class _SetAmountCard extends StatelessWidget {
                     keyboardType: const TextInputType.numberWithOptions(
                       decimal: true,
                     ),
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.w600,
+                      color: AppColors.textPrimaryLight,
                     ),
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       border: InputBorder.none,
                       hintText: '0.00',
+                      hintStyle: TextStyle(color: AppColors.textTertiary),
                     ),
                   ),
                 ),
@@ -798,9 +805,9 @@ class _SetAmountCard extends StatelessWidget {
                 return ActionChip(
                   label: Text('$currencySymbol${e.toStringAsFixed(0)}'),
                   onPressed: () => onQuickAdd(e.toDouble()),
-                  backgroundColor: primary.withOpacity(0.08),
+                  backgroundColor: AppColors.brandPrimary.withOpacity(0.15),
                   labelStyle: TextStyle(
-                    color: primary,
+                    color: AppColors.brandPrimary,
                     fontWeight: FontWeight.w600,
                   ),
                 );
@@ -830,11 +837,9 @@ class _FiatOptionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final primary = theme.colorScheme.primary;
-
     return Card(
       elevation: 0,
+      color: AppColors.surfaceDark, // Dark slate card #1E293B
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -843,18 +848,22 @@ class _FiatOptionCard extends StatelessWidget {
           children: [
             Row(
               children: [
-                Icon(Icons.account_balance_wallet, color: primary),
+                Icon(Icons.account_balance_wallet, color: AppColors.brandPrimary),
                 const SizedBox(width: 8),
-                const Text(
+                Text(
                   'Fiat Option',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textPrimaryLight,
+                  ),
                 ),
               ],
             ),
             const SizedBox(height: 4),
             Text(
               'Pay with IntaSend using your card or mobile money',
-              style: TextStyle(color: Colors.grey[600]),
+              style: TextStyle(color: AppColors.textSecondaryCool),
             ),
             const SizedBox(height: 16),
 
@@ -863,8 +872,10 @@ class _FiatOptionCard extends StatelessWidget {
               width: double.infinity,
               child: ElevatedButton.icon(
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: isProcessing ? Colors.grey : primary,
-                  foregroundColor: Colors.white,
+                  backgroundColor: isProcessing 
+                      ? AppColors.textTertiary 
+                      : AppColors.brandPrimary, // Dark teal button
+                  foregroundColor: AppColors.backgroundDeepNavy, // Dark navy text on teal
                   padding: const EdgeInsets.symmetric(vertical: 12),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
@@ -872,19 +883,23 @@ class _FiatOptionCard extends StatelessWidget {
                 ),
                 onPressed: isProcessing ? null : onPaymentPressed,
                 icon: isProcessing
-                    ? const SizedBox(
+                    ? SizedBox(
                         width: 20,
                         height: 20,
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
                           valueColor: AlwaysStoppedAnimation<Color>(
-                            Colors.white,
+                            AppColors.backgroundDeepNavy,
                           ),
                         ),
                       )
-                    : const Icon(Icons.payment),
+                    : Icon(Icons.payment, color: AppColors.backgroundDeepNavy),
                 label: Text(
                   isProcessing ? 'Processing...' : 'TopUp',
+                  style: TextStyle(
+                    color: AppColors.backgroundDeepNavy,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ),
             ),
@@ -930,11 +945,9 @@ class _CryptoOptionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final primary = theme.colorScheme.primary;
-
     return Card(
       elevation: 0,
+      color: AppColors.surfaceDark, // Dark slate card #1E293B
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -943,18 +956,22 @@ class _CryptoOptionCard extends StatelessWidget {
           children: [
             Row(
               children: [
-                Icon(Icons.currency_bitcoin, color: primary),
+                Icon(Icons.currency_bitcoin, color: AppColors.brandPrimary),
                 const SizedBox(width: 8),
-                const Text(
+                Text(
                   'Crypto Option',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textPrimaryLight,
+                  ),
                 ),
               ],
             ),
             const SizedBox(height: 4),
             Text(
               'Send cryptocurrency to these addresses',
-              style: TextStyle(color: Colors.grey[600]),
+              style: TextStyle(color: AppColors.textSecondaryCool),
             ),
             const SizedBox(height: 16),
 
@@ -966,9 +983,9 @@ class _CryptoOptionCard extends StatelessWidget {
                 margin: const EdgeInsets.only(bottom: 12),
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: Colors.grey[50],
+                  color: AppColors.backgroundDeepNavy,
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.grey[200]!),
+                  border: Border.all(color: AppColors.surfaceVariantDark),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -982,16 +999,17 @@ class _CryptoOptionCard extends StatelessWidget {
                         const SizedBox(width: 8),
                         Text(
                           currency,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
+                            color: AppColors.textPrimaryLight,
                           ),
                         ),
                         const Spacer(),
                         Text(
                           data['network']!,
                           style: TextStyle(
-                            color: Colors.grey[600],
+                            color: AppColors.textSecondaryCool,
                             fontSize: 12,
                           ),
                         ),
@@ -1002,18 +1020,19 @@ class _CryptoOptionCard extends StatelessWidget {
                       width: double.infinity,
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: Colors.white,
+                        color: AppColors.surfaceDark,
                         borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.grey[300]!),
+                        border: Border.all(color: AppColors.surfaceVariantDark),
                       ),
                       child: Row(
                         children: [
                           Expanded(
                             child: Text(
                               data['address']!,
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 12,
                                 fontFamily: 'monospace',
+                                color: AppColors.textPrimaryLight,
                               ),
                               overflow: TextOverflow.ellipsis,
                               maxLines: 2,
@@ -1029,10 +1048,10 @@ class _CryptoOptionCard extends StatelessWidget {
                             child: Container(
                               padding: const EdgeInsets.all(4),
                               decoration: BoxDecoration(
-                                color: primary.withOpacity(0.1),
+                                color: AppColors.brandPrimary.withOpacity(0.15),
                                 borderRadius: BorderRadius.circular(4),
                               ),
-                              child: Icon(Icons.copy, size: 16, color: primary),
+                              child: Icon(Icons.copy, size: 16, color: AppColors.brandPrimary),
                             ),
                           ),
                         ],

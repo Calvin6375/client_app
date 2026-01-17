@@ -22,10 +22,26 @@ class WalletRepository {
       return ref.onValue.map((event) {
         if (event.snapshot.exists && event.snapshot.value != null) {
           try {
-            final data = Map<String, dynamic>.from(
-              event.snapshot.value as Map,
-            );
-            final wallet = Wallet.fromJson(data);
+            Wallet wallet;
+            
+            // Handle case where response is just a number (balance only)
+            if (event.snapshot.value is num) {
+              final balance = (event.snapshot.value as num).toDouble();
+              wallet = Wallet(
+                currencyCode: currency,
+                balance: balance,
+              );
+            } else if (event.snapshot.value is Map) {
+              // Handle case where response is a full wallet object
+              final data = Map<String, dynamic>.from(
+                event.snapshot.value as Map,
+              );
+              wallet = Wallet.fromJson(data);
+            } else {
+              Logger.warning('Unexpected wallet data type in stream: ${event.snapshot.value.runtimeType}');
+              return null;
+            }
+            
             Logger.debug('Wallet balance updated: ${wallet.balance} ${wallet.currencyCode}');
             return wallet;
           } catch (e) {
@@ -102,12 +118,31 @@ class WalletRepository {
       }
       
       if (snapshot.exists && snapshot.value != null) {
-        final data = Map<String, dynamic>.from(snapshot.value as Map);
-        Logger.debug('');
-        Logger.debug('  Parsed Response Data:');
-        Logger.debug('  $data');
-        Logger.debug('');
-        final wallet = Wallet.fromJson(data);
+        Wallet wallet;
+        
+        // Handle case where response is just a number (balance only)
+        if (snapshot.value is num) {
+          final balance = (snapshot.value as num).toDouble();
+          Logger.debug('');
+          Logger.debug('  Parsed Response Data: Balance only (number) = $balance');
+          Logger.debug('');
+          wallet = Wallet(
+            currencyCode: currency,
+            balance: balance,
+          );
+        } else if (snapshot.value is Map) {
+          // Handle case where response is a full wallet object
+          final data = Map<String, dynamic>.from(snapshot.value as Map);
+          Logger.debug('');
+          Logger.debug('  Parsed Response Data:');
+          Logger.debug('  $data');
+          Logger.debug('');
+          wallet = Wallet.fromJson(data);
+        } else {
+          Logger.warning('Unexpected wallet data type: ${snapshot.value.runtimeType}');
+          return null;
+        }
+        
         Logger.debug('✅ Wallet balance fetched: ${wallet.balance} ${wallet.currencyCode}');
         Logger.debug('═══════════════════════════════════════════════════════════');
         return wallet;
@@ -180,12 +215,31 @@ class WalletRepository {
       }
       
       if (snapshot.exists && snapshot.value != null) {
-        final data = Map<String, dynamic>.from(snapshot.value as Map);
-        Logger.debug('');
-        Logger.debug('  Parsed Response Data:');
-        Logger.debug('  $data');
-        Logger.debug('');
-        final wallet = Wallet.fromJson(data);
+        Wallet wallet;
+        
+        // Handle case where response is just a number (balance only)
+        if (snapshot.value is num) {
+          final balance = (snapshot.value as num).toDouble();
+          Logger.debug('');
+          Logger.debug('  Parsed Response Data: Balance only (number) = $balance');
+          Logger.debug('');
+          wallet = Wallet(
+            currencyCode: currencyCode,
+            balance: balance,
+          );
+        } else if (snapshot.value is Map) {
+          // Handle case where response is a full wallet object
+          final data = Map<String, dynamic>.from(snapshot.value as Map);
+          Logger.debug('');
+          Logger.debug('  Parsed Response Data:');
+          Logger.debug('  $data');
+          Logger.debug('');
+          wallet = Wallet.fromJson(data);
+        } else {
+          Logger.warning('Unexpected crypto wallet data type: ${snapshot.value.runtimeType}');
+          return Wallet(currencyCode: currencyCode, balance: 0.0);
+        }
+        
         Logger.debug('✅ Crypto wallet balance fetched: ${wallet.balance} ${wallet.currencyCode}');
         Logger.debug('═══════════════════════════════════════════════════════════');
         return wallet;
@@ -213,10 +267,26 @@ class WalletRepository {
       return ref.onValue.map((event) {
         if (event.snapshot.exists && event.snapshot.value != null) {
           try {
-            final data = Map<String, dynamic>.from(
-              event.snapshot.value as Map,
-            );
-            final wallet = Wallet.fromJson(data);
+            Wallet wallet;
+            
+            // Handle case where response is just a number (balance only)
+            if (event.snapshot.value is num) {
+              final balance = (event.snapshot.value as num).toDouble();
+              wallet = Wallet(
+                currencyCode: currencyCode,
+                balance: balance,
+              );
+            } else if (event.snapshot.value is Map) {
+              // Handle case where response is a full wallet object
+              final data = Map<String, dynamic>.from(
+                event.snapshot.value as Map,
+              );
+              wallet = Wallet.fromJson(data);
+            } else {
+              Logger.warning('Unexpected crypto wallet data type in stream: ${event.snapshot.value.runtimeType}');
+              return Wallet(currencyCode: currencyCode, balance: 0.0);
+            }
+            
             Logger.debug('Crypto wallet balance updated: ${wallet.balance} ${wallet.currencyCode}');
             return wallet;
           } catch (e) {

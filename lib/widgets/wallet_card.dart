@@ -24,11 +24,21 @@ class _WalletCardState extends State<WalletCard> {
   String? _cryptoError;
   DateTime? _lastRefreshedAt;
   
+  // Multiple fiat wallets support
+  final Map<String, Wallet> _fiatWallets = {}; // currency -> wallet
+  final List<String> _availableFiatCurrencies = []; // Order of currencies
+  int _currentFiatIndex = 0;
+  final PageController _fiatPageController = PageController();
+  final PageController _cryptoPageController = PageController();
+  
   // Cache for balances to avoid unnecessary backend calls
   Wallet? _cachedFiatWallet;
   Wallet? _cachedCryptoWallet;
   DateTime? _cacheTimestamp;
   static const Duration _cacheValidityDuration = Duration(seconds: 30); // Cache valid for 30 seconds
+  
+  // Supported fiat currencies to check
+  static const List<String> _supportedFiatCurrencies = ['USD', 'KES', 'NGN', 'GHS', 'UGX', 'TZS'];
   
   @override
   void initState() {
@@ -46,6 +56,8 @@ class _WalletCardState extends State<WalletCard> {
 
   @override
   void dispose() {
+    _fiatPageController.dispose();
+    _cryptoPageController.dispose();
     super.dispose();
   }
 
@@ -86,19 +98,64 @@ class _WalletCardState extends State<WalletCard> {
         });
       }
       
-      // Load both fiat (USD) and crypto (USDT) wallets
-      final fiatWallet = await _walletRepository.getWalletBalance(user.uid);
+      // Load all available fiat currencies
+      final Map<String, Wallet> fiatWallets = {};
+      final List<String> availableCurrencies = [];
+      
+      // Try to load each supported fiat currency
+      for (final currency in _supportedFiatCurrencies) {
+        try {
+          final wallet = await _walletRepository.getWalletBalance(user.uid, currency: currency);
+          if (wallet != null && wallet.balance > 0) {
+            fiatWallets[currency] = wallet;
+            availableCurrencies.add(currency);
+          } else if (wallet != null) {
+            // Include wallets with 0 balance too, but prioritize non-zero
+            fiatWallets[currency] = wallet;
+            if (!availableCurrencies.contains(currency)) {
+              availableCurrencies.add(currency);
+            }
+          }
+        } catch (e) {
+          // Skip currencies that fail to load
+          continue;
+        }
+      }
+      
+      // Ensure at least USD is available
+      if (!fiatWallets.containsKey('USD')) {
+        final usdWallet = await _walletRepository.getWalletBalance(user.uid, currency: 'USD');
+        fiatWallets['USD'] = usdWallet ?? Wallet(currencyCode: 'USD', balance: 0.0);
+        if (!availableCurrencies.contains('USD')) {
+          availableCurrencies.insert(0, 'USD');
+        }
+      }
+      
+      // Load crypto wallet
       final cryptoWallet = await _walletRepository.getCryptoWalletBalance(user.uid, 'USDT');
       
       if (!mounted) return;
       
       // Update cache
-      _cachedFiatWallet = fiatWallet ?? Wallet(currencyCode: 'USD', balance: 0.0);
+      _cachedFiatWallet = fiatWallets[availableCurrencies.isNotEmpty ? availableCurrencies[0] : 'USD'] ?? Wallet(currencyCode: 'USD', balance: 0.0);
       _cachedCryptoWallet = cryptoWallet ?? Wallet(currencyCode: 'USDT', balance: 0.0);
       _cacheTimestamp = now;
       
       setState(() {
-        _fiatWallet = _cachedFiatWallet;
+        _fiatWallets.clear();
+        _fiatWallets.addAll(fiatWallets);
+        _availableFiatCurrencies.clear();
+        _availableFiatCurrencies.addAll(availableCurrencies);
+        
+        // Set current fiat wallet to first available or USD
+        if (_availableFiatCurrencies.isNotEmpty) {
+          _fiatWallet = _fiatWallets[_availableFiatCurrencies[0]];
+          _currentFiatIndex = 0;
+        } else {
+          _fiatWallet = Wallet(currencyCode: 'USD', balance: 0.0);
+          _currentFiatIndex = 0;
+        }
+        
         _cryptoWallet = _cachedCryptoWallet;
         _lastRefreshedAt = now;
         _fiatError = null; // Clear any previous errors
@@ -123,36 +180,153 @@ class _WalletCardState extends State<WalletCard> {
 
   @override
   Widget build(BuildContext context) {
-    final fiatWallet = _fiatWallet ?? Wallet(currencyCode: 'USD', balance: 0.0);
-    final cryptoWallet = _cryptoWallet ?? Wallet(currencyCode: 'USDT', balance: 0.0);
     final primary = Theme.of(context).colorScheme.primary;
-    
-    // Use selectedTab from parent instead of PageView
     final isFiat = widget.selectedTab == 0;
-    final currentWallet = isFiat ? fiatWallet : cryptoWallet;
-    final currentError = isFiat ? _fiatError : _cryptoError;
-    final walletTitle = isFiat ? "Fiat Wallet" : "Crypto Wallet";
     
-    return WalletCardWidget(
-      title: walletTitle,
-      currency: currentWallet.currencyCode,
-      balance: currentWallet.balance,
-      updatedAt: _lastRefreshedAt,
-      loading: _loading,
-      error: currentError,
-      backgroundColor: primary,
-                onTopUp: () async {
-                  await Navigator.of(context).pushNamed(RouteNames.topup);
-                  await _refreshBalance(forceRefresh: true);
-                },
-      onSwap: () {
-        Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (context) => SwapPage(initialFromCurrency: currentWallet.currencyCode),
-          ),
+    if (isFiat) {
+      // Fiat wallets - swipable PageView
+      if (_availableFiatCurrencies.isEmpty) {
+        // Show default USD wallet while loading
+        final defaultWallet = _fiatWallet ?? Wallet(currencyCode: 'USD', balance: 0.0);
+        return WalletCardWidget(
+          title: "Fiat Wallet",
+          currency: defaultWallet.currencyCode,
+          balance: defaultWallet.balance,
+          secondaryCurrency: null,
+          secondaryBalance: null,
+          updatedAt: _lastRefreshedAt,
+          loading: _loading,
+          error: _fiatError,
+          backgroundColor: primary,
+          onTopUp: () async {
+            await Navigator.of(context).pushNamed(RouteNames.topup);
+            await _refreshBalance(forceRefresh: true);
+          },
+          onSwap: () {
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (context) => SwapPage(initialFromCurrency: defaultWallet.currencyCode),
+              ),
+            );
+          },
         );
-      },
-    );
+      }
+      
+      // Swipable fiat wallets with page indicator
+      return Column(
+        children: [
+          SizedBox(
+            height: MediaQuery.of(context).size.width * 0.75 + 100, // Match circle size + padding
+            child: PageView.builder(
+              controller: _fiatPageController,
+              onPageChanged: (index) {
+                setState(() {
+                  _currentFiatIndex = index;
+                  if (index < _availableFiatCurrencies.length) {
+                    _fiatWallet = _fiatWallets[_availableFiatCurrencies[index]];
+                  }
+                });
+              },
+              itemCount: _availableFiatCurrencies.length,
+              itemBuilder: (context, index) {
+            final currency = _availableFiatCurrencies[index];
+            final wallet = _fiatWallets[currency] ?? Wallet(currencyCode: currency, balance: 0.0);
+            
+            // Find secondary currency to display
+            // Priority: 1) KES if USD is primary, 2) Next currency in list, 3) First other currency
+            String? secondaryCurrency;
+            double? secondaryBalance;
+            
+            if (currency == 'USD' && _fiatWallets.containsKey('KES')) {
+              // Show KES next to USD (most common pair)
+              secondaryCurrency = 'KES';
+              secondaryBalance = _fiatWallets['KES']!.balance;
+            } else {
+              // Find the next available currency that's not the current one
+              for (final otherCurrency in _availableFiatCurrencies) {
+                if (otherCurrency != currency && _fiatWallets.containsKey(otherCurrency)) {
+                  secondaryCurrency = otherCurrency;
+                  secondaryBalance = _fiatWallets[otherCurrency]?.balance;
+                  break;
+                }
+              }
+            }
+            
+            return WalletCardWidget(
+              title: "Fiat Wallet",
+              currency: wallet.currencyCode,
+              balance: wallet.balance,
+              secondaryCurrency: secondaryCurrency,
+              secondaryBalance: secondaryBalance,
+              updatedAt: _lastRefreshedAt,
+              loading: _loading && index == _currentFiatIndex,
+              error: _fiatError,
+              backgroundColor: primary,
+              onTopUp: () async {
+                await Navigator.of(context).pushNamed(RouteNames.topup);
+                await _refreshBalance(forceRefresh: true);
+              },
+              onSwap: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (context) => SwapPage(initialFromCurrency: wallet.currencyCode),
+                  ),
+                );
+              },
+            );
+          },
+            ),
+          ),
+          // Page indicator dots
+          if (_availableFiatCurrencies.length > 1)
+            Padding(
+              padding: const EdgeInsets.only(top: 0),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: List.generate(
+                  _availableFiatCurrencies.length,
+                  (index) => Container(
+                    margin: const EdgeInsets.symmetric(horizontal: 4),
+                    width: _currentFiatIndex == index ? 24 : 8,
+                    height: 8,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(4),
+                      color: _currentFiatIndex == index
+                          ? primary
+                          : primary.withValues(alpha: 0.3),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      );
+    } else {
+      // Crypto wallet
+      final cryptoWallet = _cryptoWallet ?? Wallet(currencyCode: 'USDT', balance: 0.0);
+      return WalletCardWidget(
+        title: "Crypto Wallet",
+        currency: cryptoWallet.currencyCode,
+        balance: cryptoWallet.balance,
+        secondaryCurrency: null,
+        secondaryBalance: null,
+        updatedAt: _lastRefreshedAt,
+        loading: _loading,
+        error: _cryptoError,
+        backgroundColor: primary,
+        onTopUp: () async {
+          await Navigator.of(context).pushNamed(RouteNames.topup);
+          await _refreshBalance(forceRefresh: true);
+        },
+        onSwap: () {
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (context) => SwapPage(initialFromCurrency: cryptoWallet.currencyCode),
+            ),
+          );
+        },
+      );
+    }
   }
 }
 
@@ -161,6 +335,8 @@ class WalletCardWidget extends StatelessWidget {
   final String title;
   final String currency;
   final double balance;
+  final String? secondaryCurrency; // For currency pairs (e.g., KES shown next to USD)
+  final double? secondaryBalance;
   final DateTime? updatedAt;
   final bool loading;
   final String? error;
@@ -173,6 +349,8 @@ class WalletCardWidget extends StatelessWidget {
     required this.title,
     required this.currency,
     required this.balance,
+    this.secondaryCurrency,
+    this.secondaryBalance,
     this.updatedAt,
     this.loading = false,
     this.error,
@@ -190,67 +368,58 @@ class WalletCardWidget extends StatelessWidget {
     return Center(
       child: Column(
         children: [
-          // Large circular balance display with glow effect
+          // Large circular balance display - professional metallic dark look
           Container(
             width: circleSize,
             height: circleSize,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              // Outer glow effect
+              // Very subtle professional shadows - no heavy glow
               boxShadow: [
                 BoxShadow(
-                  color: backgroundColor.withValues(alpha: 0.4),
-                  blurRadius: 40,
-                  spreadRadius: 10,
+                  color: Colors.black.withValues(alpha: 0.6), // Outer shadow
+                  blurRadius: 30,
+                  offset: const Offset(0, 8),
+                  spreadRadius: 0,
                 ),
                 BoxShadow(
-                  color: backgroundColor.withValues(alpha: 0.3),
-                  blurRadius: 60,
-                  spreadRadius: 20,
-                ),
-                BoxShadow(
-                  color: backgroundColor.withValues(alpha: 0.2),
-                  blurRadius: 80,
-                  spreadRadius: 30,
+                  color: Colors.black.withValues(alpha: 0.4), // Inner shadow hint
+                  blurRadius: 20,
+                  offset: const Offset(0, -2),
+                  spreadRadius: -5,
                 ),
               ],
             ),
             child: Container(
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                gradient: LinearGradient(
+                gradient: RadialGradient(
                   colors: [
-                    backgroundColor,
-                    backgroundColor.withValues(alpha: 0.9),
+                    AppColors.surfaceDark, // Slate-800 center #1E293B
+                    AppColors.surfaceDark.withValues(alpha: 0.95),
+                    AppColors.backgroundDeepNavy, // Deep navy edge #0F172A
                   ],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
+                  stops: const [0.0, 0.7, 1.0],
+                ),
+                // Metallic silver border for premium look
+                border: Border.all(
+                  color: Colors.grey.withValues(alpha: 0.3), // Silver-metallic border
+                  width: 1.5,
                 ),
               ),
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  // Title
-                  Text(
-                    title.toUpperCase(),
-                    style: TextStyle(
-                      color: colors.onPrimary.withValues(alpha: 0.8),
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      letterSpacing: 1.2,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  
-                  // Account number or balance label
+                  // Currency label - show only primary currency (professional uppercase)
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 32),
                     child: Text(
-                      currency,
+                      currency.toUpperCase(), // Uppercase for professional look
                       style: TextStyle(
-                        color: colors.onPrimary.withValues(alpha: 0.7),
+                        color: AppColors.textSecondaryCool, // Light gray #94A3B8
                         fontSize: 14,
                         fontWeight: FontWeight.w500,
+                        letterSpacing: 1.2, // Increased letter spacing for premium feel
                       ),
                     ),
                   ),
@@ -281,13 +450,14 @@ class WalletCardWidget extends StatelessWidget {
                       ),
                     )
                   else
+                    // Primary balance - large, bold, pure white for high contrast
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 32),
                       child: Text(
                         balance.toStringAsFixed(2),
                         style: TextStyle(
-                          fontSize: 36,
-                          color: colors.onPrimary,
+                          fontSize: 42,
+                          color: AppColors.textPrimaryLight, // Pure white #FFFFFF
                           fontWeight: FontWeight.bold,
                           letterSpacing: 1.0,
                         ),
@@ -302,27 +472,27 @@ class WalletCardWidget extends StatelessWidget {
                     mainAxisAlignment: MainAxisAlignment.center,
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-                      // Top Up Button
+                      // Top Up Button - professional flat design
                       _CircularActionButton(
                         icon: Icons.add_circle_outline,
                         label: 'Top Up',
                         onPressed: onTopUp,
-                        backgroundColor: colors.onPrimary,
-                        foregroundColor: backgroundColor,
-                        labelColor: colors.onPrimary, // White text for visibility
+                        backgroundColor: AppColors.surfaceBorder, // Dark gray #2D3748
+                        foregroundColor: AppColors.textTertiaryLight, // Light gray #E2E8F0
+                        labelColor: AppColors.textTertiaryLight,
                         isCompact: true,
                       ),
                       
                       const SizedBox(width: 20),
                       
-                      // Swap Button
+                      // Swap Button - professional flat design with border
                       _CircularActionButton(
                         icon: Icons.swap_horiz,
                         label: 'Swap',
                         onPressed: onSwap,
-                        backgroundColor: colors.onPrimary.withValues(alpha: 0.2),
-                        foregroundColor: colors.onPrimary,
-                        borderColor: colors.onPrimary.withValues(alpha: 0.7),
+                        backgroundColor: Colors.transparent,
+                        foregroundColor: AppColors.textTertiaryLight, // Light gray #E2E8F0
+                        borderColor: Colors.grey.withValues(alpha: 0.4), // Subtle border
                         isCompact: true,
                       ),
                     ],

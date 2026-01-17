@@ -229,9 +229,9 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       title: 'TruePay',
       debugShowCheckedModeBanner: false,
-      theme: _buildLightTheme(),
+      theme: _buildDarkTheme(), // Default to dark fintech theme
       darkTheme: _buildDarkTheme(),
-      themeMode: ThemeMode.system,
+      themeMode: ThemeMode.dark, // Force dark mode to match landing page
       initialRoute: RouteNames.splash,
       routes: {
         RouteNames.splash: (context) => const SplashPage(),

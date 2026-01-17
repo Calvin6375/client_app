@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:pretium/core/constants/app_colors.dart';
 
 class Currency {
   final String code; // e.g., NGN, USD
@@ -15,26 +16,39 @@ class CurrencyPickerBottomSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     return SafeArea(
       child: Container(
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+        decoration: BoxDecoration(
+          color: AppColors.surfaceDark, // Dark slate card
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             const SizedBox(height: 8),
-            Container(width: 48, height: 5, decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(3))),
+            Container(
+              width: 48,
+              height: 5,
+              decoration: BoxDecoration(
+                color: AppColors.textTertiary,
+                borderRadius: BorderRadius.circular(3),
+              ),
+            ),
             const SizedBox(height: 8),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               child: Row(
                 children: [
-                  Icon(Icons.flag, color: theme.colorScheme.primary),
+                  Icon(Icons.flag, color: AppColors.brandPrimary),
                   const SizedBox(width: 8),
-                  const Text('Select currency', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+                  Text(
+                    'Select currency',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 16,
+                      color: AppColors.textPrimaryLight,
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -42,15 +56,26 @@ class CurrencyPickerBottomSheet extends StatelessWidget {
               child: ListView.separated(
                 shrinkWrap: true,
                 itemCount: currencies.length,
-                separatorBuilder: (_, __) => const Divider(height: 1),
+                separatorBuilder: (_, __) => Divider(height: 1, color: AppColors.surfaceVariantDark),
                 itemBuilder: (context, i) {
                   final c = currencies[i];
                   final isSelected = c.code == selectedCode;
                   return ListTile(
-                    leading: CircleAvatar(child: Text(c.flagEmoji)),
-                    title: Text('${c.code}'),
-                    subtitle: Text(c.name),
-                    trailing: isSelected ? Icon(Icons.check, color: theme.colorScheme.primary) : null,
+                    leading: CircleAvatar(
+                      backgroundColor: AppColors.backgroundDeepNavy,
+                      child: Text(c.flagEmoji),
+                    ),
+                    title: Text(
+                      c.code,
+                      style: TextStyle(color: AppColors.textPrimaryLight),
+                    ),
+                    subtitle: Text(
+                      c.name,
+                      style: TextStyle(color: AppColors.textSecondaryCool),
+                    ),
+                    trailing: isSelected
+                        ? Icon(Icons.check, color: AppColors.brandPrimary)
+                        : null,
                     onTap: () {
                       Navigator.of(context).pop();
                       onSelected(c);

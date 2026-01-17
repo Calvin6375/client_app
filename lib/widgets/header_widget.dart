@@ -95,8 +95,8 @@ class HeaderWidget extends StatelessWidget {
               'Hello 👋',
               style: TextStyle(
                 fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: AppColors.getThemeColors(context).onPrimary,
+                fontWeight: FontWeight.w600, // Medium weight - professional
+                color: AppColors.textPrimaryLight, // Pure white #FFFFFF
               ),
               textAlign: TextAlign.left,
             ),
@@ -119,8 +119,8 @@ class HeaderWidget extends StatelessWidget {
               'Hello 👋',
               style: TextStyle(
                 fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: AppColors.getThemeColors(context).onPrimary,
+                fontWeight: FontWeight.w600, // Medium weight - professional
+                color: AppColors.textPrimaryLight, // Pure white #FFFFFF
               ),
               textAlign: TextAlign.left,
             ),

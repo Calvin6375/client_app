@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:pretium/features/send_money/screens/payment_method_screen.dart';
 import 'package:pretium/models/transaction_details_model.dart';
+import 'package:pretium/core/constants/app_colors.dart';
 
 class RecipientDetailsScreen extends StatefulWidget {
   final PaymentMethod paymentMethod;
@@ -74,9 +75,13 @@ class _RecipientDetailsScreenState extends State<RecipientDetailsScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
+            Text(
               'Recipient Details',
-              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+              style: TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+                color: AppColors.textPrimaryLight,
+              ),
             ),
             const SizedBox(height: 24),
             Expanded(
@@ -98,13 +103,20 @@ class _RecipientDetailsScreenState extends State<RecipientDetailsScreen> {
               onPressed: widget.onNext,
               style: ElevatedButton.styleFrom(
                 minimumSize: const Size(double.infinity, 50),
-                backgroundColor: Theme.of(context).colorScheme.primary,
-                foregroundColor: Colors.white,
+                backgroundColor: AppColors.brandPrimary,
+                foregroundColor: AppColors.backgroundDeepNavy,
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(30),
+                  borderRadius: BorderRadius.circular(12),
                 ),
               ),
-              child: const Text('Continue', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              child: Text(
+                'Continue',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.backgroundDeepNavy,
+                ),
+              ),
             ),
           ],
         ),
@@ -118,9 +130,24 @@ class _RecipientDetailsScreenState extends State<RecipientDetailsScreen> {
   }) {
     return TextFormField(
       controller: controller,
+      style: TextStyle(color: AppColors.textPrimaryLight),
       decoration: InputDecoration(
         labelText: label,
-        border: const OutlineInputBorder(),
+        labelStyle: TextStyle(color: AppColors.textSecondaryCool),
+        filled: true,
+        fillColor: AppColors.surfaceDark,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: AppColors.surfaceVariantDark),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: AppColors.surfaceVariantDark),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: AppColors.brandPrimary, width: 2),
+        ),
       ),
     );
   }
