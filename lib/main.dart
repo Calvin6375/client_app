@@ -14,71 +14,8 @@ import 'package:pretium/utils/logger.dart';
 import 'package:pretium/core/constants/app_colors.dart';
 import 'package:pretium/core/theme/theme_provider.dart';
 import 'package:pretium/features/wallet_verification/screens/wallet_verification_screen.dart';
+import 'package:pretium/services/notification_service.dart';
 import 'package:provider/provider.dart';
-
-/// Background message handler (must be top-level function)
-@pragma('vm:entry-point')
-Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
-  await Firebase.initializeApp();
-  Logger.info('Handling background message: ${message.messageId}');
-  // Handle background message here
-}
-
-/// Initialize Firebase Cloud Messaging
-Future<void> _initializeFCM() async {
-  try {
-    final messaging = FirebaseMessaging.instance;
-
-    // Request permission for notifications
-    final settings = await messaging.requestPermission(
-      alert: true,
-      badge: true,
-      sound: true,
-      provisional: false,
-    );
-
-    if (settings.authorizationStatus == AuthorizationStatus.authorized) {
-      Logger.success('User granted notification permission');
-    } else if (settings.authorizationStatus == AuthorizationStatus.provisional) {
-      Logger.info('User granted provisional notification permission');
-    } else {
-      Logger.warning('User declined or has not accepted notification permission');
-    }
-
-    // Get FCM token
-    final token = await messaging.getToken();
-    if (token != null) {
-      Logger.info('FCM Token: $token');
-      // TODO: Save token to Firestore or send to your backend
-      // This token can be used by Cloud Functions to send push notifications
-    }
-
-    // Set up background message handler
-    FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
-
-    // Handle foreground messages (optional)
-    FirebaseMessaging.onMessage.listen((RemoteMessage message) {
-      Logger.info('Received foreground message: ${message.messageId}');
-      // Handle foreground message here
-      // You can show a local notification or update UI
-    });
-
-    // Handle notification taps when app is in background
-    FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
-      Logger.info('Notification opened app: ${message.messageId}');
-      // Navigate to specific screen based on message data
-    });
-
-    // Check if app was opened from a notification
-    final initialMessage = await messaging.getInitialMessage();
-    if (initialMessage != null) {
-      Logger.info('App opened from notification: ${initialMessage.messageId}');
-      // Handle initial message
-    }
-  } catch (e) {
-    Logger.error('Failed to initialize FCM', e);
-  }
-}
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -90,8 +27,11 @@ Future<void> main() async {
     );
     Logger.success('Firebase initialized successfully');
     
-    // Initialize Firebase Cloud Messaging
-    await _initializeFCM();
+    // Register background message handler (must be done before runApp)
+    FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
+    
+    // Initialize NotificationService (will be fully initialized in MyApp)
+    // We can't fully initialize here because we need the navigator key
   } catch (e, stackTrace) {
     Logger.error('Firebase initialization failed', e, stackTrace);
     Logger.warning('App will continue but Firebase features may not work.');
@@ -109,8 +49,24 @@ bool isFirebaseInitialized() {
   }
 }
 
-class MyApp extends StatelessWidget {
+class MyApp extends StatefulWidget {
   const MyApp({super.key});
+
+  @override
+  State<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> {
+  final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
+
+  @override
+  void initState() {
+    super.initState();
+    // Initialize NotificationService after first frame
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      NotificationService().initialize(navigatorKey: _navigatorKey);
+    });
+  }
 
   ThemeData _buildLightTheme() {
     final colors = AppColors.light;
@@ -289,6 +245,7 @@ class MyApp extends StatelessWidget {
       child: Consumer<ThemeProvider>(
         builder: (context, themeProvider, _) {
           return MaterialApp(
+            navigatorKey: _navigatorKey,
             title: 'TruePay',
             debugShowCheckedModeBanner: false,
             theme: _buildLightTheme(), // Light theme with glassmorphism
