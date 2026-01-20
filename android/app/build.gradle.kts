@@ -12,6 +12,7 @@ android {
     // ndkVersion = "26.3.11579264"  // Align with plugin requirements - commented out to let AGP choose
 
     compileOptions {
+        isCoreLibraryDesugaringEnabled = true
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
     }
@@ -46,6 +47,7 @@ flutter {
 }
 
 dependencies {
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
     // Import the Firebase BoM
     implementation(platform("com.google.firebase:firebase-bom:34.2.0"))
     // Add the dependencies for Firebase products you want to use
