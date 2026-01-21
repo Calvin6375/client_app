@@ -5,6 +5,7 @@ import 'package:pretium/features/auth/widgets/wallet_icon_header.dart';
 import 'package:pretium/features/auth/widgets/welcome_text_section.dart';
 import 'package:pretium/features/home/screens/landing_page.dart';
 import 'package:pretium/services/auth_service.dart';
+import 'package:pretium/services/notification_service.dart';
 import 'package:pretium/utils/logger.dart';
 import 'package:pretium/core/constants/app_colors.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -129,10 +130,23 @@ class _LoginScreenState extends State<LoginPage> {
 
                             setState(() => _isLoading = true);
                             try {
-                              await _authService.signIn(
+                              final credential = await _authService.signIn(
                                 email: email,
                                 password: password,
                               );
+                              
+                              // Setup notifications after successful login
+                              if (credential.user?.uid != null) {
+                                try {
+                                  await NotificationService()
+                                      .setupNotifications(credential.user!.uid);
+                                } catch (e) {
+                                  Logger.warning(
+                                      'Failed to setup notifications after login: $e');
+                                  // Don't block login if notification setup fails
+                                }
+                              }
+                              
                               if (!mounted) return;
                               Navigator.pushAndRemoveUntil(
                                 context,

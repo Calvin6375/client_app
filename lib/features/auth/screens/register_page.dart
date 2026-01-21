@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:pretium/services/auth_service.dart';
+import 'package:pretium/services/notification_service.dart';
 import 'package:pretium/repositories/user_repository.dart';
 import 'package:pretium/utils/logger.dart';
 import 'package:pretium/core/constants/app_colors.dart';
@@ -134,12 +135,22 @@ class _RegisterPageState extends State<RegisterPage> {
         phoneNumber: phoneNumber.isNotEmpty ? phoneNumber : null,
       );
       
+      // 4) Setup notifications (save FCM token)
+      Logger.info('📤 Step 3: Setting up notifications...');
+      try {
+        await NotificationService().setupNotifications(uid);
+        Logger.success('✅ Notifications setup completed');
+      } catch (e) {
+        Logger.warning('⚠️ Failed to setup notifications: $e');
+        // Don't block registration if notification setup fails
+      }
+      
       Logger.success('✅ ===== CREATE USER SUCCESS =====');
       Logger.success('   User ID: $uid');
       Logger.success('   Email: $email');
       Logger.success('==================================');
 
-      // 3) Navigate to landing page on success
+      // 5) Navigate to landing page on success
       if (!mounted) return;
       Navigator.pushAndRemoveUntil(
         context,

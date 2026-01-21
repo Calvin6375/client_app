@@ -11,7 +11,6 @@ import 'package:pretium/features/topup/services/intasend_service.dart';
 import 'package:pretium/repositories/wallet_repository.dart';
 import 'package:pretium/repositories/user_repository.dart';
 import 'package:pretium/services/firebase_payment_service.dart';
-import 'package:pretium/services/order_service.dart';
 import 'package:pretium/core/constants/app_colors.dart';
 
 // Top Up main screen composed of smaller widgets
@@ -29,7 +28,6 @@ class _TopUpPageState extends State<TopUpPage> {
   final TextEditingController _lastNameCtrl = TextEditingController();
 
   final WalletRepository _walletRepository = WalletRepository();
-  final OrderService _orderService = OrderService();
   final UserRepository _userRepository = UserRepository();
 
   bool _hideBalance = false;
@@ -249,27 +247,7 @@ class _TopUpPageState extends State<TopUpPage> {
         final launchFailed = result['launch_failed'] ?? false;
         
         if (checkoutUrl != null && paymentId != null) {
-          // Create order in Firestore
-          try {
-            final user = FirebaseAuth.instance.currentUser;
-            if (user != null) {
-              await _orderService.createOrder(
-                userId: user.uid,
-                amount: amount,
-                currency: _selectedCurrency,
-                orderType: 'topup',
-                metadata: {
-                  'paymentId': paymentId,
-                  'checkoutUrl': checkoutUrl,
-                },
-              );
-              print('✅ Order created in Firestore');
-            }
-          } catch (e) {
-            print('⚠️ Failed to create order: $e');
-            // Don't block the payment flow if order creation fails
-          }
-          
+          // Order is created by createPayment Cloud Function; do not create from client.
           // Show payment launched dialog with URL for manual access if needed
           String message = result['message'] ?? 'Checkout created successfully';
           if (launchFailed) {
