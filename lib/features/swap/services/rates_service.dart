@@ -113,12 +113,24 @@ class RatesService {
         });
       }
     } else {
-      // No cache, trigger fetch
+      // No cache - for fiat-to-fiat try composed rate from legs (same API as Send Money)
+      final baseUpper = base.toUpperCase();
+      final quoteUpper = quote.toUpperCase();
+      if (baseUpper != quoteUpper && _isFiat(baseUpper) && _isFiat(quoteUpper)) {
+        final r1 = _pairToRate[baseUpper + 'USDT'];
+        final r2 = _pairToRate['USDT' + quoteUpper];
+        if (r1 != null && r2 != null && r1 > 0 && r2 > 0) {
+          final composed = r1 * r2;
+          _updateRate(base, quote, composed);
+          return composed;
+        }
+      }
+      // Trigger fetch
       _fetchRate(base, quote).catchError((e) {
         Logger.error('Error in background rate fetch', e);
       });
     }
-    
+
     // Return cached rate or default
     return _pairToRate[key] ?? 1.0;
   }
@@ -229,13 +241,37 @@ class RatesService {
     return updated?.sellRate;
   }
 
+  /// True if currency is a supported fiat (used for fiat-to-fiat rate via USDT).
+  bool _isFiat(String currency) {
+    final c = currency.toUpperCase();
+    return c == 'USD' || _isSupportedFiat(c);
+  }
+
   /// Fetch rate from API for a specific currency pair
   /// Falls back to Binance rates if customer rates are not available
   Future<void> _fetchRate(String base, String quote) async {
     try {
       final baseUpper = base.toUpperCase();
       final quoteUpper = quote.toUpperCase();
-      
+
+      // Fiat-to-fiat (e.g. USD/KES): compute via USDT using same API as Send Money
+      if (baseUpper != quoteUpper && _isFiat(baseUpper) && _isFiat(quoteUpper)) {
+        Logger.debug('🔄 Fetching fiat-to-fiat rate $baseUpper/$quoteUpper via USDT');
+        await _fetchRate(base, 'USDT');
+        await _fetchRate('USDT', quote);
+        final key1 = (baseUpper + 'USDT');
+        final key2 = ('USDT' + quoteUpper);
+        final r1 = _pairToRate[key1];
+        final r2 = _pairToRate[key2];
+        if (r1 != null && r2 != null && r1 > 0 && r2 > 0) {
+          final rate = r1 * r2;
+          Logger.debug('✅ Fiat-to-fiat rate $baseUpper/$quoteUpper = $rate (via USDT)');
+          _updateRate(base, quote, rate);
+          _updateRate(quote, base, 1.0 / rate);
+        }
+        return;
+      }
+
       // Handle USD/USDT pair - try to fetch from API first, then default to 1.0
       if ((baseUpper == 'USD' && quoteUpper == 'USDT') ||
           (baseUpper == 'USDT' && quoteUpper == 'USD')) {

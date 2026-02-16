@@ -250,7 +250,9 @@ class HeaderWidget extends StatelessWidget {
                     color: colors.textPrimary, // Theme-aware icon color
                     size: 28,
                   ),
-                  onPressed: () {},
+                  onPressed: () {
+                    Navigator.of(context).pushNamed(RouteNames.notifications);
+                  },
                 ),
                 Positioned(
                   right: 12,

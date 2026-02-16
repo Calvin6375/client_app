@@ -11,10 +11,16 @@ class TransactionsService {
   static const String _baseUrl = 
       'https://us-central1-truepay-72060.cloudfunctions.net/transactionsApi/transactions';
 
+  /// Default limit when not specified (matches backend default).
+  static const int defaultLimit = 50;
+
+  /// Maximum limit allowed by the transactions API.
+  static const int maxLimit = 100;
+
   /// Get transactions with optional filters and pagination
   /// 
   /// Parameters:
-  /// - [limit]: Number of results (default: 50, max: 100)
+  /// - [limit]: Number of results (default: 50, max: 100). Capped at [maxLimit] on the frontend.
   /// - [source]: "firestore", "realtime", or "both" (default: "both")
   /// - [startAfter]: Transaction ID for pagination
   /// - [type]: Filter by type: "credit", "debit", etc.
@@ -53,9 +59,14 @@ class TransactionsService {
         throw Exception('Failed to get authentication token');
       }
 
+      // Cap limit to API maximum
+      final effectiveLimit = limit != null
+          ? (limit > maxLimit ? maxLimit : limit)
+          : null;
+
       // Build query parameters
       final queryParams = <String, String>{};
-      if (limit != null) queryParams['limit'] = limit.toString();
+      if (effectiveLimit != null) queryParams['limit'] = effectiveLimit.toString();
       if (source != null) queryParams['source'] = source;
       if (startAfter != null) queryParams['startAfter'] = startAfter;
       if (type != null) queryParams['type'] = type;

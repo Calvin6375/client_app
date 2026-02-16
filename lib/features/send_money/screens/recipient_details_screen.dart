@@ -2,6 +2,31 @@ import 'package:flutter/material.dart';
 import 'package:pretium/features/send_money/screens/payment_method_screen.dart';
 import 'package:pretium/models/transaction_details_model.dart';
 import 'package:pretium/core/constants/app_colors.dart';
+import 'package:pretium/features/auth/widgets/phone_number_field.dart';
+
+/// Default dial code for "You Receive" currency (recipient country).
+String _defaultDialCodeForCurrency(String currency) {
+  switch (currency.toUpperCase()) {
+    case 'KES':
+      return '254'; // Kenya
+    case 'USD':
+      return '1'; // United States
+    case 'NGN':
+      return '234'; // Nigeria
+    case 'GHS':
+      return '233'; // Ghana
+    case 'UGX':
+      return '256'; // Uganda
+    case 'TZS':
+      return '255'; // Tanzania
+    case 'USDT':
+      return '1'; // Default to US for crypto
+    case 'ZAR':
+      return '27'; // South Africa
+    default:
+      return '254';
+  }
+}
 
 class RecipientDetailsScreen extends StatefulWidget {
   final PaymentMethod paymentMethod;
@@ -27,14 +52,21 @@ class _RecipientDetailsScreenState extends State<RecipientDetailsScreen> {
   late final TextEditingController _phoneCtrl;
   late final TextEditingController _bankNameCtrl;
   late final TextEditingController _accountNumberCtrl;
+  late String _selectedCountryCode;
 
   @override
   void initState() {
     super.initState();
     _fullNameCtrl = TextEditingController(text: widget.initialDetails.recipientFullName);
-    _phoneCtrl = TextEditingController(text: widget.initialDetails.recipientPhoneNumber);
     _bankNameCtrl = TextEditingController(text: widget.initialDetails.recipientBankName);
     _accountNumberCtrl = TextEditingController(text: widget.initialDetails.recipientAccountNumber);
+
+    _selectedCountryCode = _defaultDialCodeForCurrency(widget.initialDetails.toCurrency);
+    final digitsOnly = widget.initialDetails.recipientPhoneNumber.replaceAll(RegExp(r'[^\d]'), '');
+    final phoneText = digitsOnly.startsWith(_selectedCountryCode)
+        ? digitsOnly.substring(_selectedCountryCode.length)
+        : digitsOnly;
+    _phoneCtrl = TextEditingController(text: phoneText);
 
     _fullNameCtrl.addListener(_onChanged);
     _phoneCtrl.addListener(_onChanged);
@@ -43,10 +75,18 @@ class _RecipientDetailsScreenState extends State<RecipientDetailsScreen> {
   }
 
   void _onChanged() {
+    final fullPhone = _phoneCtrl.text.trim().isEmpty
+        ? ''
+        : '$_selectedCountryCode${_phoneCtrl.text.replaceAll(RegExp(r'[^\d]'), '')}';
     widget.onUpdate(
       TransactionDetails(
+        amountToSend: widget.initialDetails.amountToSend,
+        fromCurrency: widget.initialDetails.fromCurrency,
+        amountToReceive: widget.initialDetails.amountToReceive,
+        toCurrency: widget.initialDetails.toCurrency,
+        paymentMethod: widget.initialDetails.paymentMethod,
         recipientFullName: _fullNameCtrl.text,
-        recipientPhoneNumber: _phoneCtrl.text,
+        recipientPhoneNumber: fullPhone,
         recipientBankName: _bankNameCtrl.text,
         recipientAccountNumber: _accountNumberCtrl.text,
       ),
@@ -91,7 +131,21 @@ class _RecipientDetailsScreenState extends State<RecipientDetailsScreen> {
                 children: [
                   _buildTextField(label: 'Full Name', controller: _fullNameCtrl),
                   const SizedBox(height: 24),
-                  _buildTextField(label: 'Phone Number', controller: _phoneCtrl),
+                  PhoneNumberField(
+                    phoneController: _phoneCtrl,
+                    initialCountryCode: _selectedCountryCode,
+                    onCountryCodeChanged: (code) {
+                      setState(() => _selectedCountryCode = code);
+                      _onChanged();
+                    },
+                    primaryColor: Theme.of(context).colorScheme.primary,
+                    labelColor: Theme.of(context).colorScheme.primary,
+                    validator: (value) {
+                      if (value == null || value.trim().isEmpty) return null;
+                      if (value.trim().length < 7) return 'Enter a valid phone number';
+                      return null;
+                    },
+                  ),
                   if (widget.paymentMethod == PaymentMethod.bank) ...[
                     const SizedBox(height: 24),
                     _buildTextField(label: 'Bank Name', controller: _bankNameCtrl),

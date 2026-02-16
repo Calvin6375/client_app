@@ -8,4 +8,5 @@ class RouteNames {
   static const topup = '/topup';
   static const swap = '/swap';
   static const walletVerification = '/wallet_verification';
+  static const notifications = '/notifications';
 }

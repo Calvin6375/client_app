@@ -38,7 +38,7 @@ class _WalletCardState extends State<WalletCard> {
   static const Duration _cacheValidityDuration = Duration(seconds: 30); // Cache valid for 30 seconds
   
   // Supported fiat currencies to check
-  static const List<String> _supportedFiatCurrencies = ['USD', 'KES', 'NGN', 'GHS', 'UGX', 'TZS'];
+  static const List<String> _supportedFiatCurrencies = ['USD', 'KES', 'NGN', 'GHS', 'UGX'];
   
   @override
   void initState() {
@@ -212,11 +212,12 @@ class _WalletCardState extends State<WalletCard> {
         );
       }
       
-      // Swipable fiat wallets with page indicator
+      // Swipable fiat wallets with page indicator (height aligned with Crypto layout - no extra space)
       return Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
           SizedBox(
-            height: MediaQuery.of(context).size.width * 0.75 + 100, // Match circle size + padding
+            height: MediaQuery.of(context).size.width * 0.75 + 48, // Circle size + minimal space for page indicator
             child: PageView.builder(
               controller: _fiatPageController,
               onPageChanged: (index) {

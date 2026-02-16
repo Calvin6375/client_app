@@ -55,6 +55,35 @@ class _RegisterPageState extends State<RegisterPage> {
   final AuthService _authService = AuthService();
   final UserRepository _userRepository = UserRepository();
 
+  @override
+  void initState() {
+    super.initState();
+    _firstNameController.addListener(_onFormChanged);
+    _lastNameController.addListener(_onFormChanged);
+    _emailController.addListener(_onFormChanged);
+    _passwordController.addListener(_onFormChanged);
+    _phoneController.addListener(_onFormChanged);
+  }
+
+  void _onFormChanged() {
+    setState(() {});
+  }
+
+  /// True when all fields are filled and terms are accepted (button becomes active).
+  bool get _canSubmit {
+    final firstName = _firstNameController.text.trim();
+    final lastName = _lastNameController.text.trim();
+    final email = _emailController.text.trim();
+    final password = _passwordController.text;
+    final phoneDigits = _phoneController.text.trim().replaceAll(RegExp(r'[^\d]'), '');
+    return firstName.isNotEmpty &&
+        lastName.isNotEmpty &&
+        email.isNotEmpty &&
+        password.isNotEmpty &&
+        phoneDigits.length >= 7 &&
+        _termsAccepted;
+  }
+
   Future<void> _register() async {
     if (!_formKey.currentState!.validate()) {
       return;
@@ -178,6 +207,11 @@ class _RegisterPageState extends State<RegisterPage> {
 
   @override
   void dispose() {
+    _firstNameController.removeListener(_onFormChanged);
+    _lastNameController.removeListener(_onFormChanged);
+    _emailController.removeListener(_onFormChanged);
+    _passwordController.removeListener(_onFormChanged);
+    _phoneController.removeListener(_onFormChanged);
     _firstNameController.dispose();
     _lastNameController.dispose();
     _emailController.dispose();
@@ -300,18 +334,23 @@ class _RegisterPageState extends State<RegisterPage> {
                   ),
 
                   const SizedBox(height: 24),
-                  // Create Account button
+                  // Create Account button - active only when all fields filled and terms accepted
                   SizedBox(
                     width: double.infinity,
                     height: 48,
                     child: ElevatedButton(
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: Theme.of(context).colorScheme.primary,
+                        backgroundColor: _canSubmit && !_isSubmitting
+                            ? Theme.of(context).colorScheme.primary
+                            : Colors.grey.shade400,
+                        foregroundColor: Colors.white,
+                        disabledBackgroundColor: Colors.grey.shade400,
+                        disabledForegroundColor: Colors.white70,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(8),
                         ),
                       ),
-                      onPressed: _isSubmitting ? null : _register,
+                      onPressed: (_canSubmit && !_isSubmitting) ? _register : null,
                       child: Text(
                         _isSubmitting ? 'Creating...' : 'Create Account',
                         style: const TextStyle(fontSize: 18, color: Colors.white),
