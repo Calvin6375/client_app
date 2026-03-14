@@ -4,8 +4,30 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:pretium/services/payment_service.dart';
 import 'package:pretium/utils/logger.dart';
 
-/// Custom IntaSend service using HTTP API calls
-/// This replaces the problematic intasend_flutter plugin
+// ---------------------------------------------------------------------------
+// IntaSend integration (fiat top-up)
+// ---------------------------------------------------------------------------
+// This service handles the IntaSend payment flow for topping up the user's
+// fiat wallet. It is used only when the user taps "Top up with IntaSend" on
+// the Top Up screen (topup_page.dart). It does not affect the separate
+// TransFi top-up flow.
+//
+// Flow:
+// 1. createCheckout() — POST to IntaSend API to get a checkout URL.
+// 2. PaymentService.createPayment() — Cloud Function creates a payment record
+//    in Firebase (with checkout URL and intasendCheckoutId) and returns paymentId.
+// 3. launchCheckout() — Open the checkout URL in the device browser.
+// 4. handlePaymentWebhook() — When the user opens the link, we notify the
+//    backend (link_opened). IntaSend sends success/failure webhooks to the
+//    backend separately.
+//
+// Where it's used: TopUpPage._processIntaSendPayment() and the "Top up with
+// IntaSend" button in _FiatOptionCard. Configuration: TopUpPage.intaSendPublicKey
+// and TopUpPage.isTestMode.
+// ---------------------------------------------------------------------------
+
+/// Custom IntaSend service using HTTP API calls.
+/// Replaces the intasend_flutter plugin; uses IntaSend's REST API directly.
 class IntaSendService {
   static const String _baseUrlTest = 'https://sandbox.intasend.com/api/v1';
   static const String _baseUrlLive = 'https://payment.intasend.com/api/v1';
@@ -20,11 +42,11 @@ class IntaSendService {
 
   String get _baseUrl => isTestMode ? _baseUrlTest : _baseUrlLive;
 
-  // NOTE: Wallet balance fetching has been moved to WalletRepository
-  // Use WalletRepository.streamWalletBalance() or getWalletBalance() instead
+  // NOTE: Wallet balance fetching has been moved to WalletRepository.
+  // Use WalletRepository.streamWalletBalance() or getWalletBalance() instead.
 
-
-  /// Create a checkout session using IntaSend API
+  /// Creates a checkout session via IntaSend API (POST /api/v1/checkout/).
+  /// Returns a map with success, checkout_url, and data from IntaSend.
   Future<Map<String, dynamic>> createCheckout({
     required double amount,
     required String email,
@@ -93,7 +115,9 @@ class IntaSendService {
     }
   }
 
-  /// Launch the checkout URL in browser
+  /// Launches the IntaSend checkout URL in the device browser.
+  /// If paymentId is set, notifies the backend (handlePaymentWebhook) that the
+  /// link was opened (e.g. for manual retry).
   Future<bool> launchCheckout(String checkoutUrl, {String? paymentId}) async {
     Logger.debug('Launching checkout URL: $checkoutUrl');
     
@@ -142,8 +166,9 @@ class IntaSendService {
     return false;
   }
 
-  /// Complete payment flow - create checkout and launch URL
-  /// Uses Cloud Functions for payment creation (secure server-side)
+  /// Full IntaSend flow: create checkout → create payment record (Cloud
+  /// Function) → launch checkout URL. The Cloud Function stores the checkout
+  /// URL and intasendCheckoutId; webhooks from IntaSend are handled server-side.
   Future<Map<String, dynamic>> processPayment({
     required double amount,
     required String email,
@@ -286,7 +311,8 @@ class IntaSendService {
     };
   }
 
-  /// Check payment status (for webhook verification)
+  /// Fetches IntaSend checkout status (GET /api/v1/checkout/:id/). Used for
+  /// webhook verification or manual status checks.
   Future<Map<String, dynamic>> checkPaymentStatus(String checkoutId) async {
     final url = Uri.parse('$_baseUrl/checkout/$checkoutId/');
     

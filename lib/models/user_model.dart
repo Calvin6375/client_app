@@ -7,6 +7,11 @@ class UserModel {
   final String lastName;
   final String email;
   final String? phoneNumber;
+  final String? streetAddress;
+  final String? city;
+  final String? state;
+  final String? postalCode;
+  final String? country;
   final DateTime? createdAt;
   final DateTime? updatedAt;
 
@@ -16,6 +21,11 @@ class UserModel {
     required this.lastName,
     required this.email,
     this.phoneNumber,
+    this.streetAddress,
+    this.city,
+    this.state,
+    this.postalCode,
+    this.country,
     this.createdAt,
     this.updatedAt,
   });
@@ -29,6 +39,11 @@ class UserModel {
       lastName: data['lastName'] ?? '',
       email: data['email'] ?? '',
       phoneNumber: data['phoneNumber'] as String?,
+      streetAddress: data['streetAddress'] as String?,
+      city: data['city'] as String?,
+      state: data['state'] as String?,
+      postalCode: data['postalCode'] as String?,
+      country: data['country'] as String?,
       createdAt: (data['createdAt'] as Timestamp?)?.toDate(),
       updatedAt: (data['updatedAt'] as Timestamp?)?.toDate(),
     );
@@ -42,6 +57,11 @@ class UserModel {
       lastName: json['lastName'] ?? '',
       email: json['email'] ?? '',
       phoneNumber: json['phoneNumber'] as String?,
+      streetAddress: json['streetAddress'] as String?,
+      city: json['city'] as String?,
+      state: json['state'] as String?,
+      postalCode: json['postalCode'] as String?,
+      country: json['country'] as String?,
       createdAt: json['createdAt'] != null
           ? (json['createdAt'] is Timestamp
               ? (json['createdAt'] as Timestamp).toDate()
@@ -62,6 +82,11 @@ class UserModel {
       'lastName': lastName,
       'email': email,
       if (phoneNumber != null) 'phoneNumber': phoneNumber,
+      if (streetAddress != null) 'streetAddress': streetAddress,
+      if (city != null) 'city': city,
+      if (state != null) 'state': state,
+      if (postalCode != null) 'postalCode': postalCode,
+      if (country != null) 'country': country,
       if (createdAt != null) 'createdAt': Timestamp.fromDate(createdAt!),
       'updatedAt': FieldValue.serverTimestamp(),
     };
@@ -74,6 +99,11 @@ class UserModel {
     String? lastName,
     String? email,
     String? phoneNumber,
+    String? streetAddress,
+    String? city,
+    String? state,
+    String? postalCode,
+    String? country,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) {
@@ -83,6 +113,11 @@ class UserModel {
       lastName: lastName ?? this.lastName,
       email: email ?? this.email,
       phoneNumber: phoneNumber ?? this.phoneNumber,
+      streetAddress: streetAddress ?? this.streetAddress,
+      city: city ?? this.city,
+      state: state ?? this.state,
+      postalCode: postalCode ?? this.postalCode,
+      country: country ?? this.country,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );

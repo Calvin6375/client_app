@@ -50,6 +50,7 @@ dependencies:
   # HTTP requests for payment integration
   http: ^0.13.4
   url_launcher: ^6.2.1
+  crypto: ^3.0.3
   # intasend_flutter: ^0.0.2  # Using custom HTTP implementation instead
   confetti: ^0.7.0
   provider: ^6.1.1
