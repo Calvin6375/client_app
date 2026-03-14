@@ -15,6 +15,11 @@ class UserRepository {
     required String lastName,
     required String email,
     String? phoneNumber,
+    String? streetAddress,
+    String? city,
+    String? state,
+    String? postalCode,
+    String? country,
   }) async {
     try {
       Logger.info('Creating user profile for: $uid');
@@ -29,6 +34,21 @@ class UserRepository {
       
       if (phoneNumber != null && phoneNumber.isNotEmpty) {
         profileData['phoneNumber'] = phoneNumber;
+      }
+      if (streetAddress != null && streetAddress.isNotEmpty) {
+        profileData['streetAddress'] = streetAddress;
+      }
+      if (city != null && city.isNotEmpty) {
+        profileData['city'] = city;
+      }
+      if (state != null && state.isNotEmpty) {
+        profileData['state'] = state;
+      }
+      if (postalCode != null && postalCode.isNotEmpty) {
+        profileData['postalCode'] = postalCode;
+      }
+      if (country != null && country.isNotEmpty) {
+        profileData['country'] = country;
       }
       
       // Log request body
@@ -122,6 +142,11 @@ class UserRepository {
     String? lastName,
     String? email,
     String? phoneNumber,
+    String? streetAddress,
+    String? city,
+    String? state,
+    String? postalCode,
+    String? country,
   }) async {
     try {
       Logger.info('Updating user profile: $uid');
@@ -134,6 +159,11 @@ class UserRepository {
       if (lastName != null) updateData['lastName'] = lastName;
       if (email != null) updateData['email'] = email;
       if (phoneNumber != null) updateData['phoneNumber'] = phoneNumber;
+      if (streetAddress != null) updateData['streetAddress'] = streetAddress;
+      if (city != null) updateData['city'] = city;
+      if (state != null) updateData['state'] = state;
+      if (postalCode != null) updateData['postalCode'] = postalCode;
+      if (country != null) updateData['country'] = country;
       
       await _firestore.collection(_collection).doc(uid).update(updateData);
       

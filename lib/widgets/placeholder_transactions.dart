@@ -23,6 +23,11 @@ class _PlaceholderTransactionsState extends State<PlaceholderTransactions> {
     _loadTransactions();
   }
 
+  /// Call this from the parent (e.g. pull-to-refresh) to reload transactions.
+  Future<void> refreshTransactions() async {
+    await _loadTransactions();
+  }
+
   Future<void> _loadTransactions() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
@@ -81,9 +86,8 @@ class _PlaceholderTransactionsState extends State<PlaceholderTransactions> {
 
     return Column(
       children: transactions.map((transaction) {
-        final title = transaction.title ?? 
-                     (transaction.isDebit ? 'Sent' : 'Received') ?? 
-                     'Transaction';
+        final title = transaction.title ??
+                     (transaction.isDebit ? 'Sent' : 'Received');
         final subtitle = transaction.subtitle ?? 
                         transaction.description ?? 
                         (transaction.currency ?? '');

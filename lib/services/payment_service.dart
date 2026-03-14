@@ -249,8 +249,9 @@ Diagnostic steps:
     }
   }
 
-  /// Handle payment webhook via Cloud Function
-  /// This is called when IntaSend sends a webhook notification
+  /// Handle payment webhook via Cloud Function. Used by the IntaSend flow
+  /// (e.g. when the user opens the checkout link or when IntaSend sends
+  /// success/failure). See IntaSendService and topup_page.dart.
   Future<Map<String, dynamic>> handlePaymentWebhook({
     required String paymentId,
     required String status,

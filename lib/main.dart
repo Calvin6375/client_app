@@ -14,6 +14,7 @@ import 'package:pretium/utils/logger.dart';
 import 'package:pretium/core/constants/app_colors.dart';
 import 'package:pretium/core/theme/theme_provider.dart';
 import 'package:pretium/features/wallet_verification/screens/wallet_verification_screen.dart';
+import 'package:pretium/features/notifications/screens/notifications_page.dart';
 import 'package:pretium/services/notification_service.dart';
 import 'package:provider/provider.dart';
 
@@ -262,6 +263,7 @@ class _MyAppState extends State<MyApp> {
               RouteNames.swap: (context) => const SwapPage(),
               RouteNames.walletVerification: (context) =>
                   const WalletVerificationScreen(),
+              RouteNames.notifications: (context) => const NotificationsPage(),
             },
           );
         },

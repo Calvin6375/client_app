@@ -1,13 +1,15 @@
-// First, add this to your pubspec.yaml:
-// dependencies:
-//   intasend_flutter: ^latest_version
+// Top-up screen: fiat (IntaSend or TransFi) and crypto options.
+// IntaSend: uses IntaSendService + PaymentService.createPayment (Cloud Function).
+// TransFi: uses TransFiService only; standalone, no Cloud Function.
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:pretium/features/topup/services/intasend_service.dart';
+import 'package:pretium/features/topup/services/transfi_service.dart';
 import 'package:pretium/repositories/wallet_repository.dart';
 import 'package:pretium/repositories/user_repository.dart';
 import 'package:pretium/services/firebase_payment_service.dart';
@@ -37,9 +39,14 @@ class _TopUpPageState extends State<TopUpPage> {
   bool _isProcessingPayment = false;
   bool _isLoadingBalance = false;
 
-  // IntaSend configuration
+  // IntaSend configuration — used only by "Top up with IntaSend" (intasend_service.dart).
   static const String intaSendPublicKey ='ISPubKey_live_c2dbd636-a9a5-4a90-bdb8-dc7e7c7401a2';
   static const bool isTestMode = false;
+
+  // TransFi configuration (standalone; does not use IntaSend or createPayment Cloud Function)
+  static const String transfiPublicKey = 'pk_sandbox_ceaa4a8428d6b1968b72546891f74942952cceeb78f841ca'; // Set your TransFi PUBLIC_KEY
+  static const String transfiSecretKey = 'sk_sandbox_0cfe2684654c778255b551382ce778845e2424162d46e46212ff76b282e7ceda'; // Set your TransFi SECRET_KEY
+  static const String transfiPaymentLinkId = '6995b526e30aa438c5c0c8f2'; // e.g. 6995b526e30aa438c5c0c8f2
 
 
   bool _isFirebaseInitialized() {
@@ -163,7 +170,8 @@ class _TopUpPageState extends State<TopUpPage> {
     setState(() {});
   }
 
-  // FIXED: Using the official IntaSend Flutter plugin
+  /// IntaSend flow: validate → create checkout (IntaSendService) → create
+  /// payment record (Cloud Function) → show dialog and optionally launch URL.
   Future<void> _processIntaSendPayment() async {
     print('\n🚀 Starting IntaSend payment process...');
     print('Fiat balance: $_fiatBalance');
@@ -274,6 +282,110 @@ class _TopUpPageState extends State<TopUpPage> {
     }
   }
 
+  /// TransFi payment flow (standalone; does not use IntaSend or Cloud Function createPayment).
+  Future<void> _processTransFiPayment() async {
+    if (_amountCtrl.text.isEmpty) {
+      _showError('Please enter an amount');
+      return;
+    }
+    if (_emailCtrl.text.isEmpty ||
+        _firstNameCtrl.text.isEmpty ||
+        _lastNameCtrl.text.isEmpty) {
+      _showError('User profile data is missing. Please ensure your profile is complete.');
+      return;
+    }
+    final amount = double.tryParse(_amountCtrl.text) ?? 0.0;
+    if (amount <= 0) {
+      _showError('Please enter a valid amount');
+      return;
+    }
+    if (transfiPublicKey.isEmpty || transfiSecretKey.isEmpty || transfiPaymentLinkId.isEmpty) {
+      _showError('TransFi is not configured. Please set TransFi keys and payment link ID.');
+      return;
+    }
+
+    setState(() {
+      _isProcessingPayment = true;
+    });
+
+    try {
+      String? userPhone;
+      String? phoneCode;
+      String? country;
+      String? city;
+      String? state;
+      String? street;
+      String? postalCode;
+      try {
+        final user = FirebaseAuth.instance.currentUser;
+        if (user != null) {
+          final profile = await _userRepository.getUserProfile(user.uid);
+          userPhone = profile?.phoneNumber;
+          country = profile?.country;
+          city = profile?.city;
+          state = profile?.state;
+          street = profile?.streetAddress;
+          postalCode = profile?.postalCode;
+          // TransFi often expects +1 for US; normalize if we have country
+          if (country == 'US' || country == 'USA') phoneCode = '+1';
+        }
+      } catch (_) {}
+
+      final transfi = TransFiService(
+        publicKey: transfiPublicKey,
+        secretKey: transfiSecretKey,
+      );
+      final result = await transfi.createPaymentInvoice(
+        paymentLinkId: transfiPaymentLinkId,
+        amount: amount,
+        currency: _selectedCurrency,
+        email: _emailCtrl.text.trim(),
+        firstName: _firstNameCtrl.text.trim(),
+        lastName: _lastNameCtrl.text.trim(),
+        phone: userPhone,
+        phoneCode: phoneCode,
+        country: country,
+        city: city,
+        state: state,
+        street: street,
+        postalCode: postalCode,
+      );
+
+      if (result['success'] == true) {
+        final checkoutUrl = result['checkout_url'] as String?;
+        final invoiceId = result['invoiceId'] as String? ?? 'transfi-invoice';
+        if (checkoutUrl != null && checkoutUrl.isNotEmpty) {
+          _showPaymentLaunchedDialog(
+            checkoutUrl,
+            invoiceId,
+            'TransFi invoice created. Complete payment in the browser.',
+            isTransFi: true,
+          );
+          try {
+            final uri = Uri.parse(checkoutUrl);
+            await launchUrl(uri, mode: LaunchMode.externalApplication);
+          } catch (_) {}
+        } else {
+          _showError(
+            'TransFi did not return a checkout URL. '
+            'Check the debug console for the API response. '
+            'Ensure your payment link and keys are correct for the Create Payment Invoice API.',
+          );
+        }
+      } else {
+        _showError(result['error']?.toString() ?? 'TransFi payment failed');
+      }
+    } catch (e) {
+      _showError('Error processing TransFi payment: $e');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isProcessingPayment = false;
+        });
+      }
+    }
+  }
+
   void _showError(String message) {
     print('❌ Showing error dialog: $message');
     showDialog(
@@ -302,7 +414,8 @@ class _TopUpPageState extends State<TopUpPage> {
     );
   }
 
-  void _showPaymentLaunchedDialog(String checkoutUrl, String paymentId, String? message) {
+  void _showPaymentLaunchedDialog(String checkoutUrl, String paymentId, String? message, {bool isTransFi = false}) {
+    final providerLabel = isTransFi ? 'TransFi' : 'IntaSend';
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
@@ -320,10 +433,10 @@ class _TopUpPageState extends State<TopUpPage> {
                     color: Theme.of(context).colorScheme.primary,
                   ),
                   const SizedBox(width: 12),
-                  const Expanded(
+                  Expanded(
                     child: Text(
-                      'IntaSend checkout is ready!',
-                      style: TextStyle(fontWeight: FontWeight.bold),
+                      '$providerLabel checkout is ready!',
+                      style: const TextStyle(fontWeight: FontWeight.bold),
                     ),
                   ),
                 ],
@@ -546,7 +659,8 @@ class _TopUpPageState extends State<TopUpPage> {
                     firstNameController: _firstNameCtrl,
                     lastNameController: _lastNameCtrl,
                     isProcessing: _isProcessingPayment,
-                    onPaymentPressed: _processIntaSendPayment,
+                    onIntaSendPressed: _processIntaSendPayment,
+                    onTransFiPressed: _processTransFiPayment,
                   ),
                   const SizedBox(height: 16),
                   const _CryptoOptionCard(),
@@ -833,14 +947,16 @@ class _FiatOptionCard extends StatelessWidget {
   final TextEditingController firstNameController;
   final TextEditingController lastNameController;
   final bool isProcessing;
-  final VoidCallback onPaymentPressed;
+  final VoidCallback onIntaSendPressed;
+  final VoidCallback onTransFiPressed;
 
   const _FiatOptionCard({
     required this.emailController,
     required this.firstNameController,
     required this.lastNameController,
     required this.isProcessing,
-    required this.onPaymentPressed,
+    required this.onIntaSendPressed,
+    required this.onTransFiPressed,
   });
 
   @override
@@ -889,26 +1005,26 @@ class _FiatOptionCard extends StatelessWidget {
             ),
             const SizedBox(height: 4),
             Text(
-              'Pay with IntaSend using your card or mobile money',
+              'Pay with IntaSend or TransFi (card or mobile money)',
               style: TextStyle(color: colors.textSecondary),
             ),
             const SizedBox(height: 16),
 
-            // IntaSend checkout button
+            // IntaSend button
             SizedBox(
               width: double.infinity,
               child: ElevatedButton.icon(
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: isProcessing 
-                      ? colors.textTertiary 
-                      : Theme.of(context).colorScheme.primary, // Theme-aware primary button
-                  foregroundColor: isDark ? colors.onPrimary : Colors.white, // Theme-aware foreground
+                  backgroundColor: isProcessing
+                      ? colors.textTertiary
+                      : Theme.of(context).colorScheme.primary,
+                  foregroundColor: isDark ? colors.onPrimary : Colors.white,
                   padding: const EdgeInsets.symmetric(vertical: 12),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
                 ),
-                onPressed: isProcessing ? null : onPaymentPressed,
+                onPressed: isProcessing ? null : onIntaSendPressed,
                 icon: isProcessing
                     ? SizedBox(
                         width: 20,
@@ -922,9 +1038,32 @@ class _FiatOptionCard extends StatelessWidget {
                       )
                     : Icon(Icons.payment, color: isDark ? colors.onPrimary : Colors.white),
                 label: Text(
-                  isProcessing ? 'Processing...' : 'TopUp',
+                  isProcessing ? 'Processing...' : 'Top up with IntaSend',
                   style: TextStyle(
                     color: isDark ? colors.onPrimary : Colors.white,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
+            // TransFi button (standalone; does not use IntaSend)
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  side: BorderSide(color: Theme.of(context).colorScheme.primary),
+                ),
+                onPressed: isProcessing ? null : onTransFiPressed,
+                icon: Icon(Icons.link, size: 20, color: Theme.of(context).colorScheme.primary),
+                label: Text(
+                  'Top up with TransFi',
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.primary,
                     fontWeight: FontWeight.w600,
                   ),
                 ),

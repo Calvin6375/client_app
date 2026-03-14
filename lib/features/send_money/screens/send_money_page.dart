@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:pretium/features/send_money/screens/send_amount_screen.dart';
 import 'package:pretium/features/send_money/screens/payment_method_screen.dart';
 import 'package:pretium/features/send_money/screens/review_details_screen.dart';
 import 'package:pretium/features/send_money/screens/recipient_details_screen.dart';
+import 'package:pretium/features/send_money/services/send_money_order_service.dart';
 import 'package:pretium/models/transaction_details_model.dart';
-import 'package:pretium/services/order_service.dart';
 import 'package:pretium/core/constants/app_colors.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
@@ -22,7 +23,7 @@ class SendMoneyPage extends StatefulWidget {
 class _SendMoneyPageState extends State<SendMoneyPage> {
   SendMoneyStep _step = SendMoneyStep.amount;
   late final TransactionDetails _transactionDetails;
-  final OrderService _orderService = OrderService();
+  bool _isSubmittingSendMoney = false;
   
   @override
   void initState() {
@@ -55,46 +56,69 @@ class _SendMoneyPageState extends State<SendMoneyPage> {
   }
 
   void _nextStep() async {
-    setState(() {
-      if (_step == SendMoneyStep.amount) {
-        _step = SendMoneyStep.payment;
-      } else if (_step == SendMoneyStep.recipientDetails) {
-        _step = SendMoneyStep.review;
-      } else if (_step == SendMoneyStep.review) {
-        // Create order when transaction is finalized
-        _createSendMoneyOrder();
-        Navigator.of(context).pop();
-      }
-    });
-  }
-
-  Future<void> _createSendMoneyOrder() async {
-    try {
+    if (_step == SendMoneyStep.amount) {
+      setState(() => _step = SendMoneyStep.payment);
+    } else if (_step == SendMoneyStep.recipientDetails) {
+      setState(() => _step = SendMoneyStep.review);
+    } else if (_step == SendMoneyStep.review) {
       final user = FirebaseAuth.instance.currentUser;
-      if (user != null && _transactionDetails.amountToSend > 0) {
-        await _orderService.createOrder(
-          userId: user.uid,
-          amount: _transactionDetails.amountToSend,
-          currency: _transactionDetails.fromCurrency,
-          orderType: 'send_money',
-          metadata: {
-            'fromCurrency': _transactionDetails.fromCurrency,
-            'toCurrency': _transactionDetails.toCurrency,
-            'amountToReceive': _transactionDetails.amountToReceive,
-            'recipientFullName': _transactionDetails.recipientFullName,
-            'recipientPhoneNumber': _transactionDetails.recipientPhoneNumber,
-            'paymentMethod': _transactionDetails.paymentMethod.toString(),
-            if (_transactionDetails.recipientBankName != null)
-              'recipientBankName': _transactionDetails.recipientBankName,
-            if (_transactionDetails.recipientAccountNumber != null)
-              'recipientAccountNumber': _transactionDetails.recipientAccountNumber,
-          },
+      if (user == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Please sign in to send money')),
         );
-        print('✅ Send money order created in Firestore');
+        return;
       }
-    } catch (e) {
-      print('⚠️ Failed to create send money order: $e');
-      // Don't block the transaction flow if order creation fails
+      final amount = _transactionDetails.amountToSend;
+      if (amount <= 0) return;
+      final phone = _transactionDetails.recipientPhoneNumber.trim();
+      if (phone.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Recipient phone number is required')),
+        );
+        return;
+      }
+
+      setState(() => _isSubmittingSendMoney = true);
+      try {
+        final result = await createSendMoneyOrder(
+          recipientPhoneNumber: phone.startsWith('+') ? phone : '+$phone',
+          amount: amount,
+          currency: _transactionDetails.fromCurrency,
+          note: null,
+        );
+        if (!mounted) return;
+        setState(() => _isSubmittingSendMoney = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Sent ${result.amount} ${result.currency} successfully'),
+            backgroundColor: Colors.green.shade700,
+          ),
+        );
+        Navigator.of(context).pop();
+      } on FirebaseFunctionsException catch (e) {
+        if (!mounted) return;
+        setState(() => _isSubmittingSendMoney = false);
+        final message = switch (e.code) {
+          'unauthenticated' => 'Please sign in to send money.',
+          'invalid-argument' => 'Invalid request. You cannot send to yourself.',
+          'not-found' => 'Recipient not found. Please check the phone number.',
+          'failed-precondition' => 'Insufficient balance. You don\'t have enough funds to send this amount.',
+          'internal' => 'Something went wrong. Please try again.',
+          _ => 'Send money failed. Please try again.',
+        };
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(message), backgroundColor: Colors.red.shade700),
+        );
+      } catch (e) {
+        if (!mounted) return;
+        setState(() => _isSubmittingSendMoney = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Send money failed. Please try again.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
@@ -108,6 +132,10 @@ class _SendMoneyPageState extends State<SendMoneyPage> {
         _step = SendMoneyStep.recipientDetails;
       }
     });
+  }
+
+  void _goToStep(SendMoneyStep step) {
+    setState(() => _step = step);
   }
 
   Widget _buildCurrentStep() {
@@ -131,6 +159,9 @@ class _SendMoneyPageState extends State<SendMoneyPage> {
         return ReviewDetailsScreen(
           onNext: _nextStep,
           details: _transactionDetails,
+          onEditTransferDetails: () => _goToStep(SendMoneyStep.amount),
+          onEditRecipientDetails: () => _goToStep(SendMoneyStep.recipientDetails),
+          isSubmitting: _isSubmittingSendMoney,
         );
     }
   }

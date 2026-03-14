@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:confetti/confetti.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:pretium/features/swap/services/rates_service.dart';
+import 'package:pretium/features/swap/services/swap_order_service.dart';
 import 'package:pretium/features/swap/widgets/currency_picker_bottom_sheet.dart';
 import 'package:pretium/repositories/wallet_repository.dart';
-import 'package:pretium/services/order_service.dart';
 import 'package:pretium/utils/logger.dart';
 import 'package:pretium/core/constants/app_colors.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -26,8 +27,8 @@ class _SwapPageState extends State<SwapPage> {
   // State for the swap flow
   final _rates = RatesService();
   final _walletRepository = WalletRepository();
-  final _orderService = OrderService();
   final _fromCtrl = TextEditingController();
+  bool _isSubmittingSwap = false;
   String _fromCurrency = 'USD';
   String _toCurrency = 'USDT';
   double _fromBalance = 0.0;
@@ -59,33 +60,77 @@ class _SwapPageState extends State<SwapPage> {
     if (_step == _SwapStep.input) {
       setState(() => _step = _SwapStep.confirmation);
     } else if (_step == _SwapStep.confirmation) {
-      // Create order when swap is confirmed
-      try {
-        final user = FirebaseAuth.instance.currentUser;
-        if (user != null) {
-          final fromAmount = double.tryParse(_fromCtrl.text) ?? 0;
-          await _orderService.createOrder(
-            userId: user.uid,
-            amount: fromAmount,
-            currency: _fromCurrency,
-            orderType: 'swap',
-            metadata: {
-              'fromCurrency': _fromCurrency,
-              'toCurrency': _toCurrency,
-              'fromAmount': fromAmount,
-              'toAmount': fromAmount * _rate,
-              'rate': _rate,
-            },
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Please sign in to swap')),
           );
-          print('✅ Swap order created in Firestore');
         }
-      } catch (e) {
-        print('⚠️ Failed to create swap order: $e');
-        // Don't block the swap flow if order creation fails
+        return;
       }
-      
-      setState(() => _step = _SwapStep.success);
-      _showSuccessDialog();
+
+      final fromAmount = double.tryParse(_fromCtrl.text) ?? 0;
+      if (fromAmount <= 0) return;
+
+      setState(() => _isSubmittingSwap = true);
+
+      try {
+        final fee = fromAmount * 0.005;
+        final toAmount = fromAmount * _rate;
+
+        final result = await createSwapOrder(
+          fromCurrency: _fromCurrency,
+          toCurrency: _toCurrency,
+          fromAmount: fromAmount,
+          exchangeRate: _rate,
+          feeRate: 0.005,
+          fee: fee,
+          toAmount: toAmount,
+        );
+
+        if (!mounted) return;
+
+        if (result.newBalances != null) {
+          final nb = result.newBalances!;
+          final fromBal = nb[_fromCurrency];
+          final toBal = nb[_toCurrency];
+          if (fromBal != null) _fromBalance = (fromBal as num).toDouble();
+          if (toBal != null) _toBalance = (toBal as num).toDouble();
+          setState(() {});
+        } else {
+          await _loadBalances();
+        }
+
+        setState(() {
+          _isSubmittingSwap = false;
+          _step = _SwapStep.success;
+        });
+        _showSuccessDialog();
+      } on FirebaseFunctionsException catch (e) {
+        if (!mounted) return;
+        setState(() => _isSubmittingSwap = false);
+        final message = switch (e.code) {
+          'unauthenticated' => 'Please sign in to swap.',
+          'invalid-argument' => 'Invalid swap request. Please check your input.',
+          'failed-precondition' => 'Insufficient balance. You don\'t have enough $_fromCurrency to complete this swap.',
+          'internal' => 'Something went wrong. Please try again.',
+          _ => 'Swap failed. Please try again.',
+        };
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(message), backgroundColor: Colors.red.shade700),
+        );
+      } catch (e, st) {
+        Logger.error('Swap order failed', e, st);
+        if (!mounted) return;
+        setState(() => _isSubmittingSwap = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Swap failed. Please try again.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
@@ -200,9 +245,10 @@ class _SwapPageState extends State<SwapPage> {
 
   Future<void> _showSuccessDialog() async {
     _confettiController.play();
+    final navigator = Navigator.of(context);
     await showDialog(
       context: context,
-      builder: (context) {
+      builder: (dialogContext) {
             final colors = AppColors.getThemeColors(context);
             final isDark = Theme.of(context).brightness == Brightness.dark;
             final primary = Theme.of(context).colorScheme.primary;
@@ -237,8 +283,8 @@ class _SwapPageState extends State<SwapPage> {
                   width: double.infinity,
                   child: ElevatedButton(
                     onPressed: () {
-                      Navigator.of(context).pop();
-                      setState(() => _step = _SwapStep.input);
+                      navigator.pop(); // Dismiss dialog
+                      navigator.pop(); // Pop swap page to navigate to home
                     },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: primary,
@@ -364,6 +410,7 @@ class _SwapPageState extends State<SwapPage> {
             toCurrency: _toCurrency,
             rate: _rate,
             onNext: _nextStep,
+            isSubmitting: _isSubmittingSwap,
           ),
           // Success is a dialog, so this is just a placeholder
           const SizedBox.shrink(),
@@ -713,6 +760,7 @@ class _SwapConfirmationScreen extends StatelessWidget {
   final double toAmount;
   final String toCurrency;
   final double rate;
+  final bool isSubmitting;
 
   const _SwapConfirmationScreen({
     required this.onNext,
@@ -721,6 +769,7 @@ class _SwapConfirmationScreen extends StatelessWidget {
     required this.toAmount,
     required this.toCurrency,
     required this.rate,
+    this.isSubmitting = false,
   });
 
   @override
@@ -774,24 +823,34 @@ class _SwapConfirmationScreen extends StatelessWidget {
           ),
           const Spacer(),
           ElevatedButton(
-            onPressed: onNext,
+            onPressed: isSubmitting ? null : onNext,
             style: ElevatedButton.styleFrom(
               padding: const EdgeInsets.symmetric(vertical: 16),
               backgroundColor: primary,
               foregroundColor: Colors.white,
+              disabledBackgroundColor: colors.textTertiary,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),
               ),
               minimumSize: const Size(double.infinity, 50),
             ),
-            child: Text(
-              'Confirm Swap',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
-              ),
-            ),
+            child: isSubmitting
+                ? SizedBox(
+                    height: 24,
+                    width: 24,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                    ),
+                  )
+                : Text(
+                    'Confirm Swap',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
           ),
         ],
       ),

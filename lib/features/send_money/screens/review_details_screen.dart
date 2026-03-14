@@ -5,7 +5,18 @@ import 'package:pretium/core/constants/app_colors.dart';
 class ReviewDetailsScreen extends StatelessWidget {
   final VoidCallback onNext;
   final TransactionDetails details;
-  const ReviewDetailsScreen({super.key, required this.onNext, required this.details});
+  final VoidCallback? onEditTransferDetails;
+  final VoidCallback? onEditRecipientDetails;
+  final bool isSubmitting;
+
+  const ReviewDetailsScreen({
+    super.key,
+    required this.onNext,
+    required this.details,
+    this.onEditTransferDetails,
+    this.onEditRecipientDetails,
+    this.isSubmitting = false,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -31,6 +42,7 @@ class ReviewDetailsScreen extends StatelessWidget {
                 _buildDetailsCard(
                   context,
                   title: 'Transfer details',
+                  onEdit: onEditTransferDetails,
                   children: [
                     _DetailRow(label: 'You send', value: '${details.amountToSend.toStringAsFixed(2)} ${details.fromCurrency}'),
                     const _DetailRow(label: 'Arto+ fees', value: 'Free'),
@@ -42,6 +54,7 @@ class ReviewDetailsScreen extends StatelessWidget {
                 _buildDetailsCard(
                   context,
                   title: 'Recipient details',
+                  onEdit: onEditRecipientDetails,
                   children: [
                     _buildRecipientTile(
                       context,
@@ -56,29 +69,41 @@ class ReviewDetailsScreen extends StatelessWidget {
           ),
           const SizedBox(height: 24),
           ElevatedButton(
-            onPressed: onNext,
+            onPressed: isSubmitting ? null : onNext,
             style: ElevatedButton.styleFrom(
               padding: const EdgeInsets.symmetric(vertical: 16),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               minimumSize: const Size(double.infinity, 50),
               backgroundColor: Theme.of(context).colorScheme.primary,
               foregroundColor: isDark ? colors.onPrimary : Colors.white,
+              disabledBackgroundColor: colors.textTertiary,
             ),
-            child: Text(
-              'Continue',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: isDark ? colors.onPrimary : Colors.white,
-              ),
-            ),
+            child: isSubmitting
+                ? SizedBox(
+                    height: 24,
+                    width: 24,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        isDark ? colors.onPrimary : Colors.white,
+                      ),
+                    ),
+                  )
+                : Text(
+                    'Continue',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: isDark ? colors.onPrimary : Colors.white,
+                    ),
+                  ),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildDetailsCard(BuildContext context, {required String title, required List<Widget> children}) {
+  Widget _buildDetailsCard(BuildContext context, {required String title, VoidCallback? onEdit, required List<Widget> children}) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final colors = AppColors.getThemeColors(context);
     return Container(
@@ -119,7 +144,7 @@ class ReviewDetailsScreen extends StatelessWidget {
                   ),
                 ),
                 TextButton.icon(
-                  onPressed: () {},
+                  onPressed: onEdit,
                   icon: Icon(Icons.edit, size: 16, color: Theme.of(context).colorScheme.primary),
                   label: Text(
                     'Edit',

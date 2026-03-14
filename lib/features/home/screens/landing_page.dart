@@ -29,25 +29,33 @@ class _DashboardScreenState extends State<DashboardScreen> {
   int _selectedIndex = 0;
   int _selectedTab = 0; // For pill-shaped tabs: 0 = Fiat, 1 = Crypto
   final GlobalKey<State<WalletCard>> _walletCardKey = GlobalKey<State<WalletCard>>();
+  final GlobalKey<State<PlaceholderTransactions>> _transactionsKey = GlobalKey<State<PlaceholderTransactions>>();
 
   void _onItemTapped(int index) {
     setState(() {
       _selectedIndex = index;
     });
   }
-  
+
   Future<void> _handleRefresh() async {
     // Refresh wallet balance when user pulls down
     final walletCardState = _walletCardKey.currentState;
     if (walletCardState != null) {
-      // Call the refreshBalance method using dynamic dispatch
       try {
         await (walletCardState as dynamic).refreshBalance(forceRefresh: true);
       } catch (e) {
         // If method doesn't exist, ignore
       }
     }
-    // Add a small delay for better UX
+    // Refresh recent transactions (get transaction endpoint)
+    final transactionsState = _transactionsKey.currentState;
+    if (transactionsState != null) {
+      try {
+        await (transactionsState as dynamic).refreshTransactions();
+      } catch (e) {
+        // If method doesn't exist, ignore
+      }
+    }
     await Future.delayed(const Duration(milliseconds: 500));
   }
 
@@ -110,20 +118,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       ],
                     ),
                   ),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 12),
                   // Large circular wallet display
                   WalletCard(
                     key: _walletCardKey,
                     selectedTab: _selectedTab,
                   ),
-                const SizedBox(height: 20),
+                const SizedBox(height: 12),
                 // Financial Services grid
                 const FinancialServices(),
                 const SizedBox(height: 40),
                 // Recent Transactions
                 const RecentTransactionsHeader(),
                 const SizedBox(height: 16),
-                const PlaceholderTransactions(),
+                PlaceholderTransactions(key: _transactionsKey),
                 const SizedBox(height: 24),
               ],
             ),
