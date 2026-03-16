@@ -2,60 +2,14 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
-import 'package:pretium/services/auth_service.dart';
 import 'package:pretium/app/route_names.dart';
 import 'package:pretium/core/constants/app_colors.dart';
 
 class HeaderWidget extends StatelessWidget {
   HeaderWidget({super.key});
 
-  final AuthService _authService = AuthService();
-
   bool _isFirebaseInitialized() {
     return Firebase.apps.isNotEmpty;
-  }
-
-  Future<void> _showLogoutDialog(BuildContext context) async {
-    return showDialog<void>(
-      context: context,
-      builder: (BuildContext dialogContext) {
-        return AlertDialog(
-          title: const Text('Logout'),
-          content: const Text('Are you sure you want to logout?'),
-          actions: <Widget>[
-            TextButton(
-              child: const Text('No'),
-              onPressed: () {
-                Navigator.of(dialogContext).pop();
-              },
-            ),
-            TextButton(
-              child: const Text('Yes'),
-              onPressed: () async {
-                Navigator.of(dialogContext).pop();
-                try {
-                  await _authService.signOut();
-                  if (context.mounted) {
-                    Navigator.of(context).pushNamedAndRemoveUntil(
-                      RouteNames.login,
-                      (route) => false,
-                    );
-                  }
-                } catch (e) {
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('Logout failed: ${e.toString()}'),
-                      ),
-                    );
-                  }
-                }
-              },
-            ),
-          ],
-        );
-      },
-    );
   }
 
   Widget _buildClickableAvatar(
@@ -65,7 +19,7 @@ class HeaderWidget extends StatelessWidget {
   ) {
     final colors = AppColors.getThemeColors(context);
     return InkWell(
-      onTap: () => _showLogoutDialog(context),
+      onTap: () => Navigator.of(context).pushNamed(RouteNames.walletSettings),
       borderRadius: BorderRadius.circular(20),
       child: CircleAvatar(
         backgroundColor: Theme.of(context).brightness == Brightness.dark

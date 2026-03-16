@@ -39,7 +39,7 @@ class _TopUpPageState extends State<TopUpPage> {
   bool _isProcessingPayment = false;
   bool _isLoadingBalance = false;
 
-  // IntaSend configuration — used only by "Top up with IntaSend" (intasend_service.dart).
+  // IntaSend configuration — used only by "Local TopUp" (intasend_service.dart).
   static const String intaSendPublicKey ='ISPubKey_live_c2dbd636-a9a5-4a90-bdb8-dc7e7c7401a2';
   static const bool isTestMode = false;
 
@@ -1038,7 +1038,7 @@ class _FiatOptionCard extends StatelessWidget {
                       )
                     : Icon(Icons.payment, color: isDark ? colors.onPrimary : Colors.white),
                 label: Text(
-                  isProcessing ? 'Processing...' : 'Top up with IntaSend',
+                  isProcessing ? 'Processing...' : 'Local TopUp',
                   style: TextStyle(
                     color: isDark ? colors.onPrimary : Colors.white,
                     fontWeight: FontWeight.w600,
@@ -1061,7 +1061,7 @@ class _FiatOptionCard extends StatelessWidget {
                 onPressed: isProcessing ? null : onTransFiPressed,
                 icon: Icon(Icons.link, size: 20, color: Theme.of(context).colorScheme.primary),
                 label: Text(
-                  'Top up with TransFi',
+                  'International TopUp',
                   style: TextStyle(
                     color: Theme.of(context).colorScheme.primary,
                     fontWeight: FontWeight.w600,
@@ -1141,7 +1141,7 @@ class _CryptoOptionCard extends StatelessWidget {
                 Icon(Icons.currency_bitcoin, color: primary),
                 const SizedBox(width: 8),
                 Text(
-                  'Crypto Option',
+                  'Direct Crypto Deposit',
                   style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.w600,
