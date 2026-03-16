@@ -9,4 +9,7 @@ class RouteNames {
   static const swap = '/swap';
   static const walletVerification = '/wallet_verification';
   static const notifications = '/notifications';
+  static const transactions = '/transactions';
+  static const walletSettings = '/wallet_settings';
+  static const wallet = '/wallet';
 }

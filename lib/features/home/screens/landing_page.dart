@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:pretium/features/send_money/screens/send_money_page.dart';
 import 'package:pretium/core/constants/app_colors.dart';
+import 'package:pretium/app/route_names.dart';
 import '/widgets/header_widget.dart';
 import '/widgets/wallet_card.dart';
 import '/widgets/financial_service.dart';
@@ -176,7 +177,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
               color: _selectedIndex == 0 
                   ? primary // Theme-aware primary color when active
                   : colors.textTertiary, // Theme-aware tertiary when inactive
-              onPressed: () => _onItemTapped(0),
+              onPressed: () {
+                _onItemTapped(0);
+                Navigator.of(context).pushNamed(RouteNames.wallet);
+              },
             ),
             GestureDetector(
               onTap: () {
@@ -213,7 +217,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
               color: _selectedIndex == 2 
                   ? primary // Theme-aware primary color when active
                   : colors.textTertiary, // Theme-aware tertiary when inactive
-              onPressed: () => _onItemTapped(2),
+              onPressed: () {
+                _onItemTapped(2);
+                Navigator.of(context).pushNamed(RouteNames.transactions);
+              },
             ),
           ],
           ),

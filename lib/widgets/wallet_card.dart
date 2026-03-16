@@ -399,6 +399,12 @@ class WalletCardWidget extends StatelessWidget {
                         offset: const Offset(0, 4),
                         spreadRadius: 0,
                       ),
+                      // Light greenish-teal outline/glow (wallet page design)
+                      BoxShadow(
+                        color: (backgroundColor).withValues(alpha: 0.25),
+                        blurRadius: 20,
+                        spreadRadius: -2,
+                      ),
                     ],
             ),
             child: Container(

@@ -15,6 +15,9 @@ import 'package:pretium/core/constants/app_colors.dart';
 import 'package:pretium/core/theme/theme_provider.dart';
 import 'package:pretium/features/wallet_verification/screens/wallet_verification_screen.dart';
 import 'package:pretium/features/notifications/screens/notifications_page.dart';
+import 'package:pretium/features/transactions/screens/transactions_page.dart';
+import 'package:pretium/features/wallet_settings/screens/wallet_settings_page.dart';
+import 'package:pretium/features/wallet/screens/wallet_page.dart';
 import 'package:pretium/services/notification_service.dart';
 import 'package:provider/provider.dart';
 
@@ -264,6 +267,9 @@ class _MyAppState extends State<MyApp> {
               RouteNames.walletVerification: (context) =>
                   const WalletVerificationScreen(),
               RouteNames.notifications: (context) => const NotificationsPage(),
+              RouteNames.transactions: (context) => const TransactionsPage(),
+              RouteNames.walletSettings: (context) => const WalletSettingsPage(),
+              RouteNames.wallet: (context) => const WalletPage(),
             },
           );
         },
