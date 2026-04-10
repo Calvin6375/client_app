@@ -294,7 +294,7 @@ class _WalletCardState extends State<WalletCard> {
                       borderRadius: BorderRadius.circular(4),
                       color: _currentFiatIndex == index
                           ? primary
-                          : primary.withValues(alpha: 0.3),
+                          : primary.withOpacity(0.3),
                     ),
                   ),
                 ),
@@ -379,13 +379,13 @@ class WalletCardWidget extends StatelessWidget {
               boxShadow: Theme.of(context).brightness == Brightness.dark
                   ? [
                       BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.6), // Outer shadow for dark
+                        color: Colors.black.withOpacity(0.6), // Outer shadow for dark
                         blurRadius: 30,
                         offset: const Offset(0, 8),
                         spreadRadius: 0,
                       ),
                       BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.4), // Inner shadow hint
+                        color: Colors.black.withOpacity(0.4), // Inner shadow hint
                         blurRadius: 20,
                         offset: const Offset(0, -2),
                         spreadRadius: -5,
@@ -394,14 +394,14 @@ class WalletCardWidget extends StatelessWidget {
                   : [
                       // Subtle shadow - soft and diffused (matching image)
                       BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.06), // Very subtle shadow
+                        color: Colors.black.withOpacity(0.06), // Very subtle shadow
                         blurRadius: 24,
                         offset: const Offset(0, 4),
                         spreadRadius: 0,
                       ),
                       // Light greenish-teal outline/glow (wallet page design)
                       BoxShadow(
-                        color: (backgroundColor).withValues(alpha: 0.25),
+                        color: (backgroundColor).withOpacity(0.25),
                         blurRadius: 20,
                         spreadRadius: -2,
                       ),
@@ -414,7 +414,7 @@ class WalletCardWidget extends StatelessWidget {
                   colors: Theme.of(context).brightness == Brightness.dark
                       ? [
                           AppColors.surfaceDark, // Slate-800 center #1E293B
-                          AppColors.surfaceDark.withValues(alpha: 0.95),
+                          AppColors.surfaceDark.withOpacity(0.95),
                           AppColors.backgroundDeepNavy, // Deep navy edge #0F172A
                         ]
                       : [
@@ -428,8 +428,8 @@ class WalletCardWidget extends StatelessWidget {
                 // Border adapts to theme - very subtle for light mode
                 border: Border.all(
                   color: Theme.of(context).brightness == Brightness.dark
-                      ? Colors.grey.withValues(alpha: 0.3) // Silver-metallic border for dark
-                      : Colors.white.withValues(alpha: 0.4), // Very subtle white border
+                      ? Colors.grey.withOpacity(0.3) // Silver-metallic border for dark
+                      : Colors.white.withOpacity(0.4), // Very subtle white border
                   width: 1,
                 ),
               ),
@@ -529,7 +529,7 @@ class WalletCardWidget extends StatelessWidget {
                             ? AppColors.textTertiaryLight // Light gray for dark mode
                             : colors.primary, // Uniform primary color (teal/green) for icon
                         borderColor: Theme.of(context).brightness == Brightness.dark
-                            ? Colors.grey.withValues(alpha: 0.4) // Subtle border for dark
+                            ? Colors.grey.withOpacity(0.4) // Subtle border for dark
                             : const Color(0xFFE5E7EB), // Light gray border for light mode
                         labelColor: Theme.of(context).brightness == Brightness.dark
                             ? AppColors.textTertiaryLight
@@ -602,7 +602,7 @@ class _CircularActionButton extends StatelessWidget {
                 : [
                     // Subtle shadow for light mode buttons
                     BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.04),
+                      color: Colors.black.withOpacity(0.04),
                       blurRadius: 6,
                       offset: const Offset(0, 2),
                     ),

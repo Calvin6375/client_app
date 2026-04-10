@@ -82,13 +82,13 @@ class TransactionDetailPage extends StatelessWidget {
               decoration: BoxDecoration(
                 color: colors.surface,
                 borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: colors.border.withValues(alpha: 0.5)),
+                border: Border.all(color: colors.border.withOpacity(0.5)),
               ),
               child: Column(
                 children: [
                   CircleAvatar(
                     radius: 28,
-                    backgroundColor: primary.withValues(alpha: 0.15),
+                    backgroundColor: primary.withOpacity(0.15),
                     child: Icon(_iconFor(title), color: primary, size: 32),
                   ),
                   const SizedBox(height: 16),

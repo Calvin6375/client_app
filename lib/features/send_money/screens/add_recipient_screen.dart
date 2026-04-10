@@ -25,7 +25,7 @@ class _AddRecipientScreenState extends State<AddRecipientScreen> {
         ),
         backgroundColor: isDark
             ? Colors.transparent  // Transparent for dark mode
-            : primary.withValues(alpha: 0.08), // Light mint tint (8% opacity) for light mode
+            : primary.withOpacity(0.08), // Light mint tint (8% opacity) for light mode
         elevation: 0,
         iconTheme: IconThemeData(color: colors.textPrimary),
       ),

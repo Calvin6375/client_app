@@ -366,7 +366,7 @@ class _SpendingChart extends StatelessWidget {
                 width: 24,
                 height: h.clamp(4.0, maxHeight),
                 decoration: BoxDecoration(
-                  color: primary.withValues(alpha: 0.8),
+                  color: primary.withOpacity(0.8),
                   borderRadius: BorderRadius.circular(4),
                 ),
               ),
@@ -486,7 +486,7 @@ class _TransactionTile extends StatelessWidget {
           child: Row(
             children: [
               CircleAvatar(
-                backgroundColor: primary.withValues(alpha: 0.15),
+                backgroundColor: primary.withOpacity(0.15),
                 child: Icon(_iconFor(title), color: primary, size: 22),
               ),
               const SizedBox(width: 16),

@@ -105,7 +105,7 @@ class FinancialServices extends StatelessWidget {
                 boxShadow: isDark
                     ? [
                         BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.3),
+                          color: Colors.black.withOpacity(0.3),
                           blurRadius: 8,
                           offset: const Offset(0, 3),
                         ),
@@ -113,7 +113,7 @@ class FinancialServices extends StatelessWidget {
                     : [
                         // Minimal shadow for light mode
                         BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.04),
+                          color: Colors.black.withOpacity(0.04),
                           blurRadius: 6,
                           offset: const Offset(0, 2),
                         ),

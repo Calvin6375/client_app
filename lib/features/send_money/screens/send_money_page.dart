@@ -177,7 +177,7 @@ class _SendMoneyPageState extends State<SendMoneyPage> {
       appBar: AppBar(
         backgroundColor: isDark
             ? Colors.transparent  // Transparent for dark mode
-            : primary.withValues(alpha: 0.08), // Light mint tint (8% opacity) for light mode
+            : primary.withOpacity(0.08), // Light mint tint (8% opacity) for light mode
         elevation: 0,
         title: Text('Send Money', style: TextStyle(color: colors.textPrimary)),
         iconTheme: IconThemeData(color: colors.textPrimary),

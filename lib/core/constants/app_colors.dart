@@ -165,27 +165,27 @@ class DarkColors implements AppThemeColors {
   @override
   Color get success => AppColors.successGreen; // #00C853 - green for success, rates
   @override
-  Color get successLight => AppColors.successGreen.withValues(alpha: 0.2); // Success background tint
+  Color get successLight => AppColors.successGreen.withOpacity(0.2); // Success background tint
   @override
   Color get error => AppColors.errorRed; // #EF4444 - muted red
   @override
-  Color get errorLight => AppColors.errorRed.withValues(alpha: 0.2); // Error background tint
+  Color get errorLight => AppColors.errorRed.withOpacity(0.2); // Error background tint
   @override
   Color get warning => const Color(0xFFFFB74D); // Orange warning
   @override
-  Color get warningLight => const Color(0xFFFFB74D).withValues(alpha: 0.2);
+  Color get warningLight => const Color(0xFFFFB74D).withOpacity(0.2);
   @override
   Color get info => AppColors.brandPrimary; // Use primary teal for info
   @override
-  Color get infoLight => AppColors.brandPrimary.withValues(alpha: 0.2);
+  Color get infoLight => AppColors.brandPrimary.withOpacity(0.2);
 
   // UI Element Colors
   @override
-  Color get shadow => Colors.black.withValues(alpha: 0.5); // Strong shadow for depth
+  Color get shadow => Colors.black.withOpacity(0.5); // Strong shadow for depth
   @override
-  Color get shadowLight => Colors.black.withValues(alpha: 0.3); // Lighter shadow
+  Color get shadowLight => Colors.black.withOpacity(0.3); // Lighter shadow
   @override
-  Color get overlay => Colors.black.withValues(alpha: 0.8); // Dark overlay for dialogs
+  Color get overlay => Colors.black.withOpacity(0.8); // Dark overlay for dialogs
 
   // Icon Colors
   @override

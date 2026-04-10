@@ -134,7 +134,7 @@ class _WalletSettingsPageState extends State<WalletSettingsPage> {
                           children: [
                             CircleAvatar(
                               radius: 44,
-                              backgroundColor: primary.withValues(alpha: 0.2),
+                              backgroundColor: primary.withOpacity(0.2),
                               child: Text(
                                 _userName.isNotEmpty ? _userName[0].toUpperCase() : '?',
                                 style: TextStyle(
@@ -183,7 +183,7 @@ class _WalletSettingsPageState extends State<WalletSettingsPage> {
                     decoration: BoxDecoration(
                       color: colors.surface,
                       borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: colors.border.withValues(alpha: 0.5)),
+                      border: Border.all(color: colors.border.withOpacity(0.5)),
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -420,12 +420,12 @@ class _SettingsTile extends StatelessWidget {
       decoration: BoxDecoration(
         color: colors.surface,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: colors.border.withValues(alpha: 0.5)),
+        border: Border.all(color: colors.border.withOpacity(0.5)),
       ),
       child: ListTile(
         leading: CircleAvatar(
           radius: 22,
-          backgroundColor: primary.withValues(alpha: 0.12),
+          backgroundColor: primary.withOpacity(0.12),
           child: Icon(icon, color: primary, size: 22),
         ),
         title: Text(

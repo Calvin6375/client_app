@@ -100,7 +100,7 @@ class _MyAppState extends State<MyApp> {
         elevation: 0,
         iconTheme: IconThemeData(color: colors.textPrimary),
       ),
-      cardTheme: CardThemeData(
+      cardTheme: CardTheme(
         color: colors.surface,
         elevation: 2,
         shadowColor: Colors.black.withOpacity(0.1),
@@ -185,7 +185,7 @@ class _MyAppState extends State<MyApp> {
         elevation: 0,
         iconTheme: IconThemeData(color: colors.textPrimary),
       ),
-      cardTheme: CardThemeData(
+      cardTheme: CardTheme(
         color: colors.surface,
         elevation: 0,
         shadowColor: Colors.black.withOpacity(0.3),

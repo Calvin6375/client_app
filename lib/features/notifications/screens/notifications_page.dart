@@ -18,7 +18,7 @@ class NotificationsPage extends StatelessWidget {
       return Scaffold(
         backgroundColor: colors.background,
         appBar: AppBar(
-          backgroundColor: isDark ? Colors.transparent : primary.withValues(alpha: 0.08),
+          backgroundColor: isDark ? Colors.transparent : primary.withOpacity(0.08),
           elevation: 0,
           title: Text('Notifications', style: TextStyle(color: colors.textPrimary)),
           iconTheme: IconThemeData(color: colors.textPrimary),
@@ -39,7 +39,7 @@ class NotificationsPage extends StatelessWidget {
     return Scaffold(
       backgroundColor: colors.background,
       appBar: AppBar(
-        backgroundColor: isDark ? Colors.transparent : primary.withValues(alpha: 0.08),
+        backgroundColor: isDark ? Colors.transparent : primary.withOpacity(0.08),
         elevation: 0,
         title: Text('Notifications', style: TextStyle(color: colors.textPrimary, fontWeight: FontWeight.bold)),
         iconTheme: IconThemeData(color: colors.textPrimary),
@@ -132,7 +132,7 @@ class _EmptyNotifications extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(24),
               decoration: BoxDecoration(
-                color: primary.withValues(alpha: 0.1),
+                color: primary.withOpacity(0.1),
                 shape: BoxShape.circle,
               ),
               child: Icon(Icons.notifications_none_rounded, size: 56, color: primary),
@@ -193,7 +193,7 @@ class _NotificationTile extends StatelessWidget {
                 ? null
                 : [
                     BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.04),
+                      color: Colors.black.withOpacity(0.04),
                       blurRadius: 8,
                       offset: const Offset(0, 2),
                     ),
@@ -206,7 +206,7 @@ class _NotificationTile extends StatelessWidget {
                 width: 40,
                 height: 40,
                 decoration: BoxDecoration(
-                  color: primary.withValues(alpha: 0.12),
+                  color: primary.withOpacity(0.12),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Icon(
