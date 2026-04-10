@@ -38,6 +38,32 @@ end
 
 post_install do |installer|
   installer.pods_project.targets.each do |target|
+    # Xcode 16+ clang rejects -GCC_WARN_INHIBIT_ALL_WARNINGS (parsed as invalid -G).
+    # See https://github.com/grpc/grpc/issues/36888
+    if target.name == 'BoringSSL-GRPC'
+      target.source_build_phase.files.each do |file|
+        next unless file.settings && file.settings['COMPILER_FLAGS']
+
+        flags = file.settings['COMPILER_FLAGS'].split
+        flags.reject! { |f| f == '-GCC_WARN_INHIBIT_ALL_WARNINGS' }
+        file.settings['COMPILER_FLAGS'] = flags.join(' ')
+      end
+    end
     flutter_additional_ios_build_settings(target)
+  end
+
+  # Xcode 16.3+ Clang requires an explicit empty template argument list here.
+  # https://github.com/grpc/grpc/issues/39364
+  %w[gRPC-Core gRPC-C++].each do |pod|
+    basic_seq = File.join(installer.sandbox.root, "#{pod}/src/core/lib/promise/detail/basic_seq.h")
+    next unless File.exist?(basic_seq)
+
+    File.chmod(0o644, basic_seq)
+    contents = File.read(basic_seq)
+    fixed = contents.gsub(
+      'Traits::template CallSeqFactory(f_, *cur_, std::move(arg))',
+      'Traits::template CallSeqFactory<>(f_, *cur_, std::move(arg))'
+    )
+    File.write(basic_seq, fixed) if fixed != contents
   end
 end
