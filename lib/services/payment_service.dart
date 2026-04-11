@@ -249,6 +249,100 @@ Diagnostic steps:
     }
   }
 
+  /// Direct fiat top-up order via Cloud Function [createDirectTopup] (us-central1).
+  /// Creates a Firestore order and returns [referenceId] for bank memo / user display.
+  /// [amount] is the deposit (principal); [processingFee] and [totalDue] match the review UI.
+  Future<Map<String, dynamic>> createDirectTopup({
+    required double amount,
+    String? currency,
+    String? phoneNumber,
+    String? note,
+    Map<String, dynamic>? metadata,
+    double? processingFee,
+    double? totalDue,
+  }) async {
+    try {
+      Logger.info('🚀 ===== createDirectTopup (callable) =====');
+      await _ensureAuthenticated();
+
+      final currentUser = FirebaseAuth.instance.currentUser;
+      if (currentUser == null) {
+        throw FirebaseAuthException(
+          code: 'unauthenticated',
+          message: 'User authentication lost before createDirectTopup',
+        );
+      }
+
+      final functions = FirebaseFunctions.instanceFor(region: 'us-central1');
+      final callable = functions.httpsCallable(
+        'createDirectTopup',
+        options: HttpsCallableOptions(
+          timeout: const Duration(seconds: 60),
+        ),
+      );
+
+      final payload = <String, dynamic>{
+        'amount': amount,
+        if (currency != null && currency.trim().isNotEmpty) 'currency': currency.trim().toUpperCase(),
+        if (phoneNumber != null && phoneNumber.trim().isNotEmpty) 'phoneNumber': phoneNumber.trim(),
+        if (note != null && note.trim().isNotEmpty) 'note': note.trim(),
+        if (metadata != null && metadata.isNotEmpty) 'metadata': metadata,
+        if (processingFee != null) 'processingFee': processingFee,
+        if (totalDue != null) 'totalDue': totalDue,
+      };
+
+      Logger.info('📤 createDirectTopup payload keys: ${payload.keys.toList()}');
+      final result = await callable.call(payload);
+
+      final raw = result.data;
+      if (raw is! Map) {
+        Logger.error('createDirectTopup: unexpected response type ${raw.runtimeType}');
+        return {
+          'success': false,
+          'error': 'Invalid response from server',
+        };
+      }
+
+      final data = Map<String, dynamic>.from(raw);
+      final ok = data['success'] == true;
+      if (!ok) {
+        Logger.warning('createDirectTopup: success != true, data: $data');
+        return {
+          'success': false,
+          'error': data['error']?.toString() ?? 'Direct top-up failed',
+          'data': data,
+        };
+      }
+
+      Logger.success('createDirectTopup ok: orderId=${data['orderId']} referenceId=${data['referenceId']}');
+
+      return {
+        'success': true,
+        'orderId': data['orderId']?.toString(),
+        'referenceId': data['referenceId']?.toString(),
+        'amount': data['amount'],
+        'currency': data['currency']?.toString(),
+        'status': data['status']?.toString(),
+        'orderType': data['orderType']?.toString(),
+        'createdAt': data['createdAt']?.toString(),
+        'data': data,
+      };
+    } on FirebaseFunctionsException catch (e) {
+      Logger.error('createDirectTopup FirebaseFunctionsException: ${e.code} ${e.message}');
+      return {
+        'success': false,
+        'error': e.message ?? 'Direct top-up failed',
+        'code': e.code,
+      };
+    } catch (e, st) {
+      Logger.error('createDirectTopup error', e, st);
+      return {
+        'success': false,
+        'error': e.toString(),
+      };
+    }
+  }
+
   /// Handle payment webhook via Cloud Function. Used by the IntaSend flow
   /// (e.g. when the user opens the checkout link or when IntaSend sends
   /// success/failure). See IntaSendService and topup_page.dart.

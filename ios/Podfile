@@ -28,7 +28,9 @@ require File.expand_path(File.join('packages', 'flutter_tools', 'bin', 'podhelpe
 flutter_ios_podfile_setup
 
 target 'Runner' do
-  use_frameworks!
+  # Swift Firebase pods need static linkage + modular headers when not using dynamic frameworks.
+  use_frameworks! :linkage => :static
+  use_modular_headers!
 
   flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
   target 'RunnerTests' do
@@ -50,6 +52,11 @@ post_install do |installer|
       end
     end
     flutter_additional_ios_build_settings(target)
+
+    # Firebase umbrella `Firebase.h` with `use_frameworks!` (FlutterFire plugins).
+    target.build_configurations.each do |config|
+      config.build_settings['CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES'] = 'YES'
+    end
   end
 
   # Xcode 16.3+ Clang requires an explicit empty template argument list here.
@@ -65,5 +72,65 @@ post_install do |installer|
       'Traits::template CallSeqFactory<>(f_, *cur_, std::move(arg))'
     )
     File.write(basic_seq, fixed) if fixed != contents
+  end
+
+  # FlutterFire still uses umbrella `#import <Firebase/Firebase.h>` in some headers; Xcode 16+
+  # rejects that inside a framework module. Swap for modular imports (matches newer FlutterFire).
+  pub_cache = File.join(Dir.home, '.pub-cache', 'hosted', 'pub.dev')
+  patch_firebase_umbrella = lambda do |glob, replacement|
+    Dir.glob(File.join(pub_cache, glob)).each do |path|
+      next unless File.file?(path)
+
+      File.chmod(0o644, path)
+      contents = File.read(path)
+      next unless contents.include?('#import <Firebase/Firebase.h>')
+
+      File.write(path, contents.sub('#import <Firebase/Firebase.h>', replacement))
+    end
+  end
+
+  # Messaging .m uses FIRAuth behind __has_include(FirebaseAuth); umbrella Firebase.h used to pull it in.
+  messaging_h = Dir.glob(File.join(pub_cache, 'firebase_messaging-*/ios/Classes/FLTFirebaseMessagingPlugin.h')).first
+  if messaging_h && File.file?(messaging_h)
+    File.chmod(0o644, messaging_h)
+    mc = File.read(messaging_h)
+    unless mc.include?('FirebaseAuth/FirebaseAuth.h')
+      if mc.include?('#import <Firebase/Firebase.h>')
+        mc = mc.sub(
+          '#import <Firebase/Firebase.h>',
+          "#import <FirebaseCore/FirebaseCore.h>\n#import <FirebaseMessaging/FirebaseMessaging.h>\n" \
+          "#if __has_include(<FirebaseAuth/FirebaseAuth.h>)\n#import <FirebaseAuth/FirebaseAuth.h>\n#endif"
+        )
+      else
+        mc = mc.sub(
+          '#import <FirebaseMessaging/FirebaseMessaging.h>',
+          "#import <FirebaseMessaging/FirebaseMessaging.h>\n" \
+          "#if __has_include(<FirebaseAuth/FirebaseAuth.h>)\n#import <FirebaseAuth/FirebaseAuth.h>\n#endif"
+        )
+      end
+      File.write(messaging_h, mc)
+    end
+  end
+  %w[
+    FLTFirebaseDatabaseObserveStreamHandler.h
+    FLTFirebaseDatabasePlugin.h
+    FLTFirebaseDatabaseUtils.h
+  ].each do |name|
+    patch_firebase_umbrella.call(
+      "firebase_database-*/ios/Classes/#{name}",
+      "#import <FirebaseCore/FirebaseCore.h>\n#import <FirebaseDatabase/FirebaseDatabase.h>"
+    )
+  end
+
+  auth_replacement = "#import <FirebaseCore/FirebaseCore.h>\n#import <FirebaseAuth/FirebaseAuth.h>"
+  (Dir.glob(File.join(pub_cache, 'firebase_auth-*/ios/**/*.h')) +
+   Dir.glob(File.join(pub_cache, 'firebase_auth-*/ios/**/*.m'))).each do |path|
+    next unless File.file?(path)
+
+    File.chmod(0o644, path)
+    contents = File.read(path)
+    next unless contents.include?('#import <Firebase/Firebase.h>')
+
+    File.write(path, contents.sub('#import <Firebase/Firebase.h>', auth_replacement))
   end
 end
