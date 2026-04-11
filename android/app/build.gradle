@@ -26,7 +26,8 @@ if (flutterVersionName == null) {
 
 android {
     namespace "com.example.pretium_mock"
-    compileSdk 34
+    // Plugins (e.g. shared_preferences_android) may require current compileSdk; backward compatible.
+    compileSdk 36
 
     compileOptions {
         coreLibraryDesugaringEnabled true
@@ -40,7 +41,7 @@ android {
 
     defaultConfig {
         applicationId "com.example.pretium_mock"
-        minSdk 23
+        minSdkVersion flutter.minSdkVersion
         targetSdk flutter.targetSdkVersion
         multiDexEnabled true
         versionCode flutterVersionCode.toInteger()
