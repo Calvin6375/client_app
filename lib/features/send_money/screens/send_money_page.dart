@@ -1,13 +1,62 @@
 import 'package:flutter/material.dart';
-import 'package:cloud_functions/cloud_functions.dart';
 import 'package:pretium/features/send_money/screens/send_amount_screen.dart';
 import 'package:pretium/features/send_money/screens/payment_method_screen.dart';
 import 'package:pretium/features/send_money/screens/review_details_screen.dart';
 import 'package:pretium/features/send_money/screens/recipient_details_screen.dart';
-import 'package:pretium/features/send_money/services/send_money_order_service.dart';
 import 'package:pretium/models/transaction_details_model.dart';
 import 'package:pretium/core/constants/app_colors.dart';
+import 'package:pretium/services/payment_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+
+/// Maps UI payment method to [createDirectPayout] `payoutMethod` (server expects `bank` | `mobile_money`).
+String? _sendMoneyPayoutMethodApi(PaymentMethod method) {
+  switch (method) {
+    case PaymentMethod.mobileMoney:
+      return 'mobile_money';
+    case PaymentMethod.bank:
+      return 'bank';
+    case PaymentMethod.truePay:
+      return null;
+  }
+}
+
+String _sendMoneyPayoutNote(TransactionDetails d) {
+  final name = d.recipientFullName.trim();
+  final network = d.recipientMobileNetwork.trim();
+  final parts = <String>[
+    if (name.isNotEmpty) 'To: $name',
+    '${d.amountToSend.toStringAsFixed(2)} ${d.fromCurrency} → ${d.amountToReceive.toStringAsFixed(2)} ${d.toCurrency}',
+    'Method: ${d.paymentMethod.name}',
+    if (network.isNotEmpty) 'Mobile network: $network',
+  ];
+  return parts.join(' · ');
+}
+
+Map<String, dynamic> _sendMoneyPayoutMetadata(TransactionDetails d) {
+  final meta = <String, dynamic>{
+    'flow': 'send_money',
+    'recipientFullName': d.recipientFullName.trim(),
+    'recipientPhoneNumber': d.recipientPhoneNumber.trim(),
+    'fromCurrency': d.fromCurrency,
+    'toCurrency': d.toCurrency,
+    'amountToSend': d.amountToSend,
+    'amountToReceive': d.amountToReceive,
+    'paymentMethod': d.paymentMethod.name,
+  };
+  final network = d.recipientMobileNetwork.trim();
+  if (network.isNotEmpty) {
+    meta['mobileNetwork'] = network;
+  }
+  final bank = d.recipientBankName?.trim();
+  if (bank != null && bank.isNotEmpty) {
+    meta['recipientBankName'] = bank;
+  }
+  final acct = d.recipientAccountNumber?.trim();
+  if (acct != null && acct.isNotEmpty) {
+    meta['recipientAccountNumber'] = acct;
+  }
+  return meta;
+}
 
 enum SendMoneyStep { amount, payment, recipientDetails, review }
 
@@ -52,6 +101,7 @@ class _SendMoneyPageState extends State<SendMoneyPage> {
       _transactionDetails.recipientPhoneNumber = details.recipientPhoneNumber;
       _transactionDetails.recipientBankName = details.recipientBankName;
       _transactionDetails.recipientAccountNumber = details.recipientAccountNumber;
+      _transactionDetails.recipientMobileNetwork = details.recipientMobileNetwork;
     });
   }
 
@@ -80,35 +130,45 @@ class _SendMoneyPageState extends State<SendMoneyPage> {
 
       setState(() => _isSubmittingSendMoney = true);
       try {
-        final result = await createSendMoneyOrder(
-          recipientPhoneNumber: phone.startsWith('+') ? phone : '+$phone',
+        final paymentService = PaymentService();
+        final phoneE164 = phone.startsWith('+') ? phone : '+$phone';
+        final result = await paymentService.createDirectPayout(
           amount: amount,
           currency: _transactionDetails.fromCurrency,
-          note: null,
+          phoneNumber: phoneE164,
+          note: _sendMoneyPayoutNote(_transactionDetails),
+          payoutMethod: _sendMoneyPayoutMethodApi(_transactionDetails.paymentMethod),
+          metadata: _sendMoneyPayoutMetadata(_transactionDetails),
         );
         if (!mounted) return;
         setState(() => _isSubmittingSendMoney = false);
+        if (result['success'] != true) {
+          final code = result['code']?.toString();
+          final raw = result['error']?.toString() ?? 'Payout failed';
+          final message = switch (code) {
+            'unauthenticated' => 'Please sign in to send money.',
+            'invalid-argument' => raw,
+            'not-found' => 'Recipient not found. Please check the phone number.',
+            'failed-precondition' =>
+              'Insufficient balance. You don\'t have enough funds to send this amount.',
+            'internal' => 'Something went wrong. Please try again.',
+            _ => raw,
+          };
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(message), backgroundColor: Colors.red.shade700),
+          );
+          return;
+        }
+        final cur = result['currency']?.toString() ?? _transactionDetails.fromCurrency;
+        final amt = result['amount'];
+        final amtStr = amt is num ? amt.toString() : amount.toString();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Sent ${result.amount} ${result.currency} successfully'),
+            content: Text('Payout submitted: $amtStr $cur'),
             backgroundColor: Colors.green.shade700,
           ),
         );
         Navigator.of(context).pop();
-      } on FirebaseFunctionsException catch (e) {
-        if (!mounted) return;
-        setState(() => _isSubmittingSendMoney = false);
-        final message = switch (e.code) {
-          'unauthenticated' => 'Please sign in to send money.',
-          'invalid-argument' => 'Invalid request. You cannot send to yourself.',
-          'not-found' => 'Recipient not found. Please check the phone number.',
-          'failed-precondition' => 'Insufficient balance. You don\'t have enough funds to send this amount.',
-          'internal' => 'Something went wrong. Please try again.',
-          _ => 'Send money failed. Please try again.',
-        };
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(message), backgroundColor: Colors.red.shade700),
-        );
       } catch (e) {
         if (!mounted) return;
         setState(() => _isSubmittingSendMoney = false);
@@ -177,7 +237,7 @@ class _SendMoneyPageState extends State<SendMoneyPage> {
       appBar: AppBar(
         backgroundColor: isDark
             ? Colors.transparent  // Transparent for dark mode
-            : primary.withValues(alpha: 0.08), // Light mint tint (8% opacity) for light mode
+            : primary.withOpacity(0.08), // Light mint tint (8% opacity) for light mode
         elevation: 0,
         title: Text('Send Money', style: TextStyle(color: colors.textPrimary)),
         iconTheme: IconThemeData(color: colors.textPrimary),

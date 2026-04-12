@@ -1,4 +1,5 @@
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:pretium/services/dashboard_session_cache.dart';
 import 'package:pretium/utils/logger.dart';
 
 /// Authentication service
@@ -112,6 +113,7 @@ class AuthService {
     try {
       Logger.info('Signing out user: ${currentUserId}');
       await _auth.signOut();
+      DashboardSessionCache.instance.clear();
       Logger.success('User signed out successfully');
     } catch (e) {
       Logger.error('Sign out failed', e);
@@ -134,13 +136,18 @@ class AuthService {
     }
   }
 
-  /// Get user-friendly error message
+  /// User-facing copy for [FirebaseAuthException]. Never surfaces raw native traces.
   static String getErrorMessage(FirebaseAuthException e) {
-    switch (e.code) {
-      case 'user-not-found':
-        return 'No user found for that email.';
+    final code = e.code.toLowerCase().replaceAll('_', '-');
+    switch (code) {
+      // Email/password (Firebase may use invalid-credential or invalid-login-credentials on newer SDKs)
+      case 'invalid-credential':
+      case 'invalid-login-credentials':
+        return 'Incorrect email or password. Please try again.';
       case 'wrong-password':
-        return 'Wrong password provided.';
+        return 'Incorrect email or password. Please try again.';
+      case 'user-not-found':
+        return 'No account found for that email.';
       case 'email-already-in-use':
         return 'An account already exists for that email.';
       case 'invalid-email':
@@ -150,14 +157,24 @@ class AuthService {
       case 'user-disabled':
         return 'This account has been disabled.';
       case 'too-many-requests':
-        return 'Too many requests. Please try again later.';
+        return 'Too many attempts. Please try again later.';
       case 'operation-not-allowed':
         return 'This operation is not allowed.';
       case 'network-request-failed':
         return 'Network error. Please check your connection.';
       default:
-        return 'An error occurred: ${e.message ?? e.code}';
+        return _fallbackMessageForAuthException(e);
     }
+  }
+
+  /// When [code] is unknown, infer from [message] or use a safe generic line (no stack traces).
+  static String _fallbackMessageForAuthException(FirebaseAuthException e) {
+    final m = (e.message ?? '').toUpperCase();
+    if (m.contains('INVALID_LOGIN_CREDENTIALS') ||
+        m.contains('INVALID_CREDENTIAL')) {
+      return 'Incorrect email or password. Please try again.';
+    }
+    return 'Unable to sign in. Please check your details and try again.';
   }
 }
 

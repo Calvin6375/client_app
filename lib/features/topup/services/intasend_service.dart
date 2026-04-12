@@ -8,7 +8,7 @@ import 'package:pretium/utils/logger.dart';
 // IntaSend integration (fiat top-up)
 // ---------------------------------------------------------------------------
 // This service handles the IntaSend payment flow for topping up the user's
-// fiat wallet. It is used only when the user taps "Local TopUp" on
+// fiat wallet. It is used only when the user taps "fiat topup" on
 // the Top Up screen (topup_page.dart). It does not affect the separate
 // TransFi top-up flow.
 //

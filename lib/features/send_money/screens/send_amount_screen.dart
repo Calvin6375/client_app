@@ -226,8 +226,9 @@ class _SendAmountScreenState extends State<SendAmountScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final colors = AppColors.getThemeColors(context);
     final primaryColor = Theme.of(context).colorScheme.primary;
+    final amountToSend = double.tryParse(_fromCtrl.text.trim()) ?? 0;
+    final canContinue = amountToSend > 0;
 
     return Padding(
       padding: const EdgeInsets.all(16.0),
@@ -250,7 +251,7 @@ class _SendAmountScreenState extends State<SendAmountScreen> {
                     icon: Icon(Icons.swap_vert, color: primaryColor, size: 32),
                     onPressed: _swapCurrencies,
                     style: IconButton.styleFrom(
-                      backgroundColor: primaryColor.withValues(alpha: 0.15),
+                      backgroundColor: primaryColor.withOpacity(0.15),
                       shape: const CircleBorder(),
                       padding: const EdgeInsets.all(12),
                     ),
@@ -278,11 +279,13 @@ class _SendAmountScreenState extends State<SendAmountScreen> {
           ),
           const SizedBox(height: 16),
           ElevatedButton(
-            onPressed: widget.onNext,
+            onPressed: canContinue ? widget.onNext : null,
             style: ElevatedButton.styleFrom(
               padding: const EdgeInsets.symmetric(vertical: 16),
               backgroundColor: primaryColor,
               foregroundColor: Colors.white,
+              disabledBackgroundColor: primaryColor.withValues(alpha: 0.38),
+              disabledForegroundColor: Colors.white.withValues(alpha: 0.62),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),
               ),
@@ -293,7 +296,6 @@ class _SendAmountScreenState extends State<SendAmountScreen> {
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
-                color: Colors.white,
               ),
             ),
           ),
@@ -336,7 +338,7 @@ class _ExchangeRateDisplay extends StatelessWidget {
             ? null
             : [
                 BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.04),
+                  color: Colors.black.withOpacity(0.04),
                   blurRadius: 8,
                   offset: const Offset(0, 2),
                 ),
@@ -406,7 +408,7 @@ class _SwapCurrencyCard extends StatelessWidget {
             ? null
             : [
                 BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.04),
+                  color: Colors.black.withOpacity(0.04),
                   blurRadius: 8,
                   offset: const Offset(0, 2),
                 ),

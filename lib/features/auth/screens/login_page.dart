@@ -8,6 +8,7 @@ import 'package:pretium/services/auth_service.dart';
 import 'package:pretium/services/notification_service.dart';
 import 'package:pretium/utils/logger.dart';
 import 'package:pretium/core/constants/app_colors.dart';
+import 'package:pretium/services/dashboard_session_cache.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 class LoginPage extends StatefulWidget {
@@ -148,6 +149,7 @@ class _LoginScreenState extends State<LoginPage> {
                               }
                               
                               if (!mounted) return;
+                              DashboardSessionCache.instance.clear();
                               Navigator.pushAndRemoveUntil(
                                 context,
                                 MaterialPageRoute(
@@ -164,14 +166,20 @@ class _LoginScreenState extends State<LoginPage> {
                               }
                             } catch (e) {
                               Logger.error('Login failed', e);
-                              if (mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text('Login failed: ${e.toString()}'),
-                                    duration: const Duration(seconds: 4),
-                                  ),
-                                );
+                              if (!mounted) return;
+                              final String message;
+                              if (e is FirebaseAuthException) {
+                                message = AuthService.getErrorMessage(e);
+                              } else {
+                                message =
+                                    'Unable to sign in. Please check your connection and try again.';
                               }
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(message),
+                                  duration: const Duration(seconds: 4),
+                                ),
+                              );
                             } finally {
                               if (mounted) setState(() => _isLoading = false);
                             }

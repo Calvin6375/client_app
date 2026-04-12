@@ -24,6 +24,8 @@ class PhoneNumberField extends StatefulWidget {
   final Color? labelColor;
   final String? initialCountryCode;
   final ValueChanged<String>? onCountryCodeChanged;
+  /// When true, the country code is shown but cannot be changed (no picker).
+  final bool lockCountryCode;
 
   const PhoneNumberField({
     super.key,
@@ -33,6 +35,7 @@ class PhoneNumberField extends StatefulWidget {
     this.labelColor,
     this.initialCountryCode,
     this.onCountryCodeChanged,
+    this.lockCountryCode = false,
   });
 
   @override
@@ -70,6 +73,16 @@ class _PhoneNumberFieldState extends State<PhoneNumberField> {
   @override
   void initState() {
     super.initState();
+    _applyInitialCountryCode();
+    // Notify parent of initial country code (editable flows only; locked code is fixed in parent)
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!widget.lockCountryCode) {
+        widget.onCountryCodeChanged?.call(_selectedCountry.dialCode);
+      }
+    });
+  }
+
+  void _applyInitialCountryCode() {
     if (widget.initialCountryCode != null) {
       final country = _countryCodes.firstWhere(
         (c) => c.dialCode == widget.initialCountryCode,
@@ -77,10 +90,16 @@ class _PhoneNumberFieldState extends State<PhoneNumberField> {
       );
       _selectedCountry = country;
     }
-    // Notify parent of initial country code
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      widget.onCountryCodeChanged?.call(_selectedCountry.dialCode);
-    });
+  }
+
+  @override
+  void didUpdateWidget(covariant PhoneNumberField oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.lockCountryCode &&
+        widget.initialCountryCode != null &&
+        widget.initialCountryCode != oldWidget.initialCountryCode) {
+      setState(_applyInitialCountryCode);
+    }
   }
 
   void _showCountryCodePicker() {
@@ -156,30 +175,51 @@ class _PhoneNumberFieldState extends State<PhoneNumberField> {
       cursorColor: widget.primaryColor,
       validator: widget.validator,
       decoration: InputDecoration(
-        prefixIcon: GestureDetector(
-          onTap: _showCountryCodePicker,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  _selectedCountry.flag,
-                  style: const TextStyle(fontSize: 20),
+        prefixIcon: widget.lockCountryCode
+            ? Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      _selectedCountry.flag,
+                      style: const TextStyle(fontSize: 20),
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      '+${_selectedCountry.dialCode}',
+                      style: const TextStyle(
+                        color: Colors.black,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 4),
-                Text(
-                  '+${_selectedCountry.dialCode}',
-                  style: TextStyle(
-                    color: Colors.black,
-                    fontWeight: FontWeight.w500,
+              )
+            : GestureDetector(
+                onTap: _showCountryCodePicker,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        _selectedCountry.flag,
+                        style: const TextStyle(fontSize: 20),
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        '+${_selectedCountry.dialCode}',
+                        style: const TextStyle(
+                          color: Colors.black,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      const Icon(Icons.arrow_drop_down, color: Colors.black),
+                    ],
                   ),
                 ),
-                const Icon(Icons.arrow_drop_down, color: Colors.black),
-              ],
-            ),
-          ),
-        ),
+              ),
         labelText: 'Phone Number',
         hintText: 'Enter your phone number',
         hintStyle: TextStyle(color: Colors.grey.shade400),

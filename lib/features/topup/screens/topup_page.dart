@@ -14,6 +14,7 @@ import 'package:pretium/repositories/wallet_repository.dart';
 import 'package:pretium/repositories/user_repository.dart';
 import 'package:pretium/services/firebase_payment_service.dart';
 import 'package:pretium/core/constants/app_colors.dart';
+import 'package:pretium/features/topup/screens/direct_fiat_deposit_flow.dart';
 
 // Top Up main screen composed of smaller widgets
 class TopUpPage extends StatefulWidget {
@@ -39,7 +40,7 @@ class _TopUpPageState extends State<TopUpPage> {
   bool _isProcessingPayment = false;
   bool _isLoadingBalance = false;
 
-  // IntaSend configuration — used only by "Local TopUp" (intasend_service.dart).
+  // IntaSend configuration — used only by "fiat topup" (intasend_service.dart).
   static const String intaSendPublicKey ='ISPubKey_live_c2dbd636-a9a5-4a90-bdb8-dc7e7c7401a2';
   static const bool isTestMode = false;
 
@@ -386,6 +387,17 @@ class _TopUpPageState extends State<TopUpPage> {
     }
   }
 
+  void _openDirectFiatDepositFlow() {
+    Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => DirectFiatDepositScreen(
+          fiatBalance: _fiatBalance,
+          walletCurrencyCode: _selectedCurrency,
+        ),
+      ),
+    );
+  }
+
   void _showError(String message) {
     print('❌ Showing error dialog: $message');
     showDialog(
@@ -597,7 +609,7 @@ class _TopUpPageState extends State<TopUpPage> {
       appBar: AppBar(
         backgroundColor: isDark
             ? Colors.transparent  // Transparent for dark mode
-            : primary.withValues(alpha: 0.08), // Light mint tint (8% opacity) for light mode
+            : primary.withOpacity(0.08), // Light mint tint (8% opacity) for light mode
         elevation: 0,
         leading: IconButton(
           icon: Icon(Icons.arrow_back, color: colors.textPrimary),
@@ -661,6 +673,7 @@ class _TopUpPageState extends State<TopUpPage> {
                     isProcessing: _isProcessingPayment,
                     onIntaSendPressed: _processIntaSendPayment,
                     onTransFiPressed: _processTransFiPayment,
+                    onDirectFiatDepositPressed: _openDirectFiatDepositFlow,
                   ),
                   const SizedBox(height: 16),
                   const _CryptoOptionCard(),
@@ -833,7 +846,7 @@ class _SetAmountCard extends StatelessWidget {
             ? null
             : [
                 BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.04),
+                  color: Colors.black.withOpacity(0.04),
                   blurRadius: 8,
                   offset: const Offset(0, 2),
                 ),
@@ -949,6 +962,7 @@ class _FiatOptionCard extends StatelessWidget {
   final bool isProcessing;
   final VoidCallback onIntaSendPressed;
   final VoidCallback onTransFiPressed;
+  final VoidCallback onDirectFiatDepositPressed;
 
   const _FiatOptionCard({
     required this.emailController,
@@ -957,6 +971,7 @@ class _FiatOptionCard extends StatelessWidget {
     required this.isProcessing,
     required this.onIntaSendPressed,
     required this.onTransFiPressed,
+    required this.onDirectFiatDepositPressed,
   });
 
   @override
@@ -980,7 +995,7 @@ class _FiatOptionCard extends StatelessWidget {
             ? null
             : [
                 BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.04),
+                  color: Colors.black.withOpacity(0.04),
                   blurRadius: 8,
                   offset: const Offset(0, 2),
                 ),
@@ -1005,7 +1020,7 @@ class _FiatOptionCard extends StatelessWidget {
             ),
             const SizedBox(height: 4),
             Text(
-              'Pay with IntaSend or TransFi (card or mobile money)',
+              'TopUp with card or mobile money',
               style: TextStyle(color: colors.textSecondary),
             ),
             const SizedBox(height: 16),
@@ -1038,7 +1053,7 @@ class _FiatOptionCard extends StatelessWidget {
                       )
                     : Icon(Icons.payment, color: isDark ? colors.onPrimary : Colors.white),
                 label: Text(
-                  isProcessing ? 'Processing...' : 'Local TopUp',
+                  isProcessing ? 'Processing...' : 'fiat topup',
                   style: TextStyle(
                     color: isDark ? colors.onPrimary : Colors.white,
                     fontWeight: FontWeight.w600,
@@ -1061,7 +1076,29 @@ class _FiatOptionCard extends StatelessWidget {
                 onPressed: isProcessing ? null : onTransFiPressed,
                 icon: Icon(Icons.link, size: 20, color: Theme.of(context).colorScheme.primary),
                 label: Text(
-                  'International TopUp',
+                  'stable coin topup',
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.primary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  side: BorderSide(color: Theme.of(context).colorScheme.primary),
+                ),
+                onPressed: isProcessing ? null : onDirectFiatDepositPressed,
+                icon: Icon(Icons.account_balance, size: 20, color: Theme.of(context).colorScheme.primary),
+                label: Text(
+                  'Direct fiat deposit',
                   style: TextStyle(
                     color: Theme.of(context).colorScheme.primary,
                     fontWeight: FontWeight.w600,
@@ -1127,7 +1164,7 @@ class _CryptoOptionCard extends StatelessWidget {
             ? null
             : [
                 BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.04),
+                  color: Colors.black.withOpacity(0.04),
                   blurRadius: 8,
                   offset: const Offset(0, 2),
                 ),
@@ -1349,7 +1386,7 @@ class _SuccessDialog extends StatelessWidget {
               decoration: BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(16),
-                boxShadow: [
+                boxShadow: const [
                   BoxShadow(
                     color: Colors.black12,
                     blurRadius: 8,
@@ -1357,9 +1394,9 @@ class _SuccessDialog extends StatelessWidget {
                   ),
                 ],
               ),
-              child: Column(
+              child: const Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
-                children: const [
+                children: [
                   Text(
                     'Payment Processed',
                     style: TextStyle(color: Colors.black54),

@@ -152,7 +152,7 @@ class _WalletPageState extends State<WalletPage> {
                   boxShadow: Theme.of(context).brightness == Brightness.light
                       ? [
                           BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.04),
+                            color: Colors.black.withOpacity(0.04),
                             blurRadius: 8,
                             offset: const Offset(0, 2),
                           ),
@@ -317,10 +317,10 @@ class _SpendingActivityCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: colors.surface,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: colors.border.withValues(alpha: 0.5)),
+        border: Border.all(color: colors.border.withOpacity(0.5)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
+            color: Colors.black.withOpacity(0.04),
             blurRadius: 12,
             offset: const Offset(0, 4),
           ),
@@ -364,7 +364,7 @@ class _SpendingActivityCard extends StatelessWidget {
                       width: 24,
                       height: h.clamp(4.0, maxHeight),
                       decoration: BoxDecoration(
-                        color: primary.withValues(alpha: 0.85),
+                        color: primary.withOpacity(0.85),
                         borderRadius: BorderRadius.circular(4),
                       ),
                     ),
@@ -473,10 +473,10 @@ class _RecentTransactionsList extends StatelessWidget {
           decoration: BoxDecoration(
             color: colors.surface,
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: colors.border.withValues(alpha: 0.5)),
+            border: Border.all(color: colors.border.withOpacity(0.5)),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withValues(alpha: 0.04),
+                color: Colors.black.withOpacity(0.04),
                 blurRadius: 8,
                 offset: const Offset(0, 2),
               ),
@@ -492,7 +492,7 @@ class _RecentTransactionsList extends StatelessWidget {
                 child: Row(
                   children: [
                     CircleAvatar(
-                      backgroundColor: primary.withValues(alpha: 0.12),
+                      backgroundColor: primary.withOpacity(0.12),
                       radius: 24,
                       child: Icon(_iconFor(title), color: primary, size: 24),
                     ),

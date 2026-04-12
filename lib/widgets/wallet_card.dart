@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:pretium/app/route_names.dart';
+import 'package:pretium/features/topup/screens/direct_fiat_deposit_flow.dart';
 import 'package:pretium/models/wallet_model.dart';
 import 'package:pretium/repositories/wallet_repository.dart';
-import 'package:pretium/features/swap/screens/swap_page.dart';
 import 'package:pretium/core/constants/app_colors.dart';
+import 'package:pretium/services/dashboard_session_cache.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 
@@ -43,10 +45,43 @@ class _WalletCardState extends State<WalletCard> {
   @override
   void initState() {
     super.initState();
-    if (_isFirebaseInitialized()) {
-      // Only refresh immediately after login (when widget is first created)
+    if (!_isFirebaseInitialized()) return;
+    final snap = DashboardSessionCache.instance.readWalletIfFresh();
+    if (snap != null) {
+      _hydrateFromSnapshotSync(snap);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        if (_fiatPageController.hasClients && _availableFiatCurrencies.length > 1) {
+          _fiatPageController.jumpToPage(_currentFiatIndex.clamp(0, _availableFiatCurrencies.length - 1));
+        }
+      });
+    } else {
       _refreshBalance();
     }
+  }
+
+  void _hydrateFromSnapshotSync(WalletSessionSnapshot snap) {
+    _fiatWallets
+      ..clear()
+      ..addAll(snap.fiatWallets);
+    _availableFiatCurrencies
+      ..clear()
+      ..addAll(snap.availableFiatCurrencies);
+    if (_availableFiatCurrencies.isNotEmpty) {
+      _fiatWallet = _fiatWallets[_availableFiatCurrencies[0]];
+      _currentFiatIndex = 0;
+    } else {
+      _fiatWallet = Wallet(currencyCode: 'USD', balance: 0.0);
+      _currentFiatIndex = 0;
+    }
+    _cryptoWallet = snap.cryptoWallet;
+    _cachedFiatWallet = snap.cachedFiatWallet;
+    _cachedCryptoWallet = snap.cachedCryptoWallet;
+    _cacheTimestamp = snap.refreshedAt;
+    _lastRefreshedAt = snap.refreshedAt;
+    _loading = false;
+    _fiatError = null;
+    _cryptoError = null;
   }
   
   bool _isFirebaseInitialized() {
@@ -140,7 +175,15 @@ class _WalletCardState extends State<WalletCard> {
       _cachedFiatWallet = fiatWallets[availableCurrencies.isNotEmpty ? availableCurrencies[0] : 'USD'] ?? Wallet(currencyCode: 'USD', balance: 0.0);
       _cachedCryptoWallet = cryptoWallet ?? Wallet(currencyCode: 'USDT', balance: 0.0);
       _cacheTimestamp = now;
-      
+
+      DashboardSessionCache.instance.recordWalletSnapshot(
+        fiatWallets: fiatWallets,
+        availableFiatCurrencies: availableCurrencies,
+        cryptoWallet: cryptoWallet,
+        cachedFiatWallet: _cachedFiatWallet,
+        cachedCryptoWallet: _cachedCryptoWallet,
+      );
+
       setState(() {
         _fiatWallets.clear();
         _fiatWallets.addAll(fiatWallets);
@@ -202,13 +245,7 @@ class _WalletCardState extends State<WalletCard> {
             await Navigator.of(context).pushNamed(RouteNames.topup);
             await _refreshBalance(forceRefresh: true);
           },
-          onSwap: () {
-            Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (context) => SwapPage(initialFromCurrency: defaultWallet.currencyCode),
-              ),
-            );
-          },
+          onWithdraw: () => _openKenyaWithdraw(context),
         );
       }
       
@@ -267,13 +304,7 @@ class _WalletCardState extends State<WalletCard> {
                 await Navigator.of(context).pushNamed(RouteNames.topup);
                 await _refreshBalance(forceRefresh: true);
               },
-              onSwap: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (context) => SwapPage(initialFromCurrency: wallet.currencyCode),
-                  ),
-                );
-              },
+              onWithdraw: () => _openKenyaWithdraw(context),
             );
           },
             ),
@@ -294,7 +325,7 @@ class _WalletCardState extends State<WalletCard> {
                       borderRadius: BorderRadius.circular(4),
                       color: _currentFiatIndex == index
                           ? primary
-                          : primary.withValues(alpha: 0.3),
+                          : primary.withOpacity(0.3),
                     ),
                   ),
                 ),
@@ -319,15 +350,42 @@ class _WalletCardState extends State<WalletCard> {
           await Navigator.of(context).pushNamed(RouteNames.topup);
           await _refreshBalance(forceRefresh: true);
         },
-        onSwap: () {
-          Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (context) => SwapPage(initialFromCurrency: cryptoWallet.currencyCode),
-            ),
-          );
-        },
+        onWithdraw: () => _showWithdrawComingSoon(context),
       );
     }
+  }
+
+  void _openKenyaWithdraw(BuildContext context) {
+    final kesBalance = _fiatWallets['KES']?.balance ?? 0.0;
+    Navigator.of(context)
+        .push<void>(
+          MaterialPageRoute<void>(
+            builder: (_) => DirectFiatDepositScreen(
+              fiatBalance: kesBalance,
+              walletCurrencyCode: 'KES',
+              flowKind: DirectFiatFlowKind.withdraw,
+            ),
+          ),
+        )
+        .then((_) {
+          if (mounted) _refreshBalance(forceRefresh: true);
+        });
+  }
+
+  void _showWithdrawComingSoon(BuildContext context) {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Coming Soon'),
+        content: const Text('Withdraw will be available soon.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
   }
 }
 
@@ -343,7 +401,7 @@ class WalletCardWidget extends StatelessWidget {
   final String? error;
   final Color backgroundColor;
   final VoidCallback onTopUp;
-  final VoidCallback onSwap;
+  final VoidCallback onWithdraw;
 
   const WalletCardWidget({
     super.key,
@@ -357,7 +415,7 @@ class WalletCardWidget extends StatelessWidget {
     this.error,
     required this.backgroundColor,
     required this.onTopUp,
-    required this.onSwap,
+    required this.onWithdraw,
   });
 
   @override
@@ -379,13 +437,13 @@ class WalletCardWidget extends StatelessWidget {
               boxShadow: Theme.of(context).brightness == Brightness.dark
                   ? [
                       BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.6), // Outer shadow for dark
+                        color: Colors.black.withOpacity(0.6), // Outer shadow for dark
                         blurRadius: 30,
                         offset: const Offset(0, 8),
                         spreadRadius: 0,
                       ),
                       BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.4), // Inner shadow hint
+                        color: Colors.black.withOpacity(0.4), // Inner shadow hint
                         blurRadius: 20,
                         offset: const Offset(0, -2),
                         spreadRadius: -5,
@@ -394,14 +452,14 @@ class WalletCardWidget extends StatelessWidget {
                   : [
                       // Subtle shadow - soft and diffused (matching image)
                       BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.06), // Very subtle shadow
+                        color: Colors.black.withOpacity(0.06), // Very subtle shadow
                         blurRadius: 24,
                         offset: const Offset(0, 4),
                         spreadRadius: 0,
                       ),
                       // Light greenish-teal outline/glow (wallet page design)
                       BoxShadow(
-                        color: (backgroundColor).withValues(alpha: 0.25),
+                        color: (backgroundColor).withOpacity(0.25),
                         blurRadius: 20,
                         spreadRadius: -2,
                       ),
@@ -414,7 +472,7 @@ class WalletCardWidget extends StatelessWidget {
                   colors: Theme.of(context).brightness == Brightness.dark
                       ? [
                           AppColors.surfaceDark, // Slate-800 center #1E293B
-                          AppColors.surfaceDark.withValues(alpha: 0.95),
+                          AppColors.surfaceDark.withOpacity(0.95),
                           AppColors.backgroundDeepNavy, // Deep navy edge #0F172A
                         ]
                       : [
@@ -428,8 +486,8 @@ class WalletCardWidget extends StatelessWidget {
                 // Border adapts to theme - very subtle for light mode
                 border: Border.all(
                   color: Theme.of(context).brightness == Brightness.dark
-                      ? Colors.grey.withValues(alpha: 0.3) // Silver-metallic border for dark
-                      : Colors.white.withValues(alpha: 0.4), // Very subtle white border
+                      ? Colors.grey.withOpacity(0.3) // Silver-metallic border for dark
+                      : Colors.white.withOpacity(0.4), // Very subtle white border
                   width: 1,
                 ),
               ),
@@ -517,11 +575,12 @@ class WalletCardWidget extends StatelessWidget {
                       
                       const SizedBox(width: 20),
                       
-                      // Swap Button - glassmorphism design with border
+                      // Withdraw (swap control moved to Financial Services)
                       _CircularActionButton(
-                        icon: Icons.swap_horiz,
-                        label: 'Swap',
-                        onPressed: onSwap,
+                        icon: FontAwesomeIcons.moneyBillTransfer,
+                        label: 'Withdraw',
+                        onPressed: onWithdraw,
+                        isFontAwesome: true,
                         backgroundColor: Theme.of(context).brightness == Brightness.dark
                             ? Colors.transparent
                             : Colors.white.withOpacity(0.9), // Light background for light mode
@@ -529,7 +588,7 @@ class WalletCardWidget extends StatelessWidget {
                             ? AppColors.textTertiaryLight // Light gray for dark mode
                             : colors.primary, // Uniform primary color (teal/green) for icon
                         borderColor: Theme.of(context).brightness == Brightness.dark
-                            ? Colors.grey.withValues(alpha: 0.4) // Subtle border for dark
+                            ? Colors.grey.withOpacity(0.4) // Subtle border for dark
                             : const Color(0xFFE5E7EB), // Light gray border for light mode
                         labelColor: Theme.of(context).brightness == Brightness.dark
                             ? AppColors.textTertiaryLight
@@ -559,6 +618,7 @@ class _CircularActionButton extends StatelessWidget {
   final Color? borderColor;
   final Color? labelColor; // Optional separate color for label text
   final bool isCompact;
+  final bool isFontAwesome;
 
   const _CircularActionButton({
     required this.icon,
@@ -569,6 +629,7 @@ class _CircularActionButton extends StatelessWidget {
     this.borderColor,
     this.labelColor,
     this.isCompact = false,
+    this.isFontAwesome = false,
   });
 
   @override
@@ -602,7 +663,7 @@ class _CircularActionButton extends StatelessWidget {
                 : [
                     // Subtle shadow for light mode buttons
                     BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.04),
+                      color: Colors.black.withOpacity(0.04),
                       blurRadius: 6,
                       offset: const Offset(0, 2),
                     ),
@@ -610,11 +671,17 @@ class _CircularActionButton extends StatelessWidget {
           ),
           child: IconButton(
             onPressed: onPressed,
-            icon: Icon(
-              icon,
-              color: foregroundColor,
-              size: iconSize,
-            ),
+            icon: isFontAwesome
+                ? FaIcon(
+                    icon,
+                    color: foregroundColor,
+                    size: iconSize,
+                  )
+                : Icon(
+                    icon,
+                    color: foregroundColor,
+                    size: iconSize,
+                  ),
             padding: EdgeInsets.zero,
           ),
         ),
