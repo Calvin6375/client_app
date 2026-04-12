@@ -16,7 +16,7 @@ publish_to: "none" # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.0.0+10
+version: 1.0.0+11
 
 environment:
   sdk: ^3.1.4
@@ -55,6 +55,9 @@ dependencies:
   # intasend_flutter: ^0.0.2  # Using custom HTTP implementation instead
   confetti: ^0.7.0
   provider: ^6.1.1
+  gal: ^2.3.2
+  image: ^4.8.0
+  share_plus: ^12.0.2
 
 # Transitive (path_provider_windows, shared_preferences_windows, etc.): Dart 3.5+ removed
 # UnmodifiableUint8ListView; win32 <5.5.1 still references it and breaks iOS kernel snapshot.

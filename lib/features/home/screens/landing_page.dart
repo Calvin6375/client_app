@@ -127,7 +127,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ),
                 const SizedBox(height: 12),
                 // Financial Services grid
-                const FinancialServices(),
+                FinancialServices(
+                  swapInitialCurrency: _selectedTab == 0 ? 'USD' : 'USDT',
+                ),
                 const SizedBox(height: 40),
                 // Recent Transactions
                 const RecentTransactionsHeader(),

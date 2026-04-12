@@ -1,19 +1,25 @@
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:pretium/features/send_money/screens/send_money_page.dart';
+import 'package:pretium/features/swap/screens/swap_page.dart';
 import 'package:pretium/core/constants/app_colors.dart';
 
 class FinancialServices extends StatelessWidget {
-  const FinancialServices({super.key});
+  /// Initial "from" currency for [SwapPage] when opened from this row (e.g. USD for fiat, USDT for crypto tab).
+  final String swapInitialCurrency;
+
+  const FinancialServices({
+    super.key,
+    this.swapInitialCurrency = 'USD',
+  });
 
   @override
   Widget build(BuildContext context) {
     final colors = AppColors.getThemeColors(context);
-    
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Header with country selector - centered
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
@@ -21,14 +27,13 @@ class FinancialServices extends StatelessWidget {
               "Financial Services",
               style: TextStyle(
                 fontSize: 18,
-                fontWeight: FontWeight.w600, // Medium weight - professional
-                color: colors.textPrimary, // Theme-aware primary text
+                fontWeight: FontWeight.w600,
+                color: colors.textPrimary,
               ),
             ),
           ],
         ),
         const SizedBox(height: 16),
-        // Single horizontal row of 4 compact rounded rectangle buttons - fits on one screen
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
@@ -36,7 +41,7 @@ class FinancialServices extends StatelessWidget {
               context,
               FontAwesomeIcons.paperPlane,
               "Send Money",
-              true, // isFontAwesome
+              true,
               () {
                 Navigator.of(context).push(
                   MaterialPageRoute(builder: (context) => const SendMoneyPage()),
@@ -46,25 +51,31 @@ class FinancialServices extends StatelessWidget {
             const SizedBox(width: 12),
             _buildServiceButton(
               context,
-              FontAwesomeIcons.shoppingBasket,
-              "Buy Goods",
-              true, // isFontAwesome
-              () => _showComingSoonDialog(context),
+              FontAwesomeIcons.arrowRightArrowLeft,
+              "Swap",
+              true,
+              () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (context) => SwapPage(initialFromCurrency: swapInitialCurrency),
+                  ),
+                );
+              },
             ),
             const SizedBox(width: 12),
             _buildServiceButton(
               context,
               FontAwesomeIcons.receipt,
-              "Paybill",
-              true, // isFontAwesome
+              "Pay",
+              true,
               () => _showComingSoonDialog(context),
             ),
             const SizedBox(width: 12),
             _buildServiceButton(
               context,
-              Icons.phone_android,
-              "Airtime",
-              false, // isFontAwesome
+              FontAwesomeIcons.ellipsis,
+              "More",
+              true,
               () => _showComingSoonDialog(context),
             ),
           ],
@@ -73,15 +84,11 @@ class FinancialServices extends StatelessWidget {
     );
   }
 
-  // Build compact card button with glassmorphism for light mode
   Widget _buildServiceButton(BuildContext context, IconData icon, String label, bool isFontAwesome, [VoidCallback? onTap]) {
     final colors = AppColors.getThemeColors(context);
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    // Theme-aware container color
-    final containerColor = isDark 
-        ? AppColors.surfaceDark // Dark slate #1E293B for dark mode
-        : Colors.white; // Clean white for light mode
-    
+    final containerColor = isDark ? AppColors.surfaceDark : Colors.white;
+
     return Expanded(
       child: GestureDetector(
         onTap: onTap,
@@ -96,10 +103,10 @@ class FinancialServices extends StatelessWidget {
               decoration: BoxDecoration(
                 color: containerColor,
                 borderRadius: BorderRadius.circular(14),
-                border: isDark 
+                border: isDark
                     ? null
                     : Border.all(
-                        color: const Color(0xFFE5E7EB), // Soft gray border
+                        color: const Color(0xFFE5E7EB),
                         width: 1,
                       ),
                 boxShadow: isDark
@@ -111,7 +118,6 @@ class FinancialServices extends StatelessWidget {
                         ),
                       ]
                     : [
-                        // Minimal shadow for light mode
                         BoxShadow(
                           color: Colors.black.withOpacity(0.04),
                           blurRadius: 6,
@@ -123,12 +129,12 @@ class FinancialServices extends StatelessWidget {
                 child: isFontAwesome
                     ? FaIcon(
                         icon,
-                        color: colors.primary, // Theme-aware primary color
+                        color: colors.primary,
                         size: 24,
                       )
                     : Icon(
                         icon,
-                        color: colors.primary, // Theme-aware primary color
+                        color: colors.primary,
                         size: 24,
                       ),
               ),
@@ -139,7 +145,7 @@ class FinancialServices extends StatelessWidget {
               style: TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w500,
-                color: colors.textSecondary, // Theme-aware secondary text
+                color: colors.textSecondary,
               ),
               textAlign: TextAlign.center,
               maxLines: 2,

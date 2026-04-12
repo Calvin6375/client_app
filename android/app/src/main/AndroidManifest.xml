@@ -4,6 +4,9 @@
     <uses-permission android:name="android.permission.INTERNET"/>
     <!-- Firebase Cloud Messaging -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <!-- Save receipt images to gallery (gal) -->
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="32"/>
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES"/>
     
     <application
         android:label="TruePay"

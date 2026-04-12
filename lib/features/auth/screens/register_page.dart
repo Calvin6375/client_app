@@ -5,6 +5,7 @@ import 'package:pretium/services/notification_service.dart';
 import 'package:pretium/repositories/user_repository.dart';
 import 'package:pretium/utils/logger.dart';
 import 'package:pretium/core/constants/app_colors.dart';
+import 'package:pretium/services/dashboard_session_cache.dart';
 import '../widgets/custom_text_field.dart';
 import '../widgets/phone_number_field.dart';
 import '../widgets/register_header.dart';
@@ -181,6 +182,7 @@ class _RegisterPageState extends State<RegisterPage> {
 
       // 5) Navigate to landing page on success
       if (!mounted) return;
+      DashboardSessionCache.instance.clear();
       Navigator.pushAndRemoveUntil(
         context,
         MaterialPageRoute(builder: (context) => LandingPage()),

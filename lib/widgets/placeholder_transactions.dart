@@ -2,6 +2,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:pretium/core/constants/app_colors.dart';
 import 'package:pretium/models/transaction_model.dart';
+import 'package:pretium/features/transactions/screens/transaction_detail_page.dart';
+import 'package:pretium/services/dashboard_session_cache.dart';
 import 'package:pretium/services/transactions_service.dart';
 
 class PlaceholderTransactions extends StatefulWidget {
@@ -20,21 +22,41 @@ class _PlaceholderTransactionsState extends State<PlaceholderTransactions> {
   @override
   void initState() {
     super.initState();
+    final cached = DashboardSessionCache.instance.copyRecentTransactionsIfFresh();
+    if (cached != null) {
+      _transactionsResponse = cached;
+      _isLoading = false;
+      return;
+    }
     _loadTransactions();
   }
 
   /// Call this from the parent (e.g. pull-to-refresh) to reload transactions.
   Future<void> refreshTransactions() async {
-    await _loadTransactions();
+    await _loadTransactions(forceNetwork: true);
   }
 
-  Future<void> _loadTransactions() async {
+  Future<void> _loadTransactions({bool forceNetwork = false}) async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
       setState(() {
         _isLoading = false;
       });
       return;
+    }
+
+    if (!forceNetwork) {
+      final cached = DashboardSessionCache.instance.copyRecentTransactionsIfFresh();
+      if (cached != null) {
+        if (mounted) {
+          setState(() {
+            _transactionsResponse = cached;
+            _isLoading = false;
+            _error = null;
+          });
+        }
+        return;
+      }
     }
 
     setState(() {
@@ -45,6 +67,7 @@ class _PlaceholderTransactionsState extends State<PlaceholderTransactions> {
     try {
       final response = await _transactionsService.getTransactions(limit: 5);
       if (mounted) {
+        DashboardSessionCache.instance.recordTransactions(response);
         setState(() {
           _transactionsResponse = response;
           _isLoading = false;
@@ -96,6 +119,13 @@ class _PlaceholderTransactionsState extends State<PlaceholderTransactions> {
         final isDebit = transaction.isDebit;
 
         return ListTile(
+          onTap: () {
+            Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (context) => TransactionDetailPage(transaction: transaction),
+              ),
+            );
+          },
           leading: CircleAvatar(
             backgroundColor: colors.infoLight,
             child: Icon(

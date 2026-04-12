@@ -8,6 +8,8 @@ class TransactionDetails {
   PaymentMethod paymentMethod;
   String recipientFullName;
   String recipientPhoneNumber;
+  /// Mobile money network (e.g. Safaricom) when [paymentMethod] is mobile money.
+  String recipientMobileNetwork;
   String? recipientBankName;
   String? recipientAccountNumber;
 
@@ -19,6 +21,7 @@ class TransactionDetails {
     this.paymentMethod = PaymentMethod.mobileMoney,
     this.recipientFullName = '',
     this.recipientPhoneNumber = '',
+    this.recipientMobileNetwork = '',
     this.recipientBankName,
     this.recipientAccountNumber,
   });

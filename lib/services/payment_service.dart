@@ -343,6 +343,97 @@ Diagnostic steps:
     }
   }
 
+  /// Direct fiat payout (withdrawal) via Cloud Function [createDirectPayout] (us-central1).
+  /// [payoutMethod] is typically `bank` or `mobile_money` (server may default currency to KES).
+  Future<Map<String, dynamic>> createDirectPayout({
+    required double amount,
+    String? currency,
+    String? phoneNumber,
+    String? note,
+    String? payoutMethod,
+    Map<String, dynamic>? metadata,
+  }) async {
+    try {
+      Logger.info('🚀 ===== createDirectPayout (callable) =====');
+      await _ensureAuthenticated();
+
+      final currentUser = FirebaseAuth.instance.currentUser;
+      if (currentUser == null) {
+        throw FirebaseAuthException(
+          code: 'unauthenticated',
+          message: 'User authentication lost before createDirectPayout',
+        );
+      }
+
+      final functions = FirebaseFunctions.instanceFor(region: 'us-central1');
+      final callable = functions.httpsCallable(
+        'createDirectPayout',
+        options: HttpsCallableOptions(
+          timeout: const Duration(seconds: 60),
+        ),
+      );
+
+      final payload = <String, dynamic>{
+        'amount': amount,
+        if (currency != null && currency.trim().isNotEmpty) 'currency': currency.trim().toUpperCase(),
+        if (phoneNumber != null && phoneNumber.trim().isNotEmpty) 'phoneNumber': phoneNumber.trim(),
+        if (note != null && note.trim().isNotEmpty) 'note': note.trim(),
+        if (payoutMethod != null && payoutMethod.trim().isNotEmpty) 'payoutMethod': payoutMethod.trim(),
+        if (metadata != null && metadata.isNotEmpty) 'metadata': metadata,
+      };
+
+      Logger.info('📤 createDirectPayout payload keys: ${payload.keys.toList()}');
+      final result = await callable.call(payload);
+
+      final raw = result.data;
+      if (raw is! Map) {
+        Logger.error('createDirectPayout: unexpected response type ${raw.runtimeType}');
+        return {
+          'success': false,
+          'error': 'Invalid response from server',
+        };
+      }
+
+      final data = Map<String, dynamic>.from(raw);
+      final ok = data['success'] == true;
+      if (!ok) {
+        Logger.warning('createDirectPayout: success != true, data: $data');
+        return {
+          'success': false,
+          'error': data['error']?.toString() ?? 'Direct payout failed',
+          'data': data,
+        };
+      }
+
+      Logger.success('createDirectPayout ok: orderId=${data['orderId']} referenceId=${data['referenceId']}');
+
+      return {
+        'success': true,
+        'orderId': data['orderId']?.toString(),
+        'referenceId': data['referenceId']?.toString(),
+        'amount': data['amount'],
+        'currency': data['currency']?.toString(),
+        'status': data['status']?.toString(),
+        'orderType': data['orderType']?.toString(),
+        'createdAt': data['createdAt']?.toString(),
+        'data': data,
+      };
+    } on FirebaseFunctionsException catch (e) {
+      Logger.error('createDirectPayout FirebaseFunctionsException: ${e.code} ${e.message}');
+      return {
+        'success': false,
+        'error': e.message ?? 'Direct payout failed',
+        'code': e.code,
+      };
+    } catch (e, st) {
+      Logger.error('createDirectPayout error', e, st);
+      return {
+        'success': false,
+        'error': e.toString(),
+      };
+    }
+  }
+
   /// Handle payment webhook via Cloud Function. Used by the IntaSend flow
   /// (e.g. when the user opens the checkout link or when IntaSend sends
   /// success/failure). See IntaSendService and topup_page.dart.

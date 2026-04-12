@@ -62,6 +62,13 @@ class ReviewDetailsScreen extends StatelessWidget {
                       details.recipientPhoneNumber,
                       '${details.amountToReceive.toStringAsFixed(2)} ${details.toCurrency}',
                     ),
+                    if (details.recipientMobileNetwork.trim().isNotEmpty) ...[
+                      const SizedBox(height: 12),
+                      _DetailRow(
+                        label: 'Mobile network',
+                        value: details.recipientMobileNetwork.trim(),
+                      ),
+                    ],
                   ],
                 ),
               ],

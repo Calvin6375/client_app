@@ -1,22 +1,30 @@
 // Multi-step "Direct fiat deposit" flow (country → method → details → review → receipt).
 // Styling uses AppColors / Theme to match the rest of Pretium.
-// Confirm creates a server order via PaymentService.createDirectTopup (callable).
+// Deposit confirm: PaymentService.createDirectTopup. Withdraw: createDirectPayout (callable).
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:pretium/core/constants/app_colors.dart';
+import 'package:pretium/features/topup/utils/receipt_image_export.dart';
+import 'package:pretium/features/topup/utils/receipt_save_helper.dart';
 import 'package:pretium/services/payment_service.dart';
 
+/// Direct fiat deposit (top-up) or [DirectFiatFlowKind.withdraw] (Kenya KES payout wizard).
+enum DirectFiatFlowKind { deposit, withdraw }
+
 /// Route pushed from TopUp — direct bank / mobile-money style fiat deposit wizard.
+/// Use [flowKind] [DirectFiatFlowKind.withdraw] for the Kenya-only withdrawal flow.
 class DirectFiatDepositScreen extends StatefulWidget {
   const DirectFiatDepositScreen({
     super.key,
     required this.fiatBalance,
     required this.walletCurrencyCode,
+    this.flowKind = DirectFiatFlowKind.deposit,
   });
 
   final double fiatBalance;
   final String walletCurrencyCode;
+  final DirectFiatFlowKind flowKind;
 
   @override
   State<DirectFiatDepositScreen> createState() => _DirectFiatDepositScreenState();
@@ -62,16 +70,25 @@ class _MobileProvider {
 }
 
 class _DirectFiatDepositScreenState extends State<DirectFiatDepositScreen> {
-  static const _countries = <_DepositCountry>[
+  static const _kenyaCountry = _DepositCountry(
+    name: 'Kenya',
+    currencyName: 'Kenyan Shilling',
+    code: 'KES',
+    flagEmoji: '🇰🇪',
+  );
+
+  static const _depositCountries = <_DepositCountry>[
     _DepositCountry(name: 'Nigeria', currencyName: 'Nigerian Naira', code: 'NGN', flagEmoji: '🇳🇬'),
-    _DepositCountry(name: 'Kenya', currencyName: 'Kenyan Shilling', code: 'KES', flagEmoji: '🇰🇪'),
+    _kenyaCountry,
     _DepositCountry(name: 'Uganda', currencyName: 'Ugandan Shilling', code: 'UGX', flagEmoji: '🇺🇬'),
     _DepositCountry(name: 'Tanzania', currencyName: 'Tanzanian Shilling', code: 'TZS', flagEmoji: '🇹🇿'),
     _DepositCountry(name: 'Ethiopia', currencyName: 'Ethiopian Birr', code: 'ETB', flagEmoji: '🇪🇹'),
     _DepositCountry(name: 'Burundi', currencyName: 'Burundian Franc', code: 'BIF', flagEmoji: '🇧🇮'),
   ];
 
-  static const _methods = <_DepositMethodOption>[
+  static const _withdrawCountries = <_DepositCountry>[_kenyaCountry];
+
+  static const _depositMethods = <_DepositMethodOption>[
     _DepositMethodOption(
       id: 'mobile_money',
       title: 'Mobile Money',
@@ -98,6 +115,76 @@ class _DirectFiatDepositScreenState extends State<DirectFiatDepositScreen> {
     ),
   ];
 
+  static const _withdrawMethods = <_DepositMethodOption>[
+    _DepositMethodOption(
+      id: 'mobile_money',
+      title: 'Mobile Money',
+      subtitle: 'Instant withdrawal to M-Pesa, Airtel, or similar',
+      icon: Icons.smartphone_rounded,
+      feePercent: 0.015,
+      arrivalHint: 'Within 5 minutes',
+    ),
+    _DepositMethodOption(
+      id: 'bank_transfer',
+      title: 'Bank Transfer',
+      subtitle: 'Withdraw to your local bank account',
+      icon: Icons.account_balance_rounded,
+      feePercent: 0,
+      arrivalHint: '',
+    ),
+  ];
+
+  bool get _isWithdraw => widget.flowKind == DirectFiatFlowKind.withdraw;
+
+  List<_DepositCountry> get _countriesList => _isWithdraw ? _withdrawCountries : _depositCountries;
+
+  List<_DepositMethodOption> get _methodsList => _isWithdraw ? _withdrawMethods : _depositMethods;
+
+  String get _appBarTitle => _isWithdraw ? 'Withdraw' : 'Direct Deposit';
+
+  String get _countryInstruction =>
+      _isWithdraw
+          ? 'Withdrawals are available to Kenya (KES) only.'
+          : 'Choose the destination country for your fiat deposit.';
+
+  String get _methodInstruction =>
+      _isWithdraw
+          ? 'Choose how you would like to withdraw funds${_country != null ? ' in ${_country!.name}' : ''}.'
+          : 'Choose how you would like to deposit funds${_country != null ? ' in ${_country!.name}' : ''}.';
+
+  String get _transactionLimitBody =>
+      _isWithdraw
+          ? 'Daily withdrawal limits may apply for your account tier. Contact support if you need higher limits.'
+          : 'Daily deposit limits may apply for your account tier. Contact support if you need higher limits.';
+
+  String get _detailsStepTitle => _isWithdraw ? 'Withdrawal details' : 'Deposit details';
+
+  String get _detailsAmountPrompt => _isWithdraw ? 'How much would you like to withdraw?' : 'How much would you like to deposit?';
+
+  String get _bankAccountPurposeLine =>
+      _isWithdraw ? 'The bank account you’re withdrawing to.' : 'The bank account you’re depositing from.';
+
+  String get _phoneHelperLine {
+    if (_method?.id == 'mobile_money') {
+      return 'We’ll send payout updates to this number.';
+    }
+    return _isWithdraw
+        ? 'Optional — used for SMS updates about this withdrawal.'
+        : 'Optional — used for SMS updates about this deposit.';
+  }
+
+  String get _reviewStepTitle => _isWithdraw ? 'Review withdrawal' : 'Review deposit';
+
+  String get _reviewYouAreLine => _isWithdraw ? 'You are withdrawing' : 'You are depositing';
+
+  String get _receiptProcessingSubtitle =>
+      _isWithdraw ? 'Your withdrawal is being processed' : 'Your deposit is being processed';
+
+  String get _receiptSmsBanner =>
+      _isWithdraw
+          ? 'A confirmation SMS will be sent to your registered mobile number once your withdrawal is sent.'
+          : 'A confirmation SMS will be sent to your registered mobile number once the funds reach your wallet.';
+
   int _step = 0;
   bool _showReceipt = false;
   bool _submittingDirectTopup = false;
@@ -120,6 +207,9 @@ class _DirectFiatDepositScreenState extends State<DirectFiatDepositScreen> {
   DateTime _receiptTime = DateTime.now();
   String _maskedAccount = '';
 
+  final GlobalKey _receiptCardCaptureKey = GlobalKey();
+  bool _savingReceiptImage = false;
+
   void _onDetailsFieldsChanged() {
     if (!mounted || _step != 2) return;
     setState(() {});
@@ -128,6 +218,9 @@ class _DirectFiatDepositScreenState extends State<DirectFiatDepositScreen> {
   @override
   void initState() {
     super.initState();
+    if (_isWithdraw) {
+      _country = _withdrawCountries.first;
+    }
     _amountCtrl.addListener(_onDetailsFieldsChanged);
     _phoneCtrl.addListener(_onDetailsFieldsChanged);
     _bankNameCtrl.addListener(_onDetailsFieldsChanged);
@@ -296,6 +389,38 @@ class _DirectFiatDepositScreenState extends State<DirectFiatDepositScreen> {
 
   void _close() => Navigator.of(context).pop();
 
+  Future<void> _saveReceiptToGallery() async {
+    if (_savingReceiptImage) return;
+    setState(() => _savingReceiptImage = true);
+    try {
+      await Future<void>.delayed(Duration.zero);
+      await WidgetsBinding.instance.endOfFrame;
+      final raw = await ReceiptImageExport.captureRepaintBoundaryPng(_receiptCardCaptureKey);
+      if (raw == null || raw.isEmpty) {
+        if (mounted) _snack('Could not capture receipt. Try again.');
+        return;
+      }
+      final logoBytes = await rootBundle.load('assets/images/troupay_logo.png');
+      final out = ReceiptImageExport.applyTroupayWatermark(
+        receiptPng: raw,
+        logoPng: logoBytes.buffer.asUint8List(),
+      );
+      final stamp = DateTime.now().millisecondsSinceEpoch;
+      final baseName = 'troupay_receipt_$stamp';
+      await saveReceiptPngToGalleryOrShare(
+        pngBytes: out,
+        fileBaseName: baseName,
+        onMessage: (m) {
+          if (mounted) _snack(m);
+        },
+      );
+    } catch (e) {
+      if (mounted) _snack('Could not save receipt: $e');
+    } finally {
+      if (mounted) setState(() => _savingReceiptImage = false);
+    }
+  }
+
   void _nextFromCountry() {
     if (_country == null) return;
     setState(() => _step = 1);
@@ -360,13 +485,14 @@ class _DirectFiatDepositScreenState extends State<DirectFiatDepositScreen> {
     if (method == null) return null;
     final code = _country?.code ?? '';
     final totalStr = _formatMoney(_total, code);
+    final kind = _isWithdraw ? 'withdrawal' : 'deposit';
     switch (method.id) {
       case 'bank_transfer':
-        return 'Direct deposit $totalStr — Bank transfer (${_bankNameCtrl.text.trim()})';
+        return 'Direct fiat $kind $totalStr — Bank transfer (${_bankNameCtrl.text.trim()})';
       case 'mobile_money':
-        return 'Direct deposit $totalStr — Mobile money (${_selectedMobileProviderName()})';
+        return 'Direct fiat $kind $totalStr — Mobile money (${_selectedMobileProviderName()})';
       default:
-        return 'Direct deposit $totalStr — ${method.title}';
+        return 'Direct fiat $kind $totalStr — ${method.title}';
     }
   }
 
@@ -401,11 +527,44 @@ class _DirectFiatDepositScreenState extends State<DirectFiatDepositScreen> {
       review['accountNumberMasked'] = _maskedBankAccountForReview();
     }
     return <String, dynamic>{
-      'flow': 'direct_fiat_deposit',
+      'flow': _isWithdraw ? 'direct_fiat_withdraw' : 'direct_fiat_deposit',
       'review': review,
       'clientWalletCurrency': widget.walletCurrencyCode,
       'clientFiatBalance': widget.fiatBalance,
     };
+  }
+
+  /// Extra destination hints merged at the top level of [metadata] for [createDirectPayout].
+  Map<String, dynamic> _metadataForDirectPayout() {
+    final m = Map<String, dynamic>.from(_metadataForDirectTopup());
+    final method = _method?.id;
+    if (method == 'bank_transfer') {
+      m['bankName'] = _bankNameCtrl.text.trim();
+      final raw = _bankAccountCtrl.text.replaceAll(RegExp(r'\s'), '');
+      if (raw.isNotEmpty) {
+        m['destinationAccountNumber'] = raw;
+      }
+      if (raw.length >= 4) {
+        m['accountLast4'] = raw.substring(raw.length - 4);
+      }
+    }
+    if (method == 'mobile_money') {
+      m['mobileProvider'] = _selectedMobileProviderName();
+      m['mobileProviderId'] = _selectedMobileProviderId ?? '';
+    }
+    return m;
+  }
+
+  /// API values for [createDirectPayout]: `bank` | `mobile_money`.
+  String? _payoutMethodApiValue() {
+    switch (_method?.id) {
+      case 'bank_transfer':
+        return 'bank';
+      case 'mobile_money':
+        return 'mobile_money';
+      default:
+        return null;
+    }
   }
 
   void _applyMaskedAccountForReceipt() {
@@ -436,21 +595,36 @@ class _DirectFiatDepositScreenState extends State<DirectFiatDepositScreen> {
     setState(() => _submittingDirectTopup = true);
 
     final paymentService = PaymentService();
-    final result = await paymentService.createDirectTopup(
-      amount: _amountParsed,
-      currency: _country?.code,
-      phoneNumber: _phoneE164ForDirectTopup(),
-      note: _noteForDirectTopup(),
-      metadata: _metadataForDirectTopup(),
-      processingFee: _feeAmount,
-      totalDue: _total,
-    );
+    final Map<String, dynamic> result;
+    if (_isWithdraw) {
+      result = await paymentService.createDirectPayout(
+        amount: _amountParsed,
+        currency: _country?.code ?? 'KES',
+        phoneNumber: _phoneE164ForDirectTopup(),
+        note: _noteForDirectTopup(),
+        payoutMethod: _payoutMethodApiValue(),
+        metadata: _metadataForDirectPayout(),
+      );
+    } else {
+      result = await paymentService.createDirectTopup(
+        amount: _amountParsed,
+        currency: _country?.code,
+        phoneNumber: _phoneE164ForDirectTopup(),
+        note: _noteForDirectTopup(),
+        metadata: _metadataForDirectTopup(),
+        processingFee: _feeAmount,
+        totalDue: _total,
+      );
+    }
 
     if (!mounted) return;
 
     if (result['success'] != true) {
       setState(() => _submittingDirectTopup = false);
-      _snack(result['error']?.toString() ?? 'Could not create deposit order');
+      _snack(
+        result['error']?.toString() ??
+            (_isWithdraw ? 'Could not create withdrawal order' : 'Could not create deposit order'),
+      );
       return;
     }
 
@@ -521,7 +695,7 @@ class _DirectFiatDepositScreenState extends State<DirectFiatDepositScreen> {
           onPressed: _goBack,
         ),
         title: Text(
-          'Direct Deposit',
+          _appBarTitle,
           style: TextStyle(color: colors.textPrimary, fontWeight: FontWeight.w600),
         ),
         centerTitle: true,
@@ -573,11 +747,11 @@ class _DirectFiatDepositScreenState extends State<DirectFiatDepositScreen> {
         Text('Select country', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700, color: colors.textPrimary)),
         const SizedBox(height: 6),
         Text(
-          'Choose the destination country for your fiat deposit.',
+          _countryInstruction,
           style: TextStyle(fontSize: 14, color: colors.textSecondary, height: 1.35),
         ),
         const SizedBox(height: 20),
-        ..._countries.map((c) => _selectableCard(
+        ..._countriesList.map((c) => _selectableCard(
               selected: _country?.code == c.code,
               onTap: () => setState(() {
                 _country = c;
@@ -619,11 +793,11 @@ class _DirectFiatDepositScreenState extends State<DirectFiatDepositScreen> {
         Text('Select payment method', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700, color: colors.textPrimary)),
         const SizedBox(height: 6),
         Text(
-          'Choose how you would like to deposit funds${_country != null ? ' in ${_country!.name}' : ''}.',
+          _methodInstruction,
           style: TextStyle(fontSize: 14, color: colors.textSecondary, height: 1.35),
         ),
         const SizedBox(height: 20),
-        ..._methods.map((m) => _selectableCard(
+        ..._methodsList.map((m) => _selectableCard(
               selected: _method?.id == m.id,
               onTap: () => setState(() => _method = m),
               child: Row(
@@ -656,8 +830,7 @@ class _DirectFiatDepositScreenState extends State<DirectFiatDepositScreen> {
         _infoBanner(
           colors,
           title: 'Transaction limit',
-          body:
-              'Daily deposit limits may apply for your account tier. Contact support if you need higher limits.',
+          body: _transactionLimitBody,
           isDark: isDark,
         ),
       ],
@@ -669,10 +842,10 @@ class _DirectFiatDepositScreenState extends State<DirectFiatDepositScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Deposit details', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700, color: colors.textPrimary)),
+        Text(_detailsStepTitle, style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700, color: colors.textPrimary)),
         const SizedBox(height: 6),
         Text(
-          'How much would you like to deposit?',
+          _detailsAmountPrompt,
           style: TextStyle(fontSize: 14, color: colors.textSecondary),
         ),
         const SizedBox(height: 16),
@@ -743,7 +916,7 @@ class _DirectFiatDepositScreenState extends State<DirectFiatDepositScreen> {
         Wrap(
           spacing: 8,
           runSpacing: 8,
-          children: _methods.where((m) => m.id != 'debit_card').map((m) {
+          children: _methodsList.where((m) => m.id != 'debit_card').map((m) {
             final sel = _detailPayoutChoice == m.id;
             return ChoiceChip(
               label: Text(_payoutChipLabel(m)),
@@ -802,7 +975,7 @@ class _DirectFiatDepositScreenState extends State<DirectFiatDepositScreen> {
           ),
           const SizedBox(height: 6),
           Text(
-            'The bank account you’re depositing from.',
+            _bankAccountPurposeLine,
             style: TextStyle(fontSize: 12, color: colors.textSecondary, height: 1.3),
           ),
           const SizedBox(height: 10),
@@ -834,9 +1007,7 @@ class _DirectFiatDepositScreenState extends State<DirectFiatDepositScreen> {
         ),
         const SizedBox(height: 6),
         Text(
-          _method?.id == 'mobile_money'
-              ? 'We’ll send payout updates to this number.'
-              : 'Optional — used for SMS updates about this deposit.',
+          _phoneHelperLine,
           style: TextStyle(fontSize: 12, color: colors.textSecondary, height: 1.3),
         ),
         const SizedBox(height: 10),
@@ -953,7 +1124,7 @@ class _DirectFiatDepositScreenState extends State<DirectFiatDepositScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Review deposit', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700, color: colors.textPrimary)),
+        Text(_reviewStepTitle, style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700, color: colors.textPrimary)),
         const SizedBox(height: 16),
         Center(
           child: Container(
@@ -967,7 +1138,7 @@ class _DirectFiatDepositScreenState extends State<DirectFiatDepositScreen> {
         ),
         const SizedBox(height: 12),
         Center(
-          child: Text('You are depositing', style: TextStyle(color: colors.textSecondary, fontSize: 14)),
+          child: Text(_reviewYouAreLine, style: TextStyle(color: colors.textSecondary, fontSize: 14)),
         ),
         const SizedBox(height: 6),
         Center(
@@ -1093,6 +1264,19 @@ class _DirectFiatDepositScreenState extends State<DirectFiatDepositScreen> {
           style: TextStyle(color: colors.textPrimary, fontWeight: FontWeight.w600),
         ),
         centerTitle: true,
+        actions: [
+          IconButton(
+            tooltip: 'Download receipt',
+            onPressed: _savingReceiptImage ? null : _saveReceiptToGallery,
+            icon: _savingReceiptImage
+                ? SizedBox(
+                    width: 22,
+                    height: 22,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: primary),
+                  )
+                : Icon(Icons.download_rounded, color: colors.textPrimary),
+          ),
+        ],
       ),
       body: SafeArea(
         child: SingleChildScrollView(
@@ -1107,21 +1291,23 @@ class _DirectFiatDepositScreenState extends State<DirectFiatDepositScreen> {
               ),
               const SizedBox(height: 6),
               Text(
-                'Your deposit is being processed',
+                _receiptProcessingSubtitle,
                 textAlign: TextAlign.center,
                 style: TextStyle(fontSize: 14, color: colors.textSecondary),
               ),
               const SizedBox(height: 24),
-              Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: isDark ? colors.surface : Colors.white,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: colors.border),
-                  boxShadow: isDark ? null : [BoxShadow(color: colors.shadowLight, blurRadius: 12, offset: const Offset(0, 4))],
-                ),
-                child: Column(
-                  children: [
+              RepaintBoundary(
+                key: _receiptCardCaptureKey,
+                child: Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: isDark ? colors.surface : Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: colors.border),
+                    boxShadow: isDark ? null : [BoxShadow(color: colors.shadowLight, blurRadius: 12, offset: const Offset(0, 4))],
+                  ),
+                  child: Column(
+                    children: [
                     Text('Total amount', style: TextStyle(fontSize: 13, color: colors.textSecondary)),
                     const SizedBox(height: 8),
                     Text(
@@ -1177,16 +1363,39 @@ class _DirectFiatDepositScreenState extends State<DirectFiatDepositScreen> {
                       ),
                     ],
                   ],
+                  ),
                 ),
               ),
               const SizedBox(height: 20),
               _infoBanner(
                 colors,
                 title: null,
-                body: 'A confirmation SMS will be sent to your registered mobile number once the funds reach your wallet.',
+                body: _receiptSmsBanner,
                 isDark: isDark,
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 16),
+              OutlinedButton.icon(
+                onPressed: _savingReceiptImage ? null : _saveReceiptToGallery,
+                icon: _savingReceiptImage
+                    ? SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: primary),
+                      )
+                    : Icon(Icons.download_rounded, color: primary),
+                label: Text(
+                  _savingReceiptImage ? 'Saving…' : 'Download receipt',
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: primary,
+                  side: BorderSide(color: primary.withValues(alpha: 0.45)),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  minimumSize: const Size(double.infinity, 48),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                ),
+              ),
+              const SizedBox(height: 12),
               FilledButton(
                 onPressed: _close,
                 style: FilledButton.styleFrom(

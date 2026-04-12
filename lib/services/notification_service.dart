@@ -399,6 +399,50 @@ class NotificationService {
     }
   }
 
+  /// Marks notifications for [userId] as read (up to [limit] most recent, same window as the list stream).
+  Future<void> markAllNotificationsAsRead(String userId, {int limit = 100}) async {
+    try {
+      final snap = await FirebaseFirestore.instance
+          .collection('notifications')
+          .where('userId', isEqualTo: userId)
+          .orderBy('createdAt', descending: true)
+          .limit(limit)
+          .get();
+
+      final unread = snap.docs.where((d) {
+        final data = d.data();
+        return data['read'] != true;
+      }).toList();
+
+      if (unread.isEmpty) {
+        Logger.info('markAllNotificationsAsRead: nothing unread in window');
+        return;
+      }
+
+      WriteBatch batch = FirebaseFirestore.instance.batch();
+      var pending = 0;
+      for (final doc in unread) {
+        batch.update(doc.reference, {
+          'read': true,
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+        pending++;
+        if (pending >= 450) {
+          await batch.commit();
+          batch = FirebaseFirestore.instance.batch();
+          pending = 0;
+        }
+      }
+      if (pending > 0) {
+        await batch.commit();
+      }
+      Logger.success('Marked ${unread.length} notification(s) as read');
+    } catch (e, st) {
+      Logger.error('markAllNotificationsAsRead failed', e, st);
+      rethrow;
+    }
+  }
+
   /// Mark notification as read directly via Firestore (if rules allow)
   Future<void> markNotificationAsReadDirect(String notificationId) async {
     try {
