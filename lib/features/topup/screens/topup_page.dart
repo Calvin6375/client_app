@@ -14,11 +14,36 @@ import 'package:pretium/repositories/wallet_repository.dart';
 import 'package:pretium/repositories/user_repository.dart';
 import 'package:pretium/services/firebase_payment_service.dart';
 import 'package:pretium/core/constants/app_colors.dart';
+import 'package:pretium/features/topup/models/topup_deposit_country.dart';
 import 'package:pretium/features/topup/screens/direct_fiat_deposit_flow.dart';
+
+/// Fiat codes in the Set amount dropdown; includes every [TopupDepositCountry.code] used for top-up.
+const _topupFiatCurrencyCodes = <String>[
+  'USD',
+  'KES',
+  'NGN',
+  'GHS',
+  'UGX',
+  'TZS',
+  'ETB',
+  'BIF',
+  'AED',
+  'EUR',
+  'GBP',
+];
+
+String _coerceTopupFiatCurrency(String? code) {
+  final u = code?.trim().toUpperCase() ?? '';
+  if (u.isNotEmpty && _topupFiatCurrencyCodes.contains(u)) return u;
+  return 'USD';
+}
 
 // Top Up main screen composed of smaller widgets
 class TopUpPage extends StatefulWidget {
-  const TopUpPage({super.key});
+  const TopUpPage({super.key, this.initialDepositCountry});
+
+  /// When set (from [SelectCountryTopUpScreen]), pre-selects that currency in Set amount and is passed to direct fiat deposit.
+  final TopupDepositCountry? initialDepositCountry;
 
   @override
   State<TopUpPage> createState() => _TopUpPageState();
@@ -44,6 +69,9 @@ class _TopUpPageState extends State<TopUpPage> {
   static const String intaSendPublicKey ='ISPubKey_live_c2dbd636-a9a5-4a90-bdb8-dc7e7c7401a2';
   static const bool isTestMode = false;
 
+  /// Minimum Set amount for Fiat Option actions when currency is KES.
+  static const double _kesFiatOptionMinimumAmount = 150;
+
   // TransFi configuration (standalone; does not use IntaSend or createPayment Cloud Function)
   static const String transfiPublicKey = 'pk_sandbox_ceaa4a8428d6b1968b72546891f74942952cceeb78f841ca'; // Set your TransFi PUBLIC_KEY
   static const String transfiSecretKey = 'sk_sandbox_0cfe2684654c778255b551382ce778845e2424162d46e46212ff76b282e7ceda'; // Set your TransFi SECRET_KEY
@@ -62,6 +90,10 @@ class _TopUpPageState extends State<TopUpPage> {
   @override
   void initState() {
     super.initState();
+    final country = widget.initialDepositCountry;
+    if (country != null) {
+      _selectedCurrency = _coerceTopupFiatCurrency(country.code);
+    }
     _loadWalletBalance();
     _loadUserProfile();
   }
@@ -132,8 +164,9 @@ class _TopUpPageState extends State<TopUpPage> {
       setState(() {
         _fiatBalance = fiatWallet?.balance ?? 0.0;
         _cryptoBalance = cryptoWallet?.balance ?? 0.0;
-        // Keep selected currency for payment processing
-        _selectedCurrency = fiatWallet?.currencyCode ?? 'USD';
+        _selectedCurrency = widget.initialDepositCountry != null
+            ? _coerceTopupFiatCurrency(widget.initialDepositCountry!.code)
+            : _coerceTopupFiatCurrency(fiatWallet?.currencyCode);
       });
       
       debugPrint('TopUpPage - State updated: Fiat=$_fiatBalance, Crypto=$_cryptoBalance');
@@ -144,7 +177,9 @@ class _TopUpPageState extends State<TopUpPage> {
       setState(() {
         _fiatBalance = 0.0;
         _cryptoBalance = 0.0;
-        _selectedCurrency = 'USD';
+        _selectedCurrency = widget.initialDepositCountry != null
+            ? _coerceTopupFiatCurrency(widget.initialDepositCountry!.code)
+            : 'USD';
       });
     } finally {
       if (!mounted) return;
@@ -171,6 +206,17 @@ class _TopUpPageState extends State<TopUpPage> {
     setState(() {});
   }
 
+  double _parsedSetAmount() {
+    final text = _amountCtrl.text.replaceAll(',', '').trim();
+    return double.tryParse(text) ?? 0.0;
+  }
+
+  /// Fiat Option (IntaSend, TransFi, direct fiat): KES requires at least [_kesFiatOptionMinimumAmount].
+  bool _meetsKesFiatOptionMinimum() {
+    if (_selectedCurrency != 'KES') return true;
+    return _parsedSetAmount() >= _kesFiatOptionMinimumAmount;
+  }
+
   /// IntaSend flow: validate → create checkout (IntaSendService) → create
   /// payment record (Cloud Function) → show dialog and optionally launch URL.
   Future<void> _processIntaSendPayment() async {
@@ -194,10 +240,17 @@ class _TopUpPageState extends State<TopUpPage> {
       return;
     }
 
-    final amount = double.tryParse(_amountCtrl.text) ?? 0.0;
+    final amount = _parsedSetAmount();
     if (amount <= 0) {
       print('❌ Validation failed: Invalid amount: $amount');
       _showError('Please enter a valid amount');
+      return;
+    }
+    if (!_meetsKesFiatOptionMinimum()) {
+      print('❌ Validation failed: KES fiat option minimum not met');
+      _showError(
+        'For KES, the minimum amount for fiat top-up options is KSh ${_kesFiatOptionMinimumAmount.toStringAsFixed(0)}.',
+      );
       return;
     }
 
@@ -295,9 +348,15 @@ class _TopUpPageState extends State<TopUpPage> {
       _showError('User profile data is missing. Please ensure your profile is complete.');
       return;
     }
-    final amount = double.tryParse(_amountCtrl.text) ?? 0.0;
+    final amount = _parsedSetAmount();
     if (amount <= 0) {
       _showError('Please enter a valid amount');
+      return;
+    }
+    if (!_meetsKesFiatOptionMinimum()) {
+      _showError(
+        'For KES, the minimum amount for fiat top-up options is KSh ${_kesFiatOptionMinimumAmount.toStringAsFixed(0)}.',
+      );
       return;
     }
     if (transfiPublicKey.isEmpty || transfiSecretKey.isEmpty || transfiPaymentLinkId.isEmpty) {
@@ -388,11 +447,29 @@ class _TopUpPageState extends State<TopUpPage> {
   }
 
   void _openDirectFiatDepositFlow() {
+    if (_selectedCurrency == 'KES') {
+      if (_amountCtrl.text.trim().isEmpty) {
+        _showError('Please enter an amount');
+        return;
+      }
+      final amount = _parsedSetAmount();
+      if (amount <= 0) {
+        _showError('Please enter a valid amount');
+        return;
+      }
+      if (!_meetsKesFiatOptionMinimum()) {
+        _showError(
+          'For KES, the minimum amount for fiat top-up options is KSh ${_kesFiatOptionMinimumAmount.toStringAsFixed(0)}.',
+        );
+        return;
+      }
+    }
     Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
         builder: (_) => DirectFiatDepositScreen(
           fiatBalance: _fiatBalance,
           walletCurrencyCode: _selectedCurrency,
+          initialDepositCountry: widget.initialDepositCountry,
         ),
       ),
     );
@@ -803,10 +880,20 @@ class _SetAmountCard extends StatelessWidget {
         return '\$';
       case 'KES':
         return 'KSh';
+      case 'NGN':
+        return '₦';
+      case 'GHS':
+        return 'GH₵';
       case 'UGX':
         return 'USh';
       case 'TZS':
         return 'TSh';
+      case 'ETB':
+        return 'Br';
+      case 'BIF':
+        return 'FBu';
+      case 'AED':
+        return 'AED ';
       case 'EUR':
         return '€';
       case 'GBP':
@@ -892,7 +979,7 @@ class _SetAmountCard extends StatelessWidget {
                     style: TextStyle(
                       color: colors.textPrimary,
                     ),
-                    items: ['USD', 'KES', 'UGX', 'TZS', 'EUR', 'GBP']
+                    items: _topupFiatCurrencyCodes
                         .map((currency) => DropdownMenuItem(
                               value: currency,
                               child: Text(

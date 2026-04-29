@@ -1,13 +1,14 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:pretium/core/constants/cloud_functions_api_config.dart';
 import 'package:pretium/utils/logger.dart';
 
 /// Customer rates model for buy/sell rates
 class CustomerRates {
-  final double buyRate;  // Rate when buying USDT with fiat
+  final double buyRate; // Rate when buying USDT with fiat
   final double sellRate; // Rate when selling USDT for fiat
-  
+
   CustomerRates({required this.buyRate, required this.sellRate});
 }
 
@@ -15,21 +16,22 @@ class CustomerRates {
 /// Uses customer rates (buyRate/sellRate) from /api/customer-rates endpoint for customer transactions
 /// Falls back to /api/binance/rates for reference rates
 class RatesService {
-  // Base URL for the backend API
-  static const String _baseUrl = 'https://us-central1-truepay-72060.cloudfunctions.net/api';
-  
+  /// Same host as `/api/countries` and other HTTP Cloud Functions.
+  static String get _baseUrl => CloudFunctionsApiConfig.baseApiUrl;
+
   // Cache for rates to avoid excessive API calls
   final Map<String, double> _pairToRate = {};
   final Map<String, DateTime> _rateCacheTime = {};
-  
+
   // Cache for customer rates (buyRate/sellRate)
   final Map<String, CustomerRates> _customerRatesCache = {};
   final Map<String, DateTime> _customerRatesCacheTime = {};
-  
+
   // Cache duration: 5 minutes (rates are valid for 5-10 minutes per API docs)
   static const Duration _cacheDuration = Duration(minutes: 5);
-  
-  final StreamController<Map<String, double>> _controller = StreamController.broadcast();
+
+  final StreamController<Map<String, double>> _controller =
+      StreamController.broadcast();
   Timer? _refreshTimer;
 
   RatesService() {
@@ -40,10 +42,10 @@ class RatesService {
     _rateCacheTime['USDUSDT'] = now;
     _pairToRate['USDTUSD'] = 1.0;
     _rateCacheTime['USDTUSD'] = now;
-    
+
     // Emit initial rates
     _controller.add(Map<String, double>.from(_pairToRate));
-    
+
     // Start periodic refresh every 5 minutes
     _refreshTimer = Timer.periodic(_cacheDuration, (_) => _refreshAllRates());
   }
@@ -53,7 +55,7 @@ class RatesService {
   /// Get exchange rate for a currency pair
   /// Uses customer rates (buyRate/sellRate) when available for customer-facing transactions
   /// Returns cached rate immediately, triggers background refresh if stale
-  /// 
+  ///
   /// For USDT/fiat pairs:
   /// - When converting fiat -> USDT (buying USDT), uses buyRate
   /// - When converting USDT -> fiat (selling USDT), uses sellRate
@@ -61,11 +63,11 @@ class RatesService {
     final key = (base + quote).toUpperCase();
     final baseUpper = base.toUpperCase();
     final quoteUpper = quote.toUpperCase();
-    
+
     // Check if this is a USDT/fiat pair that can use customer rates
     String? currencyPair;
     bool isBuyingUSDT = false; // true if fiat -> USDT, false if USDT -> fiat
-    
+
     // Handle USD/USDT pair - still try to fetch rates from API
     if ((baseUpper == 'USD' && quoteUpper == 'USDT') ||
         (baseUpper == 'USDT' && quoteUpper == 'USD')) {
@@ -78,15 +80,15 @@ class RatesService {
       currencyPair = '$quoteUpper/$baseUpper';
       isBuyingUSDT = true; // Buying USDT with fiat
     }
-    
+
     // Try to use customer rates first if available
     if (currencyPair != null) {
       final customerRates = _getCustomerRatesFromCache(currencyPair);
       if (customerRates != null) {
         // Use appropriate rate based on direction
-        final rate = isBuyingUSDT 
-            ? 1.0 / customerRates.buyRate  // fiat -> USDT: inverse of buyRate
-            : customerRates.sellRate;      // USDT -> fiat: use sellRate directly
+        final rate = isBuyingUSDT
+            ? 1.0 / customerRates.buyRate // fiat -> USDT: inverse of buyRate
+            : customerRates.sellRate; // USDT -> fiat: use sellRate directly
         _updateRate(base, quote, rate);
         // Also update inverse
         _updateRate(quote, base, 1.0 / rate);
@@ -99,11 +101,11 @@ class RatesService {
         });
       }
     }
-    
+
     // Check cache first
     if (_pairToRate.containsKey(key)) {
       final cacheTime = _rateCacheTime[key];
-      if (cacheTime != null && 
+      if (cacheTime != null &&
           DateTime.now().difference(cacheTime) < _cacheDuration) {
         return _pairToRate[key]!;
       } else {
@@ -116,7 +118,9 @@ class RatesService {
       // No cache - for fiat-to-fiat try composed rate from legs (same API as Send Money)
       final baseUpper = base.toUpperCase();
       final quoteUpper = quote.toUpperCase();
-      if (baseUpper != quoteUpper && _isFiat(baseUpper) && _isFiat(quoteUpper)) {
+      if (baseUpper != quoteUpper &&
+          _isFiat(baseUpper) &&
+          _isFiat(quoteUpper)) {
         final r1 = _pairToRate[baseUpper + 'USDT'];
         final r2 = _pairToRate['USDT' + quoteUpper];
         if (r1 != null && r2 != null && r1 > 0 && r2 > 0) {
@@ -134,64 +138,66 @@ class RatesService {
     // Return cached rate or default
     return _pairToRate[key] ?? 1.0;
   }
-  
+
   /// Get customer rates (buyRate and sellRate) for a currency pair
   /// Returns null if not available or cache is stale
   CustomerRates? _getCustomerRatesFromCache(String currencyPair) {
     final cacheTime = _customerRatesCacheTime[currencyPair];
-    if (cacheTime != null && 
+    if (cacheTime != null &&
         DateTime.now().difference(cacheTime) < _cacheDuration) {
       return _customerRatesCache[currencyPair];
     }
     return null;
   }
-  
+
   /// Fetch customer rates from /api/customer-rates endpoint
   /// Format: GET /api/customer-rates?currencyPair=USDT/KES
   /// Returns: { "buyRate": 129.50, "sellRate": 128.00 }
   Future<void> _fetchCustomerRates(String currencyPair) async {
     try {
-      final url = Uri.parse('$_baseUrl/customer-rates?currencyPair=$currencyPair');
-      
+      final url =
+          Uri.parse('$_baseUrl/customer-rates?currencyPair=$currencyPair');
+
       // Log raw request
       Logger.debug('📡 CUSTOMER RATES API REQUEST');
       Logger.debug('  Method: GET');
       Logger.debug('  URL: $url');
       Logger.debug('  Headers: {}');
       Logger.debug('  Query Parameters: currencyPair=$currencyPair');
-      
+
       final response = await http.get(url);
-      
+
       // Log raw response
       Logger.debug('📥 CUSTOMER RATES API RESPONSE');
       Logger.debug('  Status Code: ${response.statusCode}');
       Logger.debug('  Headers: ${response.headers}');
       Logger.debug('  Raw Response Body: ${response.body}');
-      
+
       if (response.statusCode == 200) {
         final data = json.decode(response.body) as Map<String, dynamic>;
-        
+
         Logger.debug('  Parsed Response: $data');
-        
+
         final buyRate = (data['buyRate'] as num?)?.toDouble();
         final sellRate = (data['sellRate'] as num?)?.toDouble();
-        
+
         if (buyRate != null && sellRate != null) {
-          Logger.success('Customer rates fetched: buyRate=$buyRate, sellRate=$sellRate');
-          
+          Logger.success(
+              'Customer rates fetched: buyRate=$buyRate, sellRate=$sellRate');
+
           _customerRatesCache[currencyPair] = CustomerRates(
             buyRate: buyRate,
             sellRate: sellRate,
           );
           _customerRatesCacheTime[currencyPair] = DateTime.now();
-          
+
           // Update the rate cache based on the currency pair direction
           // Parse currency pair (e.g., "USDT/KES")
           final parts = currencyPair.split('/');
           if (parts.length == 2) {
             final base = parts[0];
             final quote = parts[1];
-            
+
             // USDT -> Fiat: use sellRate
             _updateRate(base, quote, sellRate);
             // Fiat -> USDT: inverse of buyRate
@@ -201,40 +207,42 @@ class RatesService {
           Logger.warning('Customer rates response missing buyRate or sellRate');
         }
       } else {
-        Logger.error('Customer rates API returned non-200 status: ${response.statusCode}');
+        Logger.error(
+            'Customer rates API returned non-200 status: ${response.statusCode}');
       }
     } catch (e, stackTrace) {
-      Logger.error('Error fetching customer rates for $currencyPair', e, stackTrace);
+      Logger.error(
+          'Error fetching customer rates for $currencyPair', e, stackTrace);
       // Fall back to binance rates if customer rates fail
     }
   }
-  
+
   /// Get buy rate for a currency pair (when buying USDT with fiat)
   /// Example: getBuyRate('KES', 'USDT') returns the rate for KES -> USDT
   Future<double?> getBuyRate(String fiat, String asset) async {
     final currencyPair = '$asset/$fiat';
     final cached = _getCustomerRatesFromCache(currencyPair);
-    
+
     if (cached != null) {
       return cached.buyRate;
     }
-    
+
     // Fetch if not cached
     await _fetchCustomerRates(currencyPair);
     final updated = _getCustomerRatesFromCache(currencyPair);
     return updated?.buyRate;
   }
-  
+
   /// Get sell rate for a currency pair (when selling USDT for fiat)
   /// Example: getSellRate('USDT', 'KES') returns the rate for USDT -> KES
   Future<double?> getSellRate(String asset, String fiat) async {
     final currencyPair = '$asset/$fiat';
     final cached = _getCustomerRatesFromCache(currencyPair);
-    
+
     if (cached != null) {
       return cached.sellRate;
     }
-    
+
     // Fetch if not cached
     await _fetchCustomerRates(currencyPair);
     final updated = _getCustomerRatesFromCache(currencyPair);
@@ -255,8 +263,11 @@ class RatesService {
       final quoteUpper = quote.toUpperCase();
 
       // Fiat-to-fiat (e.g. USD/KES): compute via USDT using same API as Send Money
-      if (baseUpper != quoteUpper && _isFiat(baseUpper) && _isFiat(quoteUpper)) {
-        Logger.debug('🔄 Fetching fiat-to-fiat rate $baseUpper/$quoteUpper via USDT');
+      if (baseUpper != quoteUpper &&
+          _isFiat(baseUpper) &&
+          _isFiat(quoteUpper)) {
+        Logger.debug(
+            '🔄 Fetching fiat-to-fiat rate $baseUpper/$quoteUpper via USDT');
         await _fetchRate(base, 'USDT');
         await _fetchRate('USDT', quote);
         final key1 = (baseUpper + 'USDT');
@@ -265,7 +276,8 @@ class RatesService {
         final r2 = _pairToRate[key2];
         if (r1 != null && r2 != null && r1 > 0 && r2 > 0) {
           final rate = r1 * r2;
-          Logger.debug('✅ Fiat-to-fiat rate $baseUpper/$quoteUpper = $rate (via USDT)');
+          Logger.debug(
+              '✅ Fiat-to-fiat rate $baseUpper/$quoteUpper = $rate (via USDT)');
           _updateRate(base, quote, rate);
           _updateRate(quote, base, 1.0 / rate);
         }
@@ -278,60 +290,63 @@ class RatesService {
         // Try customer rates first for USD/USDT
         final currencyPair = 'USDT/USD';
         await _fetchCustomerRates(currencyPair);
-        
+
         final customerRates = _getCustomerRatesFromCache(currencyPair);
         if (customerRates != null) {
           // Use customer rates if available
-          final rate = baseUpper == 'USD' 
-              ? 1.0 / customerRates.buyRate  // USD -> USDT: inverse of buyRate
-              : customerRates.sellRate;     // USDT -> USD: use sellRate
+          final rate = baseUpper == 'USD'
+              ? 1.0 / customerRates.buyRate // USD -> USDT: inverse of buyRate
+              : customerRates.sellRate; // USDT -> USD: use sellRate
           _updateRate(base, quote, rate);
           _updateRate(quote, base, 1.0 / rate);
           return;
         }
-        
+
         // Fall back to Binance rates for USD/USDT
         final url = Uri.parse('$_baseUrl/binance/rates?fiat=USD&asset=USDT');
-        
+
         Logger.debug('📡 BINANCE RATES API REQUEST (USD/USDT)');
         Logger.debug('  Method: GET');
         Logger.debug('  URL: $url');
         Logger.debug('  Headers: {}');
         Logger.debug('  Query Parameters: fiat=USD, asset=USDT');
-        
+
         final response = await http.get(url);
-        
+
         Logger.debug('📥 BINANCE RATES API RESPONSE (USD/USDT)');
         Logger.debug('  Status Code: ${response.statusCode}');
         Logger.debug('  Headers: ${response.headers}');
         Logger.debug('  Raw Response Body: ${response.body}');
-        
+
         if (response.statusCode == 200) {
           final data = json.decode(response.body) as Map<String, dynamic>;
           Logger.debug('  Parsed Response: $data');
-          
+
           final customerPrice = (data['customerPrice'] as num?)?.toDouble();
           if (customerPrice != null && customerPrice > 0) {
-            Logger.success('Binance rate fetched for USD/USDT: customerPrice=$customerPrice');
-            final rate = baseUpper == 'USD' ? 1.0 / customerPrice : customerPrice;
+            Logger.success(
+                'Binance rate fetched for USD/USDT: customerPrice=$customerPrice');
+            final rate =
+                baseUpper == 'USD' ? 1.0 / customerPrice : customerPrice;
             _updateRate(base, quote, rate);
             _updateRate(quote, base, 1.0 / rate);
             return;
           }
         }
-        
+
         // Default to 1.0 if API calls fail
-        Logger.debug('Using default 1.0 rate for USD/USDT (API unavailable or returned invalid data)');
+        Logger.debug(
+            'Using default 1.0 rate for USD/USDT (API unavailable or returned invalid data)');
         _updateRate(base, quote, 1.0);
         _updateRate(quote, base, 1.0);
         return;
       }
-      
+
       // For USDT/fiat pairs, try customer rates first, then fall back to Binance
       String? fiat;
       String asset = 'USDT';
       bool isBaseUSDT = false;
-      
+
       if (baseUpper == 'USDT') {
         fiat = quoteUpper;
         isBaseUSDT = true;
@@ -339,13 +354,13 @@ class RatesService {
         fiat = baseUpper;
         isBaseUSDT = false;
       }
-      
+
       // If it's a fiat currency supported by the API (excluding USD which is 1:1 with USDT)
       if (fiat != null && fiat != 'USD' && _isSupportedFiat(fiat)) {
         // Try customer rates first
         final currencyPair = '$asset/$fiat';
         await _fetchCustomerRates(currencyPair);
-        
+
         // Check if customer rates were successfully fetched
         final customerRates = _getCustomerRatesFromCache(currencyPair);
         if (customerRates != null) {
@@ -363,37 +378,39 @@ class RatesService {
           }
           return;
         }
-        
+
         // Fall back to Binance rates if customer rates are not available
-        final url = Uri.parse('$_baseUrl/binance/rates?fiat=$fiat&asset=$asset');
-        
+        final url =
+            Uri.parse('$_baseUrl/binance/rates?fiat=$fiat&asset=$asset');
+
         // Log raw request
         Logger.debug('📡 BINANCE RATES API REQUEST');
         Logger.debug('  Method: GET');
         Logger.debug('  URL: $url');
         Logger.debug('  Headers: {}');
         Logger.debug('  Query Parameters: fiat=$fiat, asset=$asset');
-        
+
         final response = await http.get(url);
-        
+
         // Log raw response
         Logger.debug('📥 BINANCE RATES API RESPONSE');
         Logger.debug('  Status Code: ${response.statusCode}');
         Logger.debug('  Headers: ${response.headers}');
         Logger.debug('  Raw Response Body: ${response.body}');
-        
+
         if (response.statusCode == 200) {
           final data = json.decode(response.body) as Map<String, dynamic>;
-          
+
           Logger.debug('  Parsed Response: $data');
-          
+
           // Use customerPrice (rate with commission) - this is the rate we should use for transactions
           // customerPrice is the rate WITH commission already applied
           final customerPrice = (data['customerPrice'] as num?)?.toDouble();
-          
+
           if (customerPrice != null) {
-            Logger.success('Binance rate fetched: customerPrice=$customerPrice');
-            
+            Logger.success(
+                'Binance rate fetched: customerPrice=$customerPrice');
+
             // customerPrice represents: 1 USDT = customerPrice fiat
             // Store the rate in the correct direction
             if (isBaseUSDT) {
@@ -411,7 +428,8 @@ class RatesService {
             Logger.warning('Binance rates response missing customerPrice');
           }
         } else {
-          Logger.error('Binance rates API returned non-200 status: ${response.statusCode}');
+          Logger.error(
+              'Binance rates API returned non-200 status: ${response.statusCode}');
         }
       } else if (fiat == 'USD') {
         // USD/USDT is 1:1
@@ -445,7 +463,7 @@ class RatesService {
     for (final pair in customerPairs) {
       await _fetchCustomerRates(pair);
     }
-    
+
     // Refresh regular rates
     final pairs = _pairToRate.keys.toList();
     for (final key in pairs) {
@@ -464,7 +482,7 @@ class RatesService {
     final key = (base + quote).toUpperCase();
     _pairToRate.remove(key);
     _rateCacheTime.remove(key);
-    
+
     // Also clear customer rates cache for this pair
     final baseUpper = base.toUpperCase();
     final quoteUpper = quote.toUpperCase();
@@ -481,7 +499,7 @@ class RatesService {
       _customerRatesCache.remove(currencyPair);
       _customerRatesCacheTime.remove(currencyPair);
     }
-    
+
     // Now fetch fresh rate
     await _fetchRate(base, quote);
   }

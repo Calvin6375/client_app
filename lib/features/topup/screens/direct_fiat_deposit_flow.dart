@@ -5,6 +5,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:pretium/core/constants/app_colors.dart';
+import 'package:pretium/features/topup/models/topup_deposit_country.dart';
 import 'package:pretium/features/topup/utils/receipt_image_export.dart';
 import 'package:pretium/features/topup/utils/receipt_save_helper.dart';
 import 'package:pretium/services/payment_service.dart';
@@ -20,28 +21,22 @@ class DirectFiatDepositScreen extends StatefulWidget {
     required this.fiatBalance,
     required this.walletCurrencyCode,
     this.flowKind = DirectFiatFlowKind.deposit,
+    this.initialDepositCountry,
+    this.initialDepositCountryCode,
   });
 
   final double fiatBalance;
   final String walletCurrencyCode;
   final DirectFiatFlowKind flowKind;
 
+  /// When set (deposit flow only), skips the country step and opens on payment method.
+  final TopupDepositCountry? initialDepositCountry;
+
+  /// Fallback when only a currency code (e.g. `NGN`) is known, e.g. deep links.
+  final String? initialDepositCountryCode;
+
   @override
   State<DirectFiatDepositScreen> createState() => _DirectFiatDepositScreenState();
-}
-
-class _DepositCountry {
-  const _DepositCountry({
-    required this.name,
-    required this.currencyName,
-    required this.code,
-    required this.flagEmoji,
-  });
-
-  final String name;
-  final String currencyName;
-  final String code;
-  final String flagEmoji;
 }
 
 class _DepositMethodOption {
@@ -70,29 +65,11 @@ class _MobileProvider {
 }
 
 class _DirectFiatDepositScreenState extends State<DirectFiatDepositScreen> {
-  static const _kenyaCountry = _DepositCountry(
-    name: 'Kenya',
-    currencyName: 'Kenyan Shilling',
-    code: 'KES',
-    flagEmoji: '🇰🇪',
-  );
-
-  static const _depositCountries = <_DepositCountry>[
-    _DepositCountry(name: 'Nigeria', currencyName: 'Nigerian Naira', code: 'NGN', flagEmoji: '🇳🇬'),
-    _kenyaCountry,
-    _DepositCountry(name: 'Uganda', currencyName: 'Ugandan Shilling', code: 'UGX', flagEmoji: '🇺🇬'),
-    _DepositCountry(name: 'Tanzania', currencyName: 'Tanzanian Shilling', code: 'TZS', flagEmoji: '🇹🇿'),
-    _DepositCountry(name: 'Ethiopia', currencyName: 'Ethiopian Birr', code: 'ETB', flagEmoji: '🇪🇹'),
-    _DepositCountry(name: 'Burundi', currencyName: 'Burundian Franc', code: 'BIF', flagEmoji: '🇧🇮'),
-  ];
-
-  static const _withdrawCountries = <_DepositCountry>[_kenyaCountry];
-
   static const _depositMethods = <_DepositMethodOption>[
     _DepositMethodOption(
       id: 'mobile_money',
       title: 'Mobile Money',
-      subtitle: 'Instant deposit via MTN, Airtel, or similar',
+      subtitle: 'Instant deposit via mobile money providers',
       icon: Icons.smartphone_rounded,
       feePercent: 0.015,
       arrivalHint: 'Within 5 minutes',
@@ -136,7 +113,8 @@ class _DirectFiatDepositScreenState extends State<DirectFiatDepositScreen> {
 
   bool get _isWithdraw => widget.flowKind == DirectFiatFlowKind.withdraw;
 
-  List<_DepositCountry> get _countriesList => _isWithdraw ? _withdrawCountries : _depositCountries;
+  List<TopupDepositCountry> get _countriesList =>
+      _isWithdraw ? TopupDepositCountry.withdrawSupported : TopupDepositCountry.depositSupported;
 
   List<_DepositMethodOption> get _methodsList => _isWithdraw ? _withdrawMethods : _depositMethods;
 
@@ -189,7 +167,7 @@ class _DirectFiatDepositScreenState extends State<DirectFiatDepositScreen> {
   bool _showReceipt = false;
   bool _submittingDirectTopup = false;
 
-  _DepositCountry? _country;
+  TopupDepositCountry? _country;
   _DepositMethodOption? _method;
 
   final TextEditingController _amountCtrl = TextEditingController();
@@ -219,7 +197,22 @@ class _DirectFiatDepositScreenState extends State<DirectFiatDepositScreen> {
   void initState() {
     super.initState();
     if (_isWithdraw) {
-      _country = _withdrawCountries.first;
+      _country = TopupDepositCountry.withdrawSupported.first;
+    } else {
+      final preset = widget.initialDepositCountry;
+      if (preset != null) {
+        _country = preset;
+        _step = 1;
+      } else {
+        final pre = widget.initialDepositCountryCode;
+        if (pre != null && pre.isNotEmpty) {
+          final match = TopupDepositCountry.forDepositCode(pre);
+          if (match != null) {
+            _country = match;
+            _step = 1;
+          }
+        }
+      }
     }
     _amountCtrl.addListener(_onDetailsFieldsChanged);
     _phoneCtrl.addListener(_onDetailsFieldsChanged);
@@ -255,6 +248,12 @@ class _DirectFiatDepositScreenState extends State<DirectFiatDepositScreen> {
         return '+251';
       case 'BIF':
         return '+257';
+      case 'GHS':
+        return '+233';
+      case 'USD':
+        return '+1';
+      case 'AED':
+        return '+971';
       default:
         return '+';
     }
@@ -298,6 +297,12 @@ class _DirectFiatDepositScreenState extends State<DirectFiatDepositScreen> {
           _MobileProvider(id: 'lumitel', name: 'Lumitel'),
           _MobileProvider(id: 'econet', name: 'Econet Leo'),
           _MobileProvider(id: 'onatel', name: 'Onatel'),
+        ];
+      case 'GHS':
+        return const [
+          _MobileProvider(id: 'mtn_gh', name: 'MTN'),
+          _MobileProvider(id: 'vodafone_gh', name: 'Vodafone Cash'),
+          _MobileProvider(id: 'airteltigo_gh', name: 'AirtelTigo Money'),
         ];
       default:
         return const [];
@@ -1510,6 +1515,10 @@ class _DirectFiatDepositScreenState extends State<DirectFiatDepositScreen> {
         return 'Br';
       case 'BIF':
         return 'FBu';
+      case 'GHS':
+        return 'GH₵';
+      case 'AED':
+        return 'د.إ';
       default:
         return code;
     }

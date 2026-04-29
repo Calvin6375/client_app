@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'package:pretium/app/route_names.dart';
+import 'package:pretium/features/topup/models/topup_deposit_country.dart';
 import 'package:pretium/features/topup/screens/direct_fiat_deposit_flow.dart';
+import 'package:pretium/features/topup/screens/select_country_topup_screen.dart';
+import 'package:pretium/features/topup/screens/topup_page.dart';
 import 'package:pretium/models/wallet_model.dart';
 import 'package:pretium/repositories/wallet_repository.dart';
 import 'package:pretium/core/constants/app_colors.dart';
@@ -241,10 +243,7 @@ class _WalletCardState extends State<WalletCard> {
           loading: _loading,
           error: _fiatError,
           backgroundColor: primary,
-          onTopUp: () async {
-            await Navigator.of(context).pushNamed(RouteNames.topup);
-            await _refreshBalance(forceRefresh: true);
-          },
+          onTopUp: _openTopUpFlow,
           onWithdraw: () => _openKenyaWithdraw(context),
         );
       }
@@ -300,10 +299,7 @@ class _WalletCardState extends State<WalletCard> {
               loading: _loading && index == _currentFiatIndex,
               error: _fiatError,
               backgroundColor: primary,
-              onTopUp: () async {
-                await Navigator.of(context).pushNamed(RouteNames.topup);
-                await _refreshBalance(forceRefresh: true);
-              },
+              onTopUp: _openTopUpFlow,
               onWithdraw: () => _openKenyaWithdraw(context),
             );
           },
@@ -346,13 +342,25 @@ class _WalletCardState extends State<WalletCard> {
         loading: _loading,
         error: _cryptoError,
         backgroundColor: primary,
-        onTopUp: () async {
-          await Navigator.of(context).pushNamed(RouteNames.topup);
-          await _refreshBalance(forceRefresh: true);
-        },
+        onTopUp: _openTopUpFlow,
         onWithdraw: () => _showWithdrawComingSoon(context),
       );
     }
+  }
+
+  Future<void> _openTopUpFlow() async {
+    final country = await Navigator.of(context).push<TopupDepositCountry>(
+      MaterialPageRoute<TopupDepositCountry>(
+        builder: (_) => const SelectCountryTopUpScreen(),
+      ),
+    );
+    if (!mounted || country == null) return;
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => TopUpPage(initialDepositCountry: country),
+      ),
+    );
+    if (mounted) await _refreshBalance(forceRefresh: true);
   }
 
   void _openKenyaWithdraw(BuildContext context) {
