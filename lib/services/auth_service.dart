@@ -1,6 +1,13 @@
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:pretium/firebase_options.dart';
 import 'package:pretium/services/dashboard_session_cache.dart';
 import 'package:pretium/utils/logger.dart';
+
+/// Android `applicationId` in `android/app/build.gradle` (password-reset app links).
+const _androidPackageForPasswordReset = 'com.example.pretium_mock';
+
+/// iOS `BUNDLE_ID` in `ios/Runner/GoogleService-Info.plist` (password-reset universal links).
+const _iosBundleIdForPasswordReset = 'com.example.pretiumMock';
 
 /// Authentication service
 /// Handles all Firebase Authentication operations
@@ -121,11 +128,23 @@ class AuthService {
     }
   }
 
-  /// Send password reset email
-  Future<void> sendPasswordResetEmail(String email) async {
+  /// Send password reset email using Firebase Auth (client SDK).
+  ///
+  /// Uses [ActionCodeSettings] so the link can open in-app when supported
+  /// (`handleCodeInApp`, iOS bundle id, Android package name). Continue URL
+  /// uses the project default host (`https://<projectId>.firebaseapp.com/`),
+  /// which is on Firebase Auth authorized domains by default.
+  Future<void> sendPasswordResetEmail(
+    String email, {
+    ActionCodeSettings? actionCodeSettings,
+  }) async {
     try {
       Logger.info('Sending password reset email to: $email');
-      await _auth.sendPasswordResetEmail(email: email.trim());
+      await _auth.sendPasswordResetEmail(
+        email: email.trim(),
+        actionCodeSettings:
+            actionCodeSettings ?? _defaultPasswordResetActionCodeSettings(),
+      );
       Logger.success('Password reset email sent');
     } on FirebaseAuthException catch (e) {
       Logger.error('Password reset email failed', e);
@@ -134,6 +153,19 @@ class AuthService {
       Logger.error('Unexpected password reset error', e);
       rethrow;
     }
+  }
+
+  static ActionCodeSettings _defaultPasswordResetActionCodeSettings() {
+    final projectId = DefaultFirebaseOptions.currentPlatform.projectId;
+    final url = 'https://$projectId.firebaseapp.com/';
+    return ActionCodeSettings(
+      url: url,
+      handleCodeInApp: true,
+      iOSBundleId: _iosBundleIdForPasswordReset,
+      androidPackageName: _androidPackageForPasswordReset,
+      androidInstallApp: true,
+      androidMinimumVersion: '1',
+    );
   }
 
   /// User-facing copy for [FirebaseAuthException]. Never surfaces raw native traces.
@@ -164,6 +196,27 @@ class AuthService {
         return 'Network error. Please check your connection.';
       default:
         return _fallbackMessageForAuthException(e);
+    }
+  }
+
+  /// User-facing copy for password reset failures (continue URI, rate limits, etc.).
+  static String getPasswordResetErrorMessage(FirebaseAuthException e) {
+    final code = e.code.toLowerCase().replaceAll('_', '-');
+    switch (code) {
+      case 'invalid-email':
+      case 'too-many-requests':
+      case 'network-request-failed':
+      case 'user-disabled':
+      case 'operation-not-allowed':
+        return getErrorMessage(e);
+      case 'unauthorized-continue-uri':
+      case 'invalid-continue-uri':
+      case 'missing-continue-uri':
+      case 'missing-android-pkg-name':
+      case 'missing-ios-bundle-id':
+        return 'Password reset is temporarily unavailable. Please try again later.';
+      default:
+        return 'Unable to send reset email. Please try again.';
     }
   }
 

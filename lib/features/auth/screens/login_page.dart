@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:pretium/features/auth/screens/forgot_password_page.dart';
 import 'package:pretium/features/auth/screens/register_page.dart';
 import 'package:pretium/features/auth/widgets/custom_text_field.dart';
 import 'package:pretium/features/auth/widgets/wallet_icon_header.dart';
@@ -26,6 +27,12 @@ class _LoginScreenState extends State<LoginPage> {
 
   final AuthService _authService = AuthService();
 
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -90,7 +97,17 @@ class _LoginScreenState extends State<LoginPage> {
                     ],
                   ),
                   TextButton(
-                    onPressed: () {},
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute<void>(
+                          builder:
+                              (context) => ForgotPasswordPage(
+                                initialEmail: _emailController.text.trim(),
+                              ),
+                        ),
+                      );
+                    },
                     child: Text(
                       'Forgot Password?',
                       style: TextStyle(
