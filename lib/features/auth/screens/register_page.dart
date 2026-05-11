@@ -11,6 +11,7 @@ import '../widgets/phone_number_field.dart';
 import '../widgets/register_header.dart';
 import '../widgets/terms_checkbox.dart';
 import 'package:pretium/features/home/screens/landing_page.dart';
+import 'package:pretium/features/auth/services/registration_api_service.dart';
 
 // Use app-level theme; no local constant color
 
@@ -55,6 +56,7 @@ class _RegisterPageState extends State<RegisterPage> {
 
   final AuthService _authService = AuthService();
   final UserRepository _userRepository = UserRepository();
+  final RegistrationApiService _registrationApiService = RegistrationApiService();
 
   @override
   void initState() {
@@ -107,6 +109,8 @@ class _RegisterPageState extends State<RegisterPage> {
     // Get formatted phone number (country code + number, e.g., '254742844875')
     final phoneDigits = _phoneController.text.trim().replaceAll(RegExp(r'[^\d]'), '');
     final phoneNumber = phoneDigits.isNotEmpty ? '$_selectedCountryCode$phoneDigits' : '';
+    final phoneNumberE164 =
+        phoneDigits.isNotEmpty ? '+$_selectedCountryCode$phoneDigits' : '';
 
     if (firstName.isEmpty ||
         lastName.isEmpty ||
@@ -118,19 +122,39 @@ class _RegisterPageState extends State<RegisterPage> {
       return;
     }
 
+    if (phoneNumberE164.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please enter a valid phone number.')),
+      );
+      return;
+    }
+
     setState(() => _isSubmitting = true);
     try {
-      // Log complete registration request
+      // Log complete registration request (matches API body except password is omitted)
       final registrationRequest = {
         'firstName': firstName,
         'lastName': lastName,
         'email': email,
-        'phoneNumber': phoneNumber.isNotEmpty ? phoneNumber : null,
+        'phoneNumber': phoneNumberE164,
+        'Institution': RegistrationApiService.institution,
+        'Channel': RegistrationApiService.channel,
         'passwordLength': password.length,
       };
       Logger.info('🚀 ===== CREATE USER REQUEST =====');
       Logger.info('📋 Registration Data: $registrationRequest');
       Logger.info('=====================================');
+
+      // 0) Backend customer registration (body includes Institution + Channel)
+      Logger.info('📤 Step 0: Registering customer with backend API...');
+      await _registrationApiService.registerCustomer(
+        firstName: firstName,
+        lastName: lastName,
+        email: email,
+        phoneNumberE164: phoneNumberE164,
+        password: password,
+      );
+      Logger.success('✅ Backend registration completed');
       
       // 1) Create user in Firebase Auth
       Logger.info('📤 Step 1: Creating user in Firebase Auth...');
@@ -188,6 +212,13 @@ class _RegisterPageState extends State<RegisterPage> {
         MaterialPageRoute(builder: (context) => LandingPage()),
         (route) => false,
       );
+    } on RegistrationApiException catch (e) {
+      Logger.error('Backend registration failed', e);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.message)),
+        );
+      }
     } on FirebaseAuthException catch (e) {
       final message = AuthService.getErrorMessage(e);
       if (mounted) {

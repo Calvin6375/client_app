@@ -14,4 +14,8 @@ final class CloudFunctionsApiConfig {
   }
 
   static Uri countriesUri() => Uri.parse('$baseApiUrl/countries');
+
+  /// Customer self-registration (`POST …/api/register`).
+  /// Path must match the deployed HTTP handler; adjust if the backend uses a different route.
+  static Uri registerUri() => Uri.parse('$baseApiUrl/register');
 }
