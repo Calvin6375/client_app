@@ -1,5 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:pretium/features/crypto/screens/usdc_receive_screen.dart';
+import 'package:pretium/features/crypto/screens/usdc_send_screen.dart';
+import 'package:pretium/features/crypto/services/crypto_api_service.dart';
 import 'package:pretium/features/topup/models/topup_deposit_country.dart';
 import 'package:pretium/features/topup/screens/direct_fiat_deposit_flow.dart';
 import 'package:pretium/features/topup/screens/select_country_topup_screen.dart';
@@ -9,7 +14,7 @@ import 'package:pretium/repositories/wallet_repository.dart';
 import 'package:pretium/core/constants/app_colors.dart';
 import 'package:pretium/services/dashboard_session_cache.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_core/firebase_core.dart';
+import 'package:pretium/utils/firebase_utils.dart';
 
 class WalletCard extends StatefulWidget {
   final int selectedTab;
@@ -21,19 +26,25 @@ class WalletCard extends StatefulWidget {
 
 class _WalletCardState extends State<WalletCard> {
   final WalletRepository _walletRepository = WalletRepository();
+  final CryptoApiService _cryptoApi = CryptoApiService();
   Wallet? _fiatWallet;
-  Wallet? _cryptoWallet;
   bool _loading = false;
   String? _fiatError;
   String? _cryptoError;
   DateTime? _lastRefreshedAt;
   
   // Multiple fiat wallets support
-  final Map<String, Wallet> _fiatWallets = {}; // currency -> wallet
-  final List<String> _availableFiatCurrencies = []; // Order of currencies
+  final Map<String, Wallet> _fiatWallets = {};
+  final List<String> _availableFiatCurrencies = [];
   int _currentFiatIndex = 0;
   final PageController _fiatPageController = PageController();
+
+  // Multiple crypto wallets (USDT legacy + Circle USDC)
+  final Map<String, Wallet> _cryptoWallets = {};
+  final List<String> _availableCryptoCurrencies = ['USDT', 'USDC'];
+  int _currentCryptoIndex = 0;
   final PageController _cryptoPageController = PageController();
+  StreamSubscription<Wallet?>? _usdcBalanceSubscription;
   
   // Cache for balances to avoid unnecessary backend calls
   Wallet? _cachedFiatWallet;
@@ -43,11 +54,13 @@ class _WalletCardState extends State<WalletCard> {
   
   // Supported fiat currencies to check
   static const List<String> _supportedFiatCurrencies = ['USD', 'KES', 'NGN', 'GHS', 'UGX'];
+  static const List<String> _supportedCryptoCurrencies = ['USDT', 'USDC'];
   
   @override
   void initState() {
     super.initState();
-    if (!_isFirebaseInitialized()) return;
+    if (!isFirebaseInitialized()) return;
+    _subscribeUsdcBalance();
     final snap = DashboardSessionCache.instance.readWalletIfFresh();
     if (snap != null) {
       _hydrateFromSnapshotSync(snap);
@@ -56,10 +69,28 @@ class _WalletCardState extends State<WalletCard> {
         if (_fiatPageController.hasClients && _availableFiatCurrencies.length > 1) {
           _fiatPageController.jumpToPage(_currentFiatIndex.clamp(0, _availableFiatCurrencies.length - 1));
         }
+        if (_cryptoPageController.hasClients && _availableCryptoCurrencies.length > 1) {
+          _cryptoPageController.jumpToPage(_currentCryptoIndex.clamp(0, _availableCryptoCurrencies.length - 1));
+        }
       });
     } else {
       _refreshBalance();
     }
+  }
+
+  void _subscribeUsdcBalance() {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    _usdcBalanceSubscription?.cancel();
+    _usdcBalanceSubscription = _walletRepository
+        .streamCryptoWalletBalance(user.uid, 'USDC')
+        .listen((wallet) {
+      if (!mounted || wallet == null) return;
+      setState(() {
+        _cryptoWallets['USDC'] = wallet;
+      });
+    });
   }
 
   void _hydrateFromSnapshotSync(WalletSessionSnapshot snap) {
@@ -76,7 +107,14 @@ class _WalletCardState extends State<WalletCard> {
       _fiatWallet = Wallet(currencyCode: 'USD', balance: 0.0);
       _currentFiatIndex = 0;
     }
-    _cryptoWallet = snap.cryptoWallet;
+    _cryptoWallets
+      ..clear()
+      ..addAll(snap.cryptoWallets);
+    _availableCryptoCurrencies
+      ..clear()
+      ..addAll(snap.availableCryptoCurrencies.isNotEmpty
+          ? snap.availableCryptoCurrencies
+          : _supportedCryptoCurrencies);
     _cachedFiatWallet = snap.cachedFiatWallet;
     _cachedCryptoWallet = snap.cachedCryptoWallet;
     _cacheTimestamp = snap.refreshedAt;
@@ -86,13 +124,9 @@ class _WalletCardState extends State<WalletCard> {
     _cryptoError = null;
   }
   
-  bool _isFirebaseInitialized() {
-    return Firebase.apps.isNotEmpty;
-  }
-
-
   @override
   void dispose() {
+    _usdcBalanceSubscription?.cancel();
     _fiatPageController.dispose();
     _cryptoPageController.dispose();
     super.dispose();
@@ -104,7 +138,7 @@ class _WalletCardState extends State<WalletCard> {
   }
   
   Future<void> _refreshBalance({bool silent = false, bool forceRefresh = false}) async {
-    if (!_isFirebaseInitialized()) return;
+    if (!isFirebaseInitialized()) return;
     
     try {
       final user = FirebaseAuth.instance.currentUser;
@@ -122,7 +156,6 @@ class _WalletCardState extends State<WalletCard> {
         if (!mounted) return;
         setState(() {
           _fiatWallet = _cachedFiatWallet;
-          _cryptoWallet = _cachedCryptoWallet;
         });
         return;
       }
@@ -168,20 +201,41 @@ class _WalletCardState extends State<WalletCard> {
         }
       }
       
-      // Load crypto wallet
-      final cryptoWallet = await _walletRepository.getCryptoWalletBalance(user.uid, 'USDT');
+      // Load crypto wallets (USDT from RTDB, USDC from RTDB + API for authoritative display)
+      final Map<String, Wallet> cryptoWallets = {};
+      for (final currency in _supportedCryptoCurrencies) {
+        try {
+          final wallet = await _walletRepository.getCryptoWalletBalance(user.uid, currency);
+          cryptoWallets[currency] = wallet ?? Wallet(currencyCode: currency, balance: 0.0);
+        } catch (_) {
+          cryptoWallets[currency] = Wallet(currencyCode: currency, balance: 0.0);
+        }
+      }
+
+      // Refresh USDC available balance from Circle API (authoritative for send validation)
+      try {
+        final usdcBalance = await _cryptoApi.getBalance();
+        cryptoWallets['USDC'] = Wallet(
+          currencyCode: 'USDC',
+          balance: usdcBalance,
+          updatedAt: now,
+        );
+      } catch (_) {
+        // RTDB stream / repository value remains
+      }
       
       if (!mounted) return;
       
       // Update cache
       _cachedFiatWallet = fiatWallets[availableCurrencies.isNotEmpty ? availableCurrencies[0] : 'USD'] ?? Wallet(currencyCode: 'USD', balance: 0.0);
-      _cachedCryptoWallet = cryptoWallet ?? Wallet(currencyCode: 'USDT', balance: 0.0);
+      _cachedCryptoWallet = cryptoWallets['USDT'] ?? Wallet(currencyCode: 'USDT', balance: 0.0);
       _cacheTimestamp = now;
 
       DashboardSessionCache.instance.recordWalletSnapshot(
         fiatWallets: fiatWallets,
         availableFiatCurrencies: availableCurrencies,
-        cryptoWallet: cryptoWallet,
+        cryptoWallets: cryptoWallets,
+        availableCryptoCurrencies: List<String>.from(_supportedCryptoCurrencies),
         cachedFiatWallet: _cachedFiatWallet,
         cachedCryptoWallet: _cachedCryptoWallet,
       );
@@ -201,10 +255,11 @@ class _WalletCardState extends State<WalletCard> {
           _currentFiatIndex = 0;
         }
         
-        _cryptoWallet = _cachedCryptoWallet;
+        _cryptoWallets.clear();
+        _cryptoWallets.addAll(cryptoWallets);
         _lastRefreshedAt = now;
-        _fiatError = null; // Clear any previous errors
-        _cryptoError = null; // Clear any previous errors
+        _fiatError = null;
+        _cryptoError = null;
       });
     } catch (e) {
       // This should rarely happen now since fetchWalletBalance returns default wallet
@@ -330,22 +385,113 @@ class _WalletCardState extends State<WalletCard> {
         ],
       );
     } else {
-      // Crypto wallet
-      final cryptoWallet = _cryptoWallet ?? Wallet(currencyCode: 'USDT', balance: 0.0);
-      return WalletCardWidget(
-        title: "Crypto Wallet",
-        currency: cryptoWallet.currencyCode,
-        balance: cryptoWallet.balance,
-        secondaryCurrency: null,
-        secondaryBalance: null,
-        updatedAt: _lastRefreshedAt,
-        loading: _loading,
-        error: _cryptoError,
-        backgroundColor: primary,
-        onTopUp: _openTopUpFlow,
-        onWithdraw: () => _showWithdrawComingSoon(context),
+      // Crypto wallets — swipable PageView (USDT + USDC)
+      if (_availableCryptoCurrencies.isEmpty) {
+        return WalletCardWidget(
+          title: "Crypto Wallet",
+          currency: 'USDT',
+          balance: 0,
+          updatedAt: _lastRefreshedAt,
+          loading: _loading,
+          error: _cryptoError,
+          backgroundColor: primary,
+          onTopUp: () => _openCryptoTopUp('USDT'),
+          onWithdraw: () => _openCryptoWithdraw('USDT'),
+        );
+      }
+
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SizedBox(
+            height: MediaQuery.of(context).size.width * 0.75 + 48,
+            child: PageView.builder(
+              controller: _cryptoPageController,
+              onPageChanged: (index) {
+                setState(() => _currentCryptoIndex = index);
+              },
+              itemCount: _availableCryptoCurrencies.length,
+              itemBuilder: (context, index) {
+                final currency = _availableCryptoCurrencies[index];
+                final wallet = _cryptoWallets[currency] ?? Wallet(currencyCode: currency, balance: 0.0);
+
+                String? secondaryCurrency;
+                double? secondaryBalance;
+                if (currency == 'USDT' && _cryptoWallets.containsKey('USDC')) {
+                  secondaryCurrency = 'USDC';
+                  secondaryBalance = _cryptoWallets['USDC']!.balance;
+                } else if (currency == 'USDC' && _cryptoWallets.containsKey('USDT')) {
+                  secondaryCurrency = 'USDT';
+                  secondaryBalance = _cryptoWallets['USDT']!.balance;
+                }
+
+                return WalletCardWidget(
+                  title: "Crypto Wallet",
+                  currency: wallet.currencyCode,
+                  balance: wallet.balance,
+                  secondaryCurrency: secondaryCurrency,
+                  secondaryBalance: secondaryBalance,
+                  updatedAt: _lastRefreshedAt,
+                  loading: _loading && index == _currentCryptoIndex,
+                  error: _cryptoError,
+                  backgroundColor: primary,
+                  onTopUp: () => _openCryptoTopUp(currency),
+                  onWithdraw: () => _openCryptoWithdraw(currency),
+                );
+              },
+            ),
+          ),
+          if (_availableCryptoCurrencies.length > 1)
+            Padding(
+              padding: const EdgeInsets.only(top: 0),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: List.generate(
+                  _availableCryptoCurrencies.length,
+                  (index) => Container(
+                    margin: const EdgeInsets.symmetric(horizontal: 4),
+                    width: _currentCryptoIndex == index ? 24 : 8,
+                    height: 8,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(4),
+                      color: _currentCryptoIndex == index
+                          ? primary
+                          : primary.withOpacity(0.3),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
       );
     }
+  }
+
+  Future<void> _openCryptoTopUp(String currency) async {
+    if (currency == 'USDC') {
+      await Navigator.of(context).push<void>(
+        MaterialPageRoute<void>(builder: (_) => const UsdcReceiveScreen()),
+      );
+      if (mounted) await _refreshBalance(forceRefresh: true);
+      return;
+    }
+    await _openTopUpFlow();
+  }
+
+  Future<void> _openCryptoWithdraw(String currency) async {
+    if (currency == 'USDC') {
+      final usdcBalance = _cryptoWallets['USDC']?.balance;
+      final refreshed = await Navigator.of(context).push<bool>(
+        MaterialPageRoute<bool>(
+          builder: (_) => UsdcSendScreen(availableBalance: usdcBalance),
+        ),
+      );
+      if (mounted && refreshed == true) {
+        await _refreshBalance(forceRefresh: true);
+      }
+      return;
+    }
+    _showWithdrawComingSoon(context);
   }
 
   Future<void> _openTopUpFlow() async {

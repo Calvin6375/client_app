@@ -8,7 +8,7 @@ import 'package:pretium/repositories/wallet_repository.dart';
 import 'package:pretium/utils/logger.dart';
 import 'package:pretium/core/constants/app_colors.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_core/firebase_core.dart';
+import 'package:pretium/utils/firebase_utils.dart';
 
 class SwapPage extends StatefulWidget {
   final String? initialFromCurrency;
@@ -142,15 +142,6 @@ class _SwapPageState extends State<SwapPage> {
 
   late ConfettiController _confettiController;
 
-  bool _isFirebaseInitialized() {
-    try {
-      Firebase.app();
-      return true;
-    } catch (_) {
-      return false;
-    }
-  }
-
   @override
   void initState() {
     super.initState();
@@ -193,7 +184,7 @@ class _SwapPageState extends State<SwapPage> {
   }
 
   Future<void> _loadBalances() async {
-    if (!_isFirebaseInitialized()) {
+    if (!isFirebaseInitialized()) {
       setState(() => _loadingBalances = false);
       return;
     }

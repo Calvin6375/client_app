@@ -5,7 +5,7 @@ import 'package:pretium/features/swap/services/rates_service.dart';
 import 'package:pretium/features/swap/widgets/currency_picker_bottom_sheet.dart';
 import 'package:pretium/core/constants/app_colors.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_core/firebase_core.dart';
+import 'package:pretium/utils/firebase_utils.dart';
 
 class SendAmountScreen extends StatefulWidget {
   final VoidCallback onNext;
@@ -41,15 +41,6 @@ class _SendAmountScreenState extends State<SendAmountScreen> {
     Currency(code: 'USDT', name: 'Tether', flagEmoji: '₮'),
   ];
 
-  bool _isFirebaseInitialized() {
-    try {
-      Firebase.app();
-      return true;
-    } catch (_) {
-      return false;
-    }
-  }
-
   @override
   void initState() {
     super.initState();
@@ -67,7 +58,7 @@ class _SendAmountScreenState extends State<SendAmountScreen> {
   }
 
   Future<void> _loadBalances() async {
-    if (!_isFirebaseInitialized()) {
+    if (!isFirebaseInitialized()) {
       setState(() => _loadingBalances = false);
       return;
     }

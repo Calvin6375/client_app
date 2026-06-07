@@ -44,15 +44,6 @@ Future<void> main() async {
   runApp(const MyApp());
 }
 
-// Helper function to check if Firebase is initialized
-bool isFirebaseInitialized() {
-  try {
-    return Firebase.apps.isNotEmpty;
-  } catch (e) {
-    return false;
-  }
-}
-
 class MyApp extends StatefulWidget {
   const MyApp({super.key});
 

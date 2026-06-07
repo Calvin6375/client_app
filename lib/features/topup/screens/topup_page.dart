@@ -6,36 +6,33 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:pretium/features/topup/services/intasend_service.dart';
 import 'package:pretium/features/topup/services/transfi_service.dart';
 import 'package:pretium/repositories/wallet_repository.dart';
 import 'package:pretium/repositories/user_repository.dart';
-import 'package:pretium/services/firebase_payment_service.dart';
+import 'package:pretium/services/payment_service.dart';
+import 'package:pretium/utils/firebase_utils.dart';
 import 'package:pretium/core/constants/app_colors.dart';
 import 'package:pretium/features/topup/models/topup_deposit_country.dart';
 import 'package:pretium/features/topup/screens/direct_fiat_deposit_flow.dart';
 
-/// Fiat codes in the Set amount dropdown; includes every [TopupDepositCountry.code] used for top-up.
-const _topupFiatCurrencyCodes = <String>[
-  'USD',
-  'KES',
-  'NGN',
-  'GHS',
-  'UGX',
-  'TZS',
-  'ETB',
-  'BIF',
-  'AED',
-  'EUR',
-  'GBP',
-];
+/// Fiat codes in the Set amount dropdown; includes every [TopupDepositCountry] code plus extras.
+List<String> _topupFiatCurrencyCodes({String? includeCode}) {
+  final codes = <String>{
+    ...TopupDepositCountry.depositCurrencyCodes,
+    'EUR',
+    'GBP',
+    if (includeCode != null && includeCode.trim().isNotEmpty)
+      includeCode.trim().toUpperCase(),
+  };
+  return codes.toList()..sort();
+}
 
 String _coerceTopupFiatCurrency(String? code) {
   final u = code?.trim().toUpperCase() ?? '';
-  if (u.isNotEmpty && _topupFiatCurrencyCodes.contains(u)) return u;
-  return 'USD';
+  if (u.isEmpty) return 'USD';
+  return TopupDepositCountry.resolve(u).code;
 }
 
 // Top Up main screen composed of smaller widgets
@@ -78,15 +75,6 @@ class _TopUpPageState extends State<TopUpPage> {
   static const String transfiPaymentLinkId = '6995b526e30aa438c5c0c8f2'; // e.g. 6995b526e30aa438c5c0c8f2
 
 
-  bool _isFirebaseInitialized() {
-    try {
-      Firebase.app();
-      return true;
-    } catch (_) {
-      return false;
-    }
-  }
-
   @override
   void initState() {
     super.initState();
@@ -99,7 +87,7 @@ class _TopUpPageState extends State<TopUpPage> {
   }
   
   Future<void> _loadUserProfile() async {
-    if (!_isFirebaseInitialized()) return;
+    if (!isFirebaseInitialized()) return;
     
     try {
       final user = FirebaseAuth.instance.currentUser;
@@ -119,7 +107,7 @@ class _TopUpPageState extends State<TopUpPage> {
   }
 
   Future<void> _loadWalletBalance() async {
-    if (_isLoadingBalance || !_isFirebaseInitialized()) return;
+    if (_isLoadingBalance || !isFirebaseInitialized()) return;
 
     setState(() {
       _isLoadingBalance = true;
@@ -657,10 +645,12 @@ class _TopUpPageState extends State<TopUpPage> {
               
               // Mark payment as completed in Firebase
               print('✅ User confirmed payment completion');
-              await FirebasePaymentService.markPaymentCompleted(
+              final paymentService = PaymentService();
+              await paymentService.handlePaymentWebhook(
                 paymentId: paymentId,
+                status: 'completed',
                 transactionId: 'user_confirmed_${DateTime.now().millisecondsSinceEpoch}',
-                paymentDetails: {
+                webhookData: {
                   'completion_method': 'user_confirmation',
                   'confirmed_at': DateTime.now().toIso8601String(),
                 },
@@ -898,6 +888,10 @@ class _SetAmountCard extends StatelessWidget {
         return '€';
       case 'GBP':
         return '£';
+      case 'CNY':
+        return '¥';
+      case 'CDF':
+        return 'FC';
       default:
         return currency;
     }
@@ -979,7 +973,7 @@ class _SetAmountCard extends StatelessWidget {
                     style: TextStyle(
                       color: colors.textPrimary,
                     ),
-                    items: _topupFiatCurrencyCodes
+                    items: _topupFiatCurrencyCodes(includeCode: selectedCurrency)
                         .map((currency) => DropdownMenuItem(
                               value: currency,
                               child: Text(

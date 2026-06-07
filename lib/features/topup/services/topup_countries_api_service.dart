@@ -15,7 +15,7 @@ import 'package:pretium/utils/logger.dart';
 final class TopupCountriesApiService {
   TopupCountriesApiService();
 
-  /// Ordered list matching the API; unknown codes are skipped (see logs).
+  /// Ordered list matching the API; unknown codes use a generic fallback entry.
   Future<List<TopupDepositCountry>> fetchEnabledCountries() async {
     final uri = CloudFunctionsApiConfig.countriesUri();
     const headers = {'Accept': 'application/json'};
@@ -76,15 +76,9 @@ final class TopupCountriesApiService {
       if (item is! String) continue;
       final trimmed = item.trim();
       if (trimmed.isEmpty) continue;
-      final mapped = TopupDepositCountry.fromIsoAlpha2(trimmed) ??
-          TopupDepositCountry.forDepositCode(trimmed);
-      if (mapped != null) {
-        if (seenCurrencyCodes.add(mapped.code)) {
-          out.add(mapped);
-        }
-      } else {
-        Logger.debug(
-            'TopupCountriesApiService: no catalog entry for "$trimmed" — skipped');
+      final mapped = TopupDepositCountry.resolve(trimmed);
+      if (seenCurrencyCodes.add(mapped.code)) {
+        out.add(mapped);
       }
     }
     return out;

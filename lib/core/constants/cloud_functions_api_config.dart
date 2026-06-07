@@ -18,4 +18,19 @@ final class CloudFunctionsApiConfig {
   /// Customer self-registration (`POST …/api/register`).
   /// Path must match the deployed HTTP handler; adjust if the backend uses a different route.
   static Uri registerUri() => Uri.parse('$baseApiUrl/register');
+
+  /// Circle USDC wallet HTTP API (`cryptoApi` Cloud Function).
+  static String get baseCryptoApiUrl {
+    final projectId = DefaultFirebaseOptions.currentPlatform.projectId;
+    return 'https://$functionsRegion-$projectId.cloudfunctions.net/cryptoApi';
+  }
+
+  static Uri cryptoWalletUri() => Uri.parse('$baseCryptoApiUrl/crypto/wallet');
+
+  static Uri cryptoBalanceUri() => Uri.parse('$baseCryptoApiUrl/crypto/balance');
+
+  static Uri cryptoTransactionsUri({int limit = 50}) =>
+      Uri.parse('$baseCryptoApiUrl/crypto/transactions?limit=$limit');
+
+  static Uri cryptoSendUri() => Uri.parse('$baseCryptoApiUrl/crypto/send');
 }

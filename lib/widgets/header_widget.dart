@@ -1,16 +1,12 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:pretium/app/route_names.dart';
 import 'package:pretium/core/constants/app_colors.dart';
+import 'package:pretium/utils/firebase_utils.dart';
 
 class HeaderWidget extends StatelessWidget {
   HeaderWidget({super.key});
-
-  bool _isFirebaseInitialized() {
-    return Firebase.apps.isNotEmpty;
-  }
 
   Widget _buildClickableAvatar(
     BuildContext context,
@@ -42,7 +38,7 @@ class HeaderWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // Check if Firebase is initialized before accessing FirebaseAuth
-    if (!_isFirebaseInitialized()) {
+    if (!isFirebaseInitialized()) {
       final primary = Theme.of(context).colorScheme.primary;
       return Row(
         children: [

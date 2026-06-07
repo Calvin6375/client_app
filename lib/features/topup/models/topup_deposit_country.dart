@@ -81,6 +81,20 @@ class TopupDepositCountry {
     flagEmoji: '🇦🇪',
   );
 
+  static const TopupDepositCountry china = TopupDepositCountry(
+    name: 'China',
+    currencyName: 'Chinese Yuan',
+    code: 'CNY',
+    flagEmoji: '🇨🇳',
+  );
+
+  static const TopupDepositCountry drCongo = TopupDepositCountry(
+    name: 'Democratic Republic of the Congo',
+    currencyName: 'Congolese Franc',
+    code: 'CDF',
+    flagEmoji: '🇨🇩',
+  );
+
   /// Countries available for direct fiat deposit (top-up) when chosen from the in-flow wizard.
   static const List<TopupDepositCountry> depositSupported =
       <TopupDepositCountry>[
@@ -93,7 +107,13 @@ class TopupDepositCountry {
     burundi,
     unitedStates,
     unitedArabEmirates,
+    china,
+    drCongo,
   ];
+
+  /// All ISO 4217 codes from [depositSupported], for dropdowns and validation.
+  static List<String> get depositCurrencyCodes =>
+      depositSupported.map((c) => c.code).toList(growable: false);
 
   /// Withdrawal wizard is Kenya-only.
   static const List<TopupDepositCountry> withdrawSupported =
@@ -120,6 +140,10 @@ class TopupDepositCountry {
         return unitedStates;
       case 'AE':
         return unitedArabEmirates;
+      case 'CN':
+        return china;
+      case 'CD':
+        return drCongo;
       default:
         return null;
     }
@@ -131,5 +155,19 @@ class TopupDepositCountry {
       if (c.code == u) return c;
     }
     return null;
+  }
+
+  /// Resolves an API country/currency code to a catalog entry.
+  /// Unknown codes get a generic fallback so the backend list is never dropped.
+  static TopupDepositCountry resolve(String code) {
+    final trimmed = code.trim().toUpperCase();
+    return fromIsoAlpha2(trimmed) ??
+        forDepositCode(trimmed) ??
+        TopupDepositCountry(
+          name: trimmed,
+          currencyName: trimmed,
+          code: trimmed,
+          flagEmoji: '🌍',
+        );
   }
 }
