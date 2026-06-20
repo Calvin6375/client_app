@@ -5,13 +5,14 @@ import 'package:pretium/services/notification_service.dart';
 import 'package:pretium/repositories/user_repository.dart';
 import 'package:pretium/utils/logger.dart';
 import 'package:pretium/core/constants/app_colors.dart';
-import 'package:pretium/services/dashboard_session_cache.dart';
 import '../widgets/custom_text_field.dart';
 import '../widgets/phone_number_field.dart';
 import '../widgets/register_header.dart';
 import '../widgets/terms_checkbox.dart';
-import 'package:pretium/features/home/screens/landing_page.dart';
 import 'package:pretium/features/auth/services/registration_api_service.dart';
+import 'package:pretium/features/auth/utils/post_auth_routing.dart';
+import 'package:pretium/services/auth_claims_service.dart';
+import 'package:pretium/core/constants/auth_config.dart';
 
 // Use app-level theme; no local constant color
 
@@ -57,6 +58,7 @@ class _RegisterPageState extends State<RegisterPage> {
   final AuthService _authService = AuthService();
   final UserRepository _userRepository = UserRepository();
   final RegistrationApiService _registrationApiService = RegistrationApiService();
+  final AuthClaimsService _authClaimsService = AuthClaimsService();
 
   @override
   void initState() {
@@ -169,8 +171,14 @@ class _RegisterPageState extends State<RegisterPage> {
       try {
         // Force a token refresh to ensure it's available
         await credential.user!.getIdToken(true);
-        Logger.info('✅ Auth token is ready');
-        
+        final userType = await _authClaimsService.userTypeClaim(forceRefresh: true);
+        Logger.info('✅ Auth token is ready (userType: ${userType ?? "(missing)"})');
+        if (userType != AuthConfig.expectedCustomerClaim) {
+          Logger.warning(
+            'Expected userType "${AuthConfig.expectedCustomerClaim}" after registration, got: $userType',
+          );
+        }
+
         // Small delay to ensure auth state propagates to Firestore
         // This is especially important on physical devices with network latency
         await Future.delayed(const Duration(milliseconds: 500));
@@ -204,14 +212,9 @@ class _RegisterPageState extends State<RegisterPage> {
       Logger.success('   Email: $email');
       Logger.success('==================================');
 
-      // 5) Navigate to landing page on success
+      // 5) Route by userType claim (customer stays in app; partner/admin → web dashboard)
       if (!mounted) return;
-      DashboardSessionCache.instance.clear();
-      Navigator.pushAndRemoveUntil(
-        context,
-        MaterialPageRoute(builder: (context) => LandingPage()),
-        (route) => false,
-      );
+      await completeAuthAndRoute(context);
     } on RegistrationApiException catch (e) {
       Logger.error('Backend registration failed', e);
       if (mounted) {

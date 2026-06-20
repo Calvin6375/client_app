@@ -6,6 +6,7 @@ import 'package:pretium/core/constants/cloud_functions_api_config.dart';
 import 'package:pretium/features/crypto/models/crypto_send_result.dart';
 import 'package:pretium/features/crypto/models/crypto_transaction.dart';
 import 'package:pretium/features/crypto/models/crypto_wallet_info.dart';
+import 'package:pretium/services/auth_claims_service.dart';
 import 'package:pretium/utils/logger.dart';
 
 class CryptoApiException implements Exception {
@@ -19,20 +20,23 @@ class CryptoApiException implements Exception {
 
 /// HTTP client for Circle USDC endpoints (`cryptoApi` Cloud Function).
 final class CryptoApiService {
-  CryptoApiService({http.Client? httpClient}) : _http = httpClient ?? http.Client();
+  CryptoApiService({http.Client? httpClient, AuthClaimsService? authClaims})
+      : _http = httpClient ?? http.Client(),
+        _authClaims = authClaims ?? AuthClaimsService();
 
   final http.Client _http;
+  final AuthClaimsService _authClaims;
 
   Future<String> _requireIdToken({bool forceRefresh = false}) async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) {
+    try {
+      if (forceRefresh) {
+        final user = FirebaseAuth.instance.currentUser;
+        await user?.getIdToken(true);
+      }
+      return await _authClaims.idTokenForApi(forceRefreshIfStale: !forceRefresh);
+    } on FirebaseAuthException {
       throw CryptoApiException(401, 'Not signed in');
     }
-    final token = await user.getIdToken(forceRefresh);
-    if (token == null || token.isEmpty) {
-      throw CryptoApiException(401, 'Missing ID token');
-    }
-    return token;
   }
 
   Future<Map<String, String>> _headers({String? idempotencyKey}) async {

@@ -4,12 +4,11 @@ import 'package:pretium/features/auth/screens/register_page.dart';
 import 'package:pretium/features/auth/widgets/custom_text_field.dart';
 import 'package:pretium/features/auth/widgets/wallet_icon_header.dart';
 import 'package:pretium/features/auth/widgets/welcome_text_section.dart';
-import 'package:pretium/features/home/screens/landing_page.dart';
+import 'package:pretium/features/auth/utils/post_auth_routing.dart';
 import 'package:pretium/services/auth_service.dart';
 import 'package:pretium/services/notification_service.dart';
 import 'package:pretium/utils/logger.dart';
 import 'package:pretium/core/constants/app_colors.dart';
-import 'package:pretium/services/dashboard_session_cache.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 class LoginPage extends StatefulWidget {
@@ -166,14 +165,7 @@ class _LoginScreenState extends State<LoginPage> {
                               }
                               
                               if (!mounted) return;
-                              DashboardSessionCache.instance.clear();
-                              Navigator.pushAndRemoveUntil(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => LandingPage(),
-                                ),
-                                (route) => false,
-                              );
+                              await completeAuthAndRoute(context);
                             } on FirebaseAuthException catch (e) {
                               final message = AuthService.getErrorMessage(e);
                               if (mounted) {

@@ -3,6 +3,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:pretium/features/send_money/screens/send_money_page.dart';
 import 'package:pretium/core/constants/app_colors.dart';
 import 'package:pretium/app/route_names.dart';
+import 'package:pretium/services/app_access_guard.dart';
 import '/widgets/header_widget.dart';
 import '/widgets/wallet_card.dart';
 import '/widgets/financial_service.dart';
@@ -31,6 +32,24 @@ class _DashboardScreenState extends State<DashboardScreen> {
   int _selectedTab = 0; // For pill-shaped tabs: 0 = Fiat, 1 = Crypto
   final GlobalKey<State<WalletCard>> _walletCardKey = GlobalKey<State<WalletCard>>();
   final GlobalKey<State<PlaceholderTransactions>> _transactionsKey = GlobalKey<State<PlaceholderTransactions>>();
+  bool _accessChecked = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _verifyCustomerAccess());
+  }
+
+  Future<void> _verifyCustomerAccess() async {
+    final guard = AppAccessGuard();
+    final access = await guard.evaluate();
+    if (!mounted) return;
+    if (access != AppAccessResult.allowed) {
+      await guard.enforceDeniedAccess(context, access);
+      return;
+    }
+    setState(() => _accessChecked = true);
+  }
 
   void _onItemTapped(int index) {
     setState(() {
@@ -62,6 +81,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (!_accessChecked) {
+      return Scaffold(
+        backgroundColor: AppColors.getThemeColors(context).background,
+        body: const Center(child: CircularProgressIndicator()),
+      );
+    }
+
     final colors = AppColors.getThemeColors(context);
     final primary = Theme.of(context).colorScheme.primary;
     return Scaffold(

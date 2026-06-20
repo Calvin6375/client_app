@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:pretium/models/transaction_model.dart';
+import 'package:pretium/services/auth_claims_service.dart';
 import 'package:pretium/utils/logger.dart';
 
 /// Service for fetching transactions from the Cloud Functions API
@@ -10,6 +10,8 @@ import 'package:pretium/utils/logger.dart';
 class TransactionsService {
   static const String _baseUrl = 
       'https://us-central1-truepay-72060.cloudfunctions.net/transactionsApi/transactions';
+
+  final AuthClaimsService _authClaims = AuthClaimsService();
 
   /// Default limit when not specified (matches backend default).
   static const int defaultLimit = 50;
@@ -48,16 +50,7 @@ class TransactionsService {
     String? status,
   }) async {
     try {
-      // Get Firebase Auth token
-      final user = FirebaseAuth.instance.currentUser;
-      if (user == null) {
-        throw Exception('User not authenticated');
-      }
-
-      final token = await user.getIdToken();
-      if (token == null || token.isEmpty) {
-        throw Exception('Failed to get authentication token');
-      }
+      final token = await _authClaims.idTokenForApi();
 
       // Cap limit to API maximum
       final effectiveLimit = limit != null
