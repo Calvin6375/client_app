@@ -103,65 +103,123 @@ class _PhoneNumberFieldState extends State<PhoneNumberField> {
   }
 
   void _showCountryCodePicker() {
+    final searchController = TextEditingController();
+    var filtered = List<CountryCode>.from(_countryCodes);
+
     showModalBottomSheet(
       context: context,
+      isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (context) {
-        return Container(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 40,
-                height: 4,
-                margin: const EdgeInsets.only(bottom: 16),
-                decoration: BoxDecoration(
-                  color: Colors.grey[300],
-                  borderRadius: BorderRadius.circular(2),
-                ),
+      builder: (sheetContext) {
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            void applyFilter(String query) {
+              final q = query.trim().toLowerCase();
+              setSheetState(() {
+                filtered = q.isEmpty
+                    ? List<CountryCode>.from(_countryCodes)
+                    : _countryCodes.where((country) {
+                        return country.name.toLowerCase().contains(q) ||
+                            country.code.toLowerCase().contains(q) ||
+                            country.dialCode.contains(q.replaceAll('+', ''));
+                      }).toList();
+              });
+            }
+
+            final maxHeight = MediaQuery.of(context).size.height * 0.75;
+
+            return Padding(
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.of(context).viewInsets.bottom,
               ),
-              const Text(
-                'Select Country',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 16),
-              Expanded(
-                child: ListView.builder(
-                  shrinkWrap: true,
-                  itemCount: _countryCodes.length,
-                  itemBuilder: (context, index) {
-                    final country = _countryCodes[index];
-                    final isSelected = country.dialCode == _selectedCountry.dialCode;
-                    return ListTile(
-                      leading: Text(country.flag, style: const TextStyle(fontSize: 24)),
-                      title: Text(country.name),
-                      trailing: Text(
-                        '+${country.dialCode}',
-                        style: TextStyle(
-                          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                          color: isSelected ? widget.primaryColor : Colors.black,
+              child: SizedBox(
+                height: maxHeight,
+                child: Column(
+                  children: [
+                    const SizedBox(height: 12),
+                    Container(
+                      width: 40,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: Colors.grey[300],
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    const Text(
+                      'Select Country',
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 12),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: TextField(
+                        controller: searchController,
+                        onChanged: applyFilter,
+                        decoration: InputDecoration(
+                          hintText: 'Search by country or code',
+                          prefixIcon: const Icon(Icons.search),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
                         ),
                       ),
-                      selected: isSelected,
-                      onTap: () {
-                        setState(() {
-                          _selectedCountry = country;
-                        });
-                        widget.onCountryCodeChanged?.call(country.dialCode);
-                        Navigator.pop(context);
-                      },
-                    );
-                  },
+                    ),
+                    const SizedBox(height: 8),
+                    Expanded(
+                      child: filtered.isEmpty
+                          ? Center(
+                              child: Text(
+                                'No countries found',
+                                style: TextStyle(color: Colors.grey.shade600),
+                              ),
+                            )
+                          : ListView.builder(
+                              itemCount: filtered.length,
+                              itemBuilder: (context, index) {
+                                final country = filtered[index];
+                                final isSelected =
+                                    country.dialCode == _selectedCountry.dialCode;
+                                return ListTile(
+                                  leading: Text(
+                                    country.flag,
+                                    style: const TextStyle(fontSize: 24),
+                                  ),
+                                  title: Text(country.name),
+                                  trailing: Text(
+                                    '+${country.dialCode}',
+                                    style: TextStyle(
+                                      fontWeight: isSelected
+                                          ? FontWeight.bold
+                                          : FontWeight.normal,
+                                      color: isSelected
+                                          ? widget.primaryColor
+                                          : Colors.black,
+                                    ),
+                                  ),
+                                  selected: isSelected,
+                                  onTap: () {
+                                    setState(() {
+                                      _selectedCountry = country;
+                                    });
+                                    widget.onCountryCodeChanged
+                                        ?.call(country.dialCode);
+                                    Navigator.pop(sheetContext);
+                                  },
+                                );
+                              },
+                            ),
+                    ),
+                  ],
                 ),
               ),
-            ],
-          ),
+            );
+          },
         );
       },
-    );
+    ).whenComplete(searchController.dispose);
   }
 
   @override

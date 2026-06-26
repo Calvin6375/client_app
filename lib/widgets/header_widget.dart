@@ -3,6 +3,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:pretium/app/route_names.dart';
 import 'package:pretium/core/constants/app_colors.dart';
+import 'package:pretium/models/notification_model.dart';
+import 'package:pretium/services/notification_service.dart';
 import 'package:pretium/utils/firebase_utils.dart';
 
 class HeaderWidget extends StatelessWidget {
@@ -192,32 +194,54 @@ class HeaderWidget extends StatelessWidget {
                 textAlign: TextAlign.left,
               ),
             ),
-            Stack(
-              children: [
-                IconButton(
-                  icon: Icon(
-                    Icons.notifications_outlined,
-                    color: colors.textPrimary, // Theme-aware icon color
-                    size: 28,
-                  ),
-                  onPressed: () {
-                    Navigator.of(context).pushNamed(RouteNames.notifications);
-                  },
-                ),
-                Positioned(
-                  right: 12,
-                  top: 12,
-                  child: Container(
-                    width: 8,
-                    height: 8,
-                    decoration: BoxDecoration(
-                      color: colors.error,
-                      shape: BoxShape.circle,
-                    ),
-                  ),
-                ),
-              ],
+            _NotificationBellButton(userId: uid),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _NotificationBellButton extends StatelessWidget {
+  const _NotificationBellButton({required this.userId});
+
+  final String userId;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = AppColors.getThemeColors(context);
+
+    return StreamBuilder<List<NotificationModel>>(
+      stream: NotificationService().getNotificationsStream(userId),
+      builder: (context, snapshot) {
+        final hasUnread = snapshot.data?.any((n) => !n.read) ?? false;
+
+        return Stack(
+          clipBehavior: Clip.none,
+          children: [
+            IconButton(
+              icon: Icon(
+                Icons.notifications_outlined,
+                color: colors.textPrimary,
+                size: 28,
+              ),
+              onPressed: () {
+                Navigator.of(context).pushNamed(RouteNames.notifications);
+              },
             ),
+            if (hasUnread)
+              Positioned(
+                right: 12,
+                top: 12,
+                child: Container(
+                  width: 8,
+                  height: 8,
+                  decoration: BoxDecoration(
+                    color: colors.error,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+              ),
           ],
         );
       },

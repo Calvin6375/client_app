@@ -20,6 +20,7 @@ final class RegistrationApiService {
     required String email,
     required String phoneNumberE164,
     required String password,
+    String? country,
   }) async {
     final uri = CloudFunctionsApiConfig.registerUri();
     final body = <String, dynamic>{
@@ -30,6 +31,7 @@ final class RegistrationApiService {
       'password': password,
       'Institution': institution,
       'Channel': channel,
+      if (country != null && country.isNotEmpty) 'country': country,
     };
 
     final headers = {

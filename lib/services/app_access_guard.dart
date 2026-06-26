@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:pretium/app/route_names.dart';
 import 'package:pretium/core/constants/auth_config.dart';
+import 'package:pretium/repositories/user_repository.dart';
 import 'package:pretium/services/auth_claims_service.dart';
 import 'package:pretium/services/auth_service.dart';
 import 'package:pretium/utils/logger.dart';
@@ -26,11 +27,14 @@ final class AppAccessGuard {
   AppAccessGuard({
     AuthClaimsService? claimsService,
     AuthService? authService,
+    UserRepository? userRepository,
   })  : _claims = claimsService ?? AuthClaimsService(),
-        _auth = authService ?? AuthService();
+        _auth = authService ?? AuthService(),
+        _users = userRepository ?? UserRepository();
 
   final AuthClaimsService _claims;
   final AuthService _auth;
+  final UserRepository _users;
 
   Future<AppAccessResult> evaluate() async {
     final userType = await _claims.userTypeClaim();
@@ -45,6 +49,32 @@ final class AppAccessGuard {
     if (_claims.isAdmin(userType)) {
       return AppAccessResult.redirectAdmin;
     }
+
+    if (userType == null || userType.isEmpty) {
+      return _evaluateLegacyRouting();
+    }
+
+    return AppAccessResult.unknownUserType;
+  }
+
+  Future<AppAccessResult> _evaluateLegacyRouting() async {
+    final legacy = await _claims.legacyRoutingHint();
+
+    if (legacy.partnerId != null) {
+      Logger.info('Auth routing: legacy partnerId=${legacy.partnerId}');
+      return AppAccessResult.redirectPartner;
+    }
+    if (legacy.admin || _claims.isSuperAdminEmail(legacy.email)) {
+      Logger.info('Auth routing: legacy admin');
+      return AppAccessResult.redirectAdmin;
+    }
+
+    final uid = _auth.currentUserId;
+    if (uid != null && await _users.profileExists(uid)) {
+      Logger.info('Auth routing: legacy customer (users/$uid exists)');
+      return AppAccessResult.allowed;
+    }
+
     return AppAccessResult.unknownUserType;
   }
 

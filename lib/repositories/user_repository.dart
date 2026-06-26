@@ -93,6 +93,17 @@ class UserRepository {
     }
   }
 
+  /// Whether `users/{uid}` exists (legacy customer routing when `userType` is absent).
+  Future<bool> profileExists(String uid) async {
+    try {
+      final doc = await _firestore.collection(_collection).doc(uid).get();
+      return doc.exists;
+    } catch (e) {
+      Logger.error('Failed to check user profile existence', e);
+      return false;
+    }
+  }
+
   /// Get user profile by UID
   Future<UserModel?> getUserProfile(String uid) async {
     try {

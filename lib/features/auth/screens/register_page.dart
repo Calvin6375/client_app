@@ -6,7 +6,9 @@ import 'package:pretium/repositories/user_repository.dart';
 import 'package:pretium/utils/logger.dart';
 import 'package:pretium/core/constants/app_colors.dart';
 import '../widgets/custom_text_field.dart';
+import '../widgets/nationality_field.dart';
 import '../widgets/phone_number_field.dart';
+import '../data/nationalities.dart';
 import '../widgets/register_header.dart';
 import '../widgets/terms_checkbox.dart';
 import 'package:pretium/features/auth/services/registration_api_service.dart';
@@ -54,6 +56,7 @@ class _RegisterPageState extends State<RegisterPage> {
   bool _termsAccepted = false;
   bool _isSubmitting = false;
   String _selectedCountryCode = '254'; // Default to Kenya
+  NationalityOption? _selectedNationality = nationalityByIsoCode('KE');
 
   final AuthService _authService = AuthService();
   final UserRepository _userRepository = UserRepository();
@@ -86,6 +89,7 @@ class _RegisterPageState extends State<RegisterPage> {
         email.isNotEmpty &&
         password.isNotEmpty &&
         phoneDigits.length >= 7 &&
+        _selectedNationality != null &&
         _termsAccepted;
   }
 
@@ -131,6 +135,14 @@ class _RegisterPageState extends State<RegisterPage> {
       return;
     }
 
+    final nationality = _selectedNationality;
+    if (nationality == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please select your nationality.')),
+      );
+      return;
+    }
+
     setState(() => _isSubmitting = true);
     try {
       // Log complete registration request (matches API body except password is omitted)
@@ -139,6 +151,7 @@ class _RegisterPageState extends State<RegisterPage> {
         'lastName': lastName,
         'email': email,
         'phoneNumber': phoneNumberE164,
+        'country': nationality.isoCode,
         'Institution': RegistrationApiService.institution,
         'Channel': RegistrationApiService.channel,
         'passwordLength': password.length,
@@ -155,6 +168,7 @@ class _RegisterPageState extends State<RegisterPage> {
         email: email,
         phoneNumberE164: phoneNumberE164,
         password: password,
+        country: nationality.isoCode,
       );
       Logger.success('✅ Backend registration completed');
       
@@ -195,6 +209,7 @@ class _RegisterPageState extends State<RegisterPage> {
         lastName: lastName,
         email: email,
         phoneNumber: phoneNumber.isNotEmpty ? phoneNumber : null,
+        country: nationality.isoCode,
       );
       
       // 4) Setup notifications (save FCM token)
@@ -262,161 +277,167 @@ class _RegisterPageState extends State<RegisterPage> {
     return Scaffold(
       backgroundColor: colors.background, // Theme-aware background
       body: SafeArea(
-        child: Padding(
+        child: SingleChildScrollView(
           padding: const EdgeInsets.symmetric(horizontal: 24.0),
-          child: SingleChildScrollView(
-            child: SizedBox(
-              // Set minimum height to screen height minus safe area
-              height: MediaQuery.of(context).size.height -
-                  MediaQuery.of(context).padding.top -
-                  MediaQuery.of(context).padding.bottom,
-              child: Form(
-                key: _formKey,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                  const SizedBox(height: 16),
+          child: Form(
+            key: _formKey,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const SizedBox(height: 16),
 
-                  // Back Arrow
-                  IconButton(
-                    icon: Icon(
-                      Icons.arrow_back,
-                      color: Theme.of(context).colorScheme.primary,
-                    ),
-                    onPressed: () => Navigator.pop(context),
-                  ),
-
-                  // Header section with left alignment
-                  const RegisterHeader(),
-                  const SizedBox(height: 32),
-
-                  // First Name field
-                  CustomTextField(
-                    controller: _firstNameController,
-                    labelText: 'First Name',
-                    hintText: 'Enter your first name',
-                    prefixIcon: Icons.person_outline,
-                    primaryColor: Theme.of(context).colorScheme.primary,
-                    labelColor: Theme.of(context).colorScheme.primary,
-                  ),
-                  const SizedBox(height: 24),
-
-                  // Last Name field
-                  CustomTextField(
-                    controller: _lastNameController,
-                    labelText: 'Last Name',
-                    hintText: 'Enter your last name',
-                    prefixIcon: Icons.person_outline,
-                    primaryColor: Theme.of(context).colorScheme.primary,
-                    labelColor: Theme.of(context).colorScheme.primary,
-                  ),
-                  const SizedBox(height: 24),
-
-                  // Email field
-                  CustomTextField(
-                    controller: _emailController,
-                    labelText: 'Email',
-                    hintText: 'Enter your email',
-                    prefixIcon: Icons.email_outlined,
-                    keyboardType: TextInputType.emailAddress,
-                    primaryColor: Theme.of(context).colorScheme.primary,
-                    labelColor: Theme.of(context).colorScheme.primary,
-                  ),
-                  const SizedBox(height: 24),
-
-                  // Phone Number field with country code selector
-                  PhoneNumberField(
-                    phoneController: _phoneController,
-                    primaryColor: Theme.of(context).colorScheme.primary,
-                    labelColor: Theme.of(context).colorScheme.primary,
-                    initialCountryCode: _selectedCountryCode,
-                    onCountryCodeChanged: (countryCode) {
-                      setState(() {
-                        _selectedCountryCode = countryCode;
-                      });
-                    },
-                    validator: (value) {
-                      if (value == null || value.trim().isEmpty) {
-                        return 'Please enter your phone number';
-                      }
-                      if (value.trim().length < 7) {
-                        return 'Please enter a valid phone number';
-                      }
-                      return null;
-                    },
-                  ),
-                  const SizedBox(height: 24),
-
-                  // Password field
-                  CustomTextField(
-                    controller: _passwordController,
-                    labelText: 'Password',
-                    hintText: 'Enter your password',
-                    prefixIcon: Icons.lock_outline,
-                    isPassword: true,
-                    primaryColor: Theme.of(context).colorScheme.primary,
-                  ),
-
-                  const SizedBox(height: 16),
-                  // Terms and conditions checkbox
-                  TermsCheckbox(
-                    value: _termsAccepted,
-                    onChanged: (value) {
-                      setState(() {
-                        _termsAccepted = value!;
-                      });
-                    },
+                // Back Arrow
+                IconButton(
+                  icon: Icon(
+                    Icons.arrow_back,
                     color: Theme.of(context).colorScheme.primary,
                   ),
+                  onPressed: () => Navigator.pop(context),
+                ),
 
-                  const SizedBox(height: 24),
-                  // Create Account button - active only when all fields filled and terms accepted
-                  SizedBox(
-                    width: double.infinity,
-                    height: 48,
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: _canSubmit && !_isSubmitting
-                            ? Theme.of(context).colorScheme.primary
-                            : Colors.grey.shade400,
-                        foregroundColor: Colors.white,
-                        disabledBackgroundColor: Colors.grey.shade400,
-                        disabledForegroundColor: Colors.white70,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                      ),
-                      onPressed: (_canSubmit && !_isSubmitting) ? _register : null,
-                      child: Text(
-                        _isSubmitting ? 'Creating...' : 'Create Account',
-                        style: const TextStyle(fontSize: 18, color: Colors.white),
+                // Header section with left alignment
+                const RegisterHeader(),
+                const SizedBox(height: 32),
+
+                // First Name field
+                CustomTextField(
+                  controller: _firstNameController,
+                  labelText: 'First Name',
+                  hintText: 'Enter your first name',
+                  prefixIcon: Icons.person_outline,
+                  primaryColor: Theme.of(context).colorScheme.primary,
+                  labelColor: Theme.of(context).colorScheme.primary,
+                ),
+                const SizedBox(height: 24),
+
+                // Last Name field
+                CustomTextField(
+                  controller: _lastNameController,
+                  labelText: 'Last Name',
+                  hintText: 'Enter your last name',
+                  prefixIcon: Icons.person_outline,
+                  primaryColor: Theme.of(context).colorScheme.primary,
+                  labelColor: Theme.of(context).colorScheme.primary,
+                ),
+                const SizedBox(height: 24),
+
+                // Email field
+                CustomTextField(
+                  controller: _emailController,
+                  labelText: 'Email',
+                  hintText: 'Enter your email',
+                  prefixIcon: Icons.email_outlined,
+                  keyboardType: TextInputType.emailAddress,
+                  primaryColor: Theme.of(context).colorScheme.primary,
+                  labelColor: Theme.of(context).colorScheme.primary,
+                ),
+                const SizedBox(height: 24),
+
+                // Phone Number field with country code selector
+                PhoneNumberField(
+                  phoneController: _phoneController,
+                  primaryColor: Theme.of(context).colorScheme.primary,
+                  labelColor: Theme.of(context).colorScheme.primary,
+                  initialCountryCode: _selectedCountryCode,
+                  onCountryCodeChanged: (countryCode) {
+                    setState(() {
+                      _selectedCountryCode = countryCode;
+                    });
+                  },
+                  validator: (value) {
+                    if (value == null || value.trim().isEmpty) {
+                      return 'Please enter your phone number';
+                    }
+                    if (value.trim().length < 7) {
+                      return 'Please enter a valid phone number';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 24),
+
+                NationalityField(
+                  primaryColor: Theme.of(context).colorScheme.primary,
+                  labelColor: Theme.of(context).colorScheme.primary,
+                  initialValue: _selectedNationality,
+                  onChanged: (option) {
+                    setState(() => _selectedNationality = option);
+                  },
+                  validator: (value) {
+                    if (value == null) {
+                      return 'Please select your nationality';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 24),
+
+                // Password field
+                CustomTextField(
+                  controller: _passwordController,
+                  labelText: 'Password',
+                  hintText: 'Enter your password',
+                  prefixIcon: Icons.lock_outline,
+                  isPassword: true,
+                  primaryColor: Theme.of(context).colorScheme.primary,
+                ),
+
+                const SizedBox(height: 16),
+                // Terms and conditions checkbox
+                TermsCheckbox(
+                  value: _termsAccepted,
+                  onChanged: (value) {
+                    setState(() {
+                      _termsAccepted = value!;
+                    });
+                  },
+                  color: Theme.of(context).colorScheme.primary,
+                ),
+
+                const SizedBox(height: 24),
+                // Create Account button - active only when all fields filled and terms accepted
+                SizedBox(
+                  width: double.infinity,
+                  height: 48,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: _canSubmit && !_isSubmitting
+                          ? Theme.of(context).colorScheme.primary
+                          : Colors.grey.shade400,
+                      foregroundColor: Colors.white,
+                      disabledBackgroundColor: Colors.grey.shade400,
+                      disabledForegroundColor: Colors.white70,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
                       ),
                     ),
+                    onPressed: (_canSubmit && !_isSubmitting) ? _register : null,
+                    child: Text(
+                      _isSubmitting ? 'Creating...' : 'Create Account',
+                      style: const TextStyle(fontSize: 18, color: Colors.white),
+                    ),
                   ),
+                ),
 
-                  const Expanded(
-                    child: SizedBox(),
-                  ), // Replace Spacer with Expanded
-                  // Login section
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Text('Already have an account?'),
-                      TextButton(
-                        onPressed: () => Navigator.pop(context), // Add navigation
-                        child: Text(
-                          'Login',
-                          style: TextStyle(
-                            color: Theme.of(context).colorScheme.primary,
-                          ),
+                const SizedBox(height: 32),
+                // Login section
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Text('Already have an account?'),
+                    TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: Text(
+                        'Login',
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.primary,
                         ),
                       ),
-                    ],
-                  ),
-                  const SizedBox(height: 24),
+                    ),
                   ],
                 ),
-              ),
+                const SizedBox(height: 24),
+              ],
             ),
           ),
         ),

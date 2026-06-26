@@ -67,4 +67,42 @@ final class AuthClaimsService {
   bool isPartner(String? userType) => userType == AuthConfig.partnerUserType;
 
   bool isAdmin(String? userType) => userType == AuthConfig.adminUserType;
+
+  /// Legacy routing hints when [userTypeClaim] is absent (pre-migration tokens).
+  Future<LegacyRoutingHint> legacyRoutingHint() async {
+    final user = _auth.currentUser;
+    if (user == null) return const LegacyRoutingHint();
+
+    final result = await user.getIdTokenResult(false);
+    final claims = result.claims ?? {};
+
+    final partnerId = claims[AuthConfig.partnerIdClaimKey]?.toString();
+    final adminRaw = claims[AuthConfig.adminClaimKey];
+    final admin = adminRaw == true || adminRaw == 'true';
+
+    return LegacyRoutingHint(
+      partnerId: partnerId?.isNotEmpty == true ? partnerId : null,
+      admin: admin,
+      email: user.email,
+    );
+  }
+
+  bool isSuperAdminEmail(String? email) {
+    if (email == null || email.isEmpty) return false;
+    return email.trim().toLowerCase() ==
+        AuthConfig.masterAdminEmail.toLowerCase();
+  }
+}
+
+/// Legacy ID-token fields used when `userType` is missing.
+final class LegacyRoutingHint {
+  const LegacyRoutingHint({
+    this.partnerId,
+    this.admin = false,
+    this.email,
+  });
+
+  final String? partnerId;
+  final bool admin;
+  final String? email;
 }
