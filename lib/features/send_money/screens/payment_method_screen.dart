@@ -34,10 +34,10 @@ class _PaymentMethodScreenState extends State<PaymentMethodScreen> {
           child: ListView(
             padding: const EdgeInsets.symmetric(horizontal: 16.0),
             children: [
-              _buildSectionHeader(context, 'True Pay to True pay transfer'),
+              _buildSectionHeader(context, 'SafariTap to SafariTap transfer'),
               _PaymentOptionCard(
                 icon: Icons.send_to_mobile,
-                title: 'True Pay to True pay transfer',
+                title: 'SafariTap to SafariTap transfer',
                 subtitle: 'Use money in your account to pay for your transfer instantly. Should arrive in seconds.',
                 isSelected: _selectedMethod == PaymentMethod.truePay,
                 onTap: () => setState(() => _selectedMethod = PaymentMethod.truePay),

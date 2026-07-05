@@ -1,3 +1,5 @@
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:pretium/features/send_money/screens/send_money_page.dart';
@@ -91,6 +93,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final colors = AppColors.getThemeColors(context);
     final primary = Theme.of(context).colorScheme.primary;
     return Scaffold(
+      extendBody: true,
       backgroundColor: colors.background,
       body: Column(
         children: [
@@ -146,7 +149,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     ),
                   ),
                   const SizedBox(height: 12),
-                  // Large circular wallet display
+                  // Credit-card style wallet display
                   WalletCard(
                     key: _walletCardKey,
                     selectedTab: _selectedTab,
@@ -161,96 +164,96 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 const RecentTransactionsHeader(),
                 const SizedBox(height: 16),
                 PlaceholderTransactions(key: _transactionsKey),
-                const SizedBox(height: 24),
+                SizedBox(height: MediaQuery.of(context).padding.bottom + 96),
               ],
             ),
             ),
           ),
         ],
       ),
-      bottomNavigationBar: Container(
-        decoration: BoxDecoration(
-          color: Theme.of(context).brightness == Brightness.light
-              ? Colors.white.withOpacity(0.95) // Clean white background
-              : colors.background, // Dark background for dark mode
-          border: Border(
-            top: BorderSide(
-              color: Theme.of(context).brightness == Brightness.dark
-                  ? AppColors.surfaceVariantDark // Subtle top border for dark
-                  : const Color(0xFFE5E7EB), // Soft gray border for light mode
-              width: 1,
-            ),
-          ),
-          boxShadow: Theme.of(context).brightness == Brightness.light
-              ? [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.04),
-                    blurRadius: 8,
-                    offset: const Offset(0, -2),
-                  ),
-                ]
-              : null,
-        ),
-        child: BottomAppBar(
-          color: Colors.transparent,
-          elevation: 0,
-          shape: const CircularNotchedRectangle(),
-          notchMargin: 8.0,
-          child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceAround,
-          children: <Widget>[
-            IconButton(
-              icon: const Icon(Icons.account_balance_wallet),
-              iconSize: 26,
-              color: _selectedIndex == 0 
-                  ? primary // Theme-aware primary color when active
-                  : colors.textTertiary, // Theme-aware tertiary when inactive
-              onPressed: () {
-                _onItemTapped(0);
-                Navigator.of(context).pushNamed(RouteNames.wallet);
-              },
-            ),
-            GestureDetector(
-              onTap: () {
-                _onItemTapped(1);
-                Navigator.of(context).push(
-                  MaterialPageRoute(builder: (context) => const SendMoneyPage(initialFromCurrency: 'USD')),
-                );
-              },
-              child: Container(
-                decoration: BoxDecoration(
-                  color: primary, // Theme-aware primary color
-                  shape: BoxShape.circle,
-                  boxShadow: [
-                    BoxShadow(
-                      color: primary.withOpacity(0.3), // Theme-aware glow
-                      blurRadius: 12,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
-                ),
-                padding: const EdgeInsets.all(12),
-                child: FaIcon(
-                  FontAwesomeIcons.paperPlane,
-                  color: Theme.of(context).brightness == Brightness.dark
-                      ? AppColors.backgroundDeepNavy // Deep navy icon for dark mode
-                      : Colors.white, // White icon for light mode
-                  size: 22,
-                ),
+      bottomNavigationBar: _buildFloatingBottomNav(context, colors, primary),
+    );
+  }
+
+  Widget _buildFloatingBottomNav(
+    BuildContext context,
+    AppThemeColors colors,
+    Color primary,
+  ) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final barColor = isDark
+        ? AppColors.surfaceDark.withValues(alpha: 0.92)
+        : Colors.white.withValues(alpha: 0.92);
+
+    return SafeArea(
+      minimum: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(36),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+          child: Container(
+            height: 62,
+            decoration: BoxDecoration(
+              color: barColor,
+              borderRadius: BorderRadius.circular(36),
+              border: Border.all(
+                color: isDark
+                    ? Colors.white.withValues(alpha: 0.08)
+                    : Colors.white.withValues(alpha: 0.6),
               ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: isDark ? 0.35 : 0.1),
+                  blurRadius: 24,
+                  offset: const Offset(0, 8),
+                ),
+              ],
             ),
-            IconButton(
-              icon: const Icon(Icons.receipt_long),
-              iconSize: 26,
-              color: _selectedIndex == 2 
-                  ? primary // Theme-aware primary color when active
-                  : colors.textTertiary, // Theme-aware tertiary when inactive
-              onPressed: () {
-                _onItemTapped(2);
-                Navigator.of(context).pushNamed(RouteNames.transactions);
-              },
+            child: Row(
+              children: [
+                Expanded(
+                  child: _FloatingNavItem(
+                    icon: Icons.account_balance_wallet_outlined,
+                    isSelected: _selectedIndex == 0,
+                    primary: primary,
+                    inactiveColor: colors.textTertiary,
+                    onTap: () {
+                      _onItemTapped(0);
+                      Navigator.of(context).pushNamed(RouteNames.wallet);
+                    },
+                  ),
+                ),
+                Expanded(
+                  child: _FloatingNavItem(
+                    faIcon: FontAwesomeIcons.paperPlane,
+                    isSelected: _selectedIndex == 1,
+                    primary: primary,
+                    inactiveColor: colors.textTertiary,
+                    onTap: () {
+                      _onItemTapped(1);
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (context) =>
+                              const SendMoneyPage(initialFromCurrency: 'USD'),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+                Expanded(
+                  child: _FloatingNavItem(
+                    icon: Icons.receipt_long_outlined,
+                    isSelected: _selectedIndex == 2,
+                    primary: primary,
+                    inactiveColor: colors.textTertiary,
+                    onTap: () {
+                      _onItemTapped(2);
+                      Navigator.of(context).pushNamed(RouteNames.transactions);
+                    },
+                  ),
+                ),
+              ],
             ),
-          ],
           ),
         ),
       ),
@@ -289,6 +292,59 @@ class _DashboardScreenState extends State<DashboardScreen> {
               fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
               fontSize: 14,
             ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _FloatingNavItem extends StatelessWidget {
+  const _FloatingNavItem({
+    this.icon,
+    this.faIcon,
+    required this.isSelected,
+    required this.primary,
+    required this.inactiveColor,
+    required this.onTap,
+  }) : assert(icon != null || faIcon != null);
+
+  final IconData? icon;
+  final IconData? faIcon;
+  final bool isSelected;
+  final Color primary;
+  final Color inactiveColor;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = isSelected ? primary : inactiveColor;
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(24),
+        child: SizedBox(
+          height: 62,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              if (faIcon != null)
+                FaIcon(faIcon, size: 22, color: color)
+              else
+                Icon(icon, size: 24, color: color),
+              const SizedBox(height: 6),
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                width: isSelected ? 5 : 0,
+                height: isSelected ? 5 : 0,
+                decoration: BoxDecoration(
+                  color: primary,
+                  shape: BoxShape.circle,
+                ),
+              ),
+            ],
           ),
         ),
       ),

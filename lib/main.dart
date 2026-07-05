@@ -241,7 +241,7 @@ class _MyAppState extends State<MyApp> {
         builder: (context, themeProvider, _) {
           return MaterialApp(
             navigatorKey: _navigatorKey,
-            title: 'TruePay',
+            title: 'SafariTap',
             debugShowCheckedModeBanner: false,
             theme: _buildLightTheme(), // Light theme with glassmorphism
             darkTheme: _buildDarkTheme(), // Dark fintech theme

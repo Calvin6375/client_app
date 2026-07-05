@@ -1,4 +1,4 @@
-// Wallet Settings screen - profile, balance, security, preferences, network.
+// Wallet Settings screen - profile, balance, security, preferences.
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -23,8 +23,6 @@ class _WalletSettingsPageState extends State<WalletSettingsPage> {
   final AuthService _authService = AuthService();
 
   bool _biometricEnabled = true;
-  bool _twoFactorEnabled = false;
-  bool _seedPhraseEnabled = false;
   bool _pushNotificationsEnabled = true;
   String _balance = '0.00';
   String _userName = '';
@@ -269,34 +267,8 @@ class _WalletSettingsPageState extends State<WalletSettingsPage> {
                       activeColor: primary,
                     ),
                   ),
-                  _SettingsTile(
-                    icon: Icons.shield_outlined,
-                    title: 'Two-Factor Auth (2FA)',
-                    subtitle: 'Enhanced account protection',
-                    trailing: Switch(
-                      value: _twoFactorEnabled,
-                      onChanged: (v) => setState(() => _twoFactorEnabled = v),
-                      activeColor: primary,
-                    ),
-                  ),
-                  _SettingsTile(
-                    icon: Icons.vpn_key_outlined,
-                    title: 'Seed Phrase',
-                    subtitle: 'View or backup your recovery phrase',
-                    trailing: Switch(
-                      value: _seedPhraseEnabled,
-                      onChanged: (v) => setState(() => _seedPhraseEnabled = v),
-                      activeColor: primary,
-                    ),
-                  ),
                   const SizedBox(height: 24),
                   _SectionTitle(title: 'PREFERENCES'),
-                  _SettingsTile(
-                    icon: Icons.attach_money,
-                    title: 'Default Currency',
-                    subtitle: 'USD (\$)',
-                    trailing: const Icon(Icons.chevron_right),
-                  ),
                   _SettingsTile(
                     icon: Icons.notifications_outlined,
                     title: 'Push Notifications',
@@ -322,20 +294,6 @@ class _WalletSettingsPageState extends State<WalletSettingsPage> {
                       },
                     ),
                   ),
-                  const SizedBox(height: 24),
-                  _SectionTitle(title: 'NETWORK'),
-                  _SettingsTile(
-                    icon: Icons.account_tree_outlined,
-                    title: 'Mainnet Node',
-                    subtitle: 'Connected to Ethereum Mainnet',
-                    trailing: const Icon(Icons.chevron_right),
-                  ),
-                  _SettingsTile(
-                    icon: Icons.speed_outlined,
-                    title: 'Gas Preference',
-                    subtitle: 'Standard (Market Rate)',
-                    trailing: const Icon(Icons.chevron_right),
-                  ),
                   const SizedBox(height: 32),
                   Center(
                     child: TextButton.icon(
@@ -350,7 +308,7 @@ class _WalletSettingsPageState extends State<WalletSettingsPage> {
                   const SizedBox(height: 16),
                   Center(
                     child: Text(
-                      'TruePay v1.0.0',
+                      'SafariTap v1.0.0',
                       style: TextStyle(
                         color: colors.textTertiary,
                         fontSize: 12,

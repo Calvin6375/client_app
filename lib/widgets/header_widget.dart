@@ -20,6 +20,7 @@ class HeaderWidget extends StatelessWidget {
       onTap: () => Navigator.of(context).pushNamed(RouteNames.walletSettings),
       borderRadius: BorderRadius.circular(20),
       child: CircleAvatar(
+        radius: 22,
         backgroundColor: Theme.of(context).brightness == Brightness.dark
             ? colors.onPrimary // White for dark mode
             : primary.withOpacity(0.1), // Light teal background for light mode
@@ -37,27 +38,62 @@ class HeaderWidget extends StatelessWidget {
     );
   }
 
+  Widget _buildHeaderLayout({
+    required BuildContext context,
+    required String avatarInitial,
+    required String displayName,
+    String? userId,
+  }) {
+    final colors = AppColors.getThemeColors(context);
+    final primary = Theme.of(context).colorScheme.primary;
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        _buildClickableAvatar(context, avatarInitial, primary),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'Welcome back,',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w400,
+                  color: colors.textSecondary,
+                  height: 1.2,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                displayName,
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                  color: colors.textPrimary,
+                  height: 1.2,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+          ),
+        ),
+        if (userId != null) _NotificationBellButton(userId: userId),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     // Check if Firebase is initialized before accessing FirebaseAuth
     if (!isFirebaseInitialized()) {
-      final primary = Theme.of(context).colorScheme.primary;
-      return Row(
-        children: [
-          _buildClickableAvatar(context, 'U', primary),
-          const SizedBox(width: 12),
-              Expanded(
-            child: Text(
-              'Hello 👋',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w600, // Medium weight - professional
-                color: AppColors.getThemeColors(context).textPrimary, // Theme-aware text color
-              ),
-              textAlign: TextAlign.left,
-            ),
-          ),
-        ],
+      return _buildHeaderLayout(
+        context: context,
+        avatarInitial: 'U',
+        displayName: 'Guest',
       );
     }
 
@@ -65,23 +101,10 @@ class HeaderWidget extends StatelessWidget {
 
     // If no user is logged in, show a simple placeholder header
     if (user == null) {
-      final primary = Theme.of(context).colorScheme.primary;
-      return Row(
-        children: [
-          _buildClickableAvatar(context, 'U', primary),
-          const SizedBox(width: 12),
-              Expanded(
-            child: Text(
-              'Hello 👋',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w600, // Medium weight - professional
-                color: AppColors.getThemeColors(context).textPrimary, // Theme-aware text color
-              ),
-              textAlign: TextAlign.left,
-            ),
-          ),
-        ],
+      return _buildHeaderLayout(
+        context: context,
+        avatarInitial: 'U',
+        displayName: 'Guest',
       );
     }
 
@@ -93,30 +116,15 @@ class HeaderWidget extends StatelessWidget {
       userDocStream = FirebaseFirestore.instance.collection('users').doc(uid).snapshots();
     } catch (e) {
       // If Firestore fails, show default UI
-      final colors = AppColors.getThemeColors(context);
-      final primary = Theme.of(context).colorScheme.primary;
-      return Row(
-        children: [
-          _buildClickableAvatar(
-            context,
-            (user.email?.isNotEmpty ?? false) ? user.email![0].toUpperCase() : 'U',
-            primary,
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              user.email?.isNotEmpty ?? false 
-                  ? 'Hello, ${user.email!.split('@').first} 👋'
-                  : 'Hello 👋',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: colors.textPrimary, // Black text for visibility in light mode
-              ),
-              textAlign: TextAlign.left,
-            ),
-          ),
-        ],
+      return _buildHeaderLayout(
+        context: context,
+        avatarInitial: (user.email?.isNotEmpty ?? false)
+            ? user.email![0].toUpperCase()
+            : 'U',
+        displayName: user.email?.isNotEmpty ?? false
+            ? user.email!.split('@').first
+            : 'Guest',
+        userId: uid,
       );
     }
 
@@ -125,30 +133,15 @@ class HeaderWidget extends StatelessWidget {
       builder: (context, snapshot) {
         // Handle errors in the stream
         if (snapshot.hasError) {
-          final colors = AppColors.getThemeColors(context);
-          final primary = Theme.of(context).colorScheme.primary;
-          return Row(
-            children: [
-              _buildClickableAvatar(
-                context,
-                (user.email?.isNotEmpty ?? false) ? user.email![0].toUpperCase() : 'U',
-                primary,
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  user.email?.isNotEmpty ?? false 
-                      ? 'Hello, ${user.email!.split('@').first} 👋'
-                      : 'Hello 👋',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: colors.textPrimary, // Theme-aware primary text
-                  ),
-                  textAlign: TextAlign.left,
-                ),
-              ),
-            ],
+          return _buildHeaderLayout(
+            context: context,
+            avatarInitial: (user.email?.isNotEmpty ?? false)
+                ? user.email![0].toUpperCase()
+                : 'U',
+            displayName: user.email?.isNotEmpty ?? false
+                ? user.email!.split('@').first
+                : 'Guest',
+            userId: uid,
           );
         }
         String firstName = '';
@@ -174,28 +167,11 @@ class HeaderWidget extends StatelessWidget {
                     : (email.isNotEmpty ? email[0] : 'U'))
                 .toUpperCase();
 
-        final colors = AppColors.getThemeColors(context);
-        return Row(
-          children: [
-            _buildClickableAvatar(
-              context,
-              avatarInitial,
-              Theme.of(context).colorScheme.primary,
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                displayName.isNotEmpty ? 'Hello, $displayName 👋' : 'Hello 👋',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: colors.textPrimary, // Black text for visibility in light mode
-                ),
-                textAlign: TextAlign.left,
-              ),
-            ),
-            _NotificationBellButton(userId: uid),
-          ],
+        return _buildHeaderLayout(
+          context: context,
+          avatarInitial: avatarInitial,
+          displayName: displayName.isNotEmpty ? displayName : 'Guest',
+          userId: uid,
         );
       },
     );

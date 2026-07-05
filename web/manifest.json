@@ -1,6 +1,6 @@
 {
-    "name": "TruePay",
-    "short_name": "TruePay",
+    "name": "SafariTap",
+    "short_name": "SafariTap",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",

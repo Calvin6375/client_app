@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:pretium/features/crypto/screens/usdc_receive_screen.dart';
 import 'package:pretium/features/crypto/screens/usdc_send_screen.dart';
 import 'package:pretium/features/crypto/services/crypto_api_service.dart';
@@ -55,6 +54,17 @@ class _WalletCardState extends State<WalletCard> {
   // Supported fiat currencies to check
   static const List<String> _supportedFiatCurrencies = ['USD', 'KES', 'NGN', 'GHS', 'UGX'];
   static const List<String> _supportedCryptoCurrencies = ['USDT', 'USDC'];
+  static const double _cardAspectRatio = 1.586; // ISO/IEC 7810 ID-1 card ratio
+  static const double _actionButtonsHeight = 56;
+
+  double _cardHeight(BuildContext context) {
+    final cardWidth = MediaQuery.of(context).size.width - 40;
+    return cardWidth / _cardAspectRatio;
+  }
+
+  double _pageItemHeight(BuildContext context) {
+    return _cardHeight(context) + _actionButtonsHeight + 12;
+  }
   
   @override
   void initState() {
@@ -308,7 +318,7 @@ class _WalletCardState extends State<WalletCard> {
         mainAxisSize: MainAxisSize.min,
         children: [
           SizedBox(
-            height: MediaQuery.of(context).size.width * 0.75 + 48, // Circle size + minimal space for page indicator
+            height: _pageItemHeight(context),
             child: PageView.builder(
               controller: _fiatPageController,
               onPageChanged: (index) {
@@ -360,23 +370,23 @@ class _WalletCardState extends State<WalletCard> {
           },
             ),
           ),
-          // Page indicator dots
+          // Page indicator dots — FlowPay-style circular indicators
           if (_availableFiatCurrencies.length > 1)
             Padding(
-              padding: const EdgeInsets.only(top: 0),
+              padding: const EdgeInsets.only(top: 8),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: List.generate(
                   _availableFiatCurrencies.length,
                   (index) => Container(
                     margin: const EdgeInsets.symmetric(horizontal: 4),
-                    width: _currentFiatIndex == index ? 24 : 8,
-                    height: 8,
+                    width: _currentFiatIndex == index ? 10 : 6,
+                    height: _currentFiatIndex == index ? 10 : 6,
                     decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(4),
+                      shape: BoxShape.circle,
                       color: _currentFiatIndex == index
                           ? primary
-                          : primary.withOpacity(0.3),
+                          : primary.withOpacity(0.25),
                     ),
                   ),
                 ),
@@ -404,7 +414,7 @@ class _WalletCardState extends State<WalletCard> {
         mainAxisSize: MainAxisSize.min,
         children: [
           SizedBox(
-            height: MediaQuery.of(context).size.width * 0.75 + 48,
+            height: _pageItemHeight(context),
             child: PageView.builder(
               controller: _cryptoPageController,
               onPageChanged: (index) {
@@ -443,20 +453,20 @@ class _WalletCardState extends State<WalletCard> {
           ),
           if (_availableCryptoCurrencies.length > 1)
             Padding(
-              padding: const EdgeInsets.only(top: 0),
+              padding: const EdgeInsets.only(top: 8),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: List.generate(
                   _availableCryptoCurrencies.length,
                   (index) => Container(
                     margin: const EdgeInsets.symmetric(horizontal: 4),
-                    width: _currentCryptoIndex == index ? 24 : 8,
-                    height: 8,
+                    width: _currentCryptoIndex == index ? 10 : 6,
+                    height: _currentCryptoIndex == index ? 10 : 6,
                     decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(4),
+                      shape: BoxShape.circle,
                       color: _currentCryptoIndex == index
                           ? primary
-                          : primary.withOpacity(0.3),
+                          : primary.withOpacity(0.25),
                     ),
                   ),
                 ),
@@ -543,12 +553,12 @@ class _WalletCardState extends State<WalletCard> {
   }
 }
 
-/// Reusable wallet card widget with modern UX design
-class WalletCardWidget extends StatelessWidget {
+/// Reusable wallet card widget — FlowPay credit-card layout with app colors
+class WalletCardWidget extends StatefulWidget {
   final String title;
   final String currency;
   final double balance;
-  final String? secondaryCurrency; // For currency pairs (e.g., KES shown next to USD)
+  final String? secondaryCurrency;
   final double? secondaryBalance;
   final DateTime? updatedAt;
   final bool loading;
@@ -573,285 +583,448 @@ class WalletCardWidget extends StatelessWidget {
   });
 
   @override
+  State<WalletCardWidget> createState() => _WalletCardWidgetState();
+}
+
+class _WalletCardWidgetState extends State<WalletCardWidget> {
+  bool _balanceVisible = true;
+
+  String get _currencySymbol {
+    switch (widget.currency.toUpperCase()) {
+      case 'USD':
+      case 'USDT':
+      case 'USDC':
+        return '\$';
+      case 'KES':
+        return 'KSh ';
+      case 'NGN':
+        return '₦';
+      case 'GHS':
+        return 'GH₵';
+      case 'UGX':
+        return 'USh ';
+      default:
+        return '${widget.currency} ';
+    }
+  }
+
+  String get _maskedCardNumber {
+    final seed = widget.currency.hashCode.abs();
+    final last4 = (seed % 10000).toString().padLeft(4, '0');
+    return '**** **** **** $last4';
+  }
+
+  String get _displayBalance {
+    if (!_balanceVisible) return '****';
+    return '$_currencySymbol${widget.balance.toStringAsFixed(2)}';
+  }
+
+  @override
   Widget build(BuildContext context) {
     final colors = AppColors.getThemeColors(context);
     final size = MediaQuery.of(context).size;
-    final circleSize = size.width * 0.75; // Large circular element
-    
+    final cardWidth = size.width - 40;
+    const cardAspectRatio = 1.586;
+    final cardHeight = cardWidth / cardAspectRatio;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Center(
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          // Large circular balance display - professional metallic dark look
           Container(
-            width: circleSize,
-            height: circleSize,
+            width: cardWidth,
+            height: cardHeight,
             decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              // Theme-aware shadows - enhanced glassmorphism for light mode
-              boxShadow: Theme.of(context).brightness == Brightness.dark
+              borderRadius: BorderRadius.circular(24),
+              boxShadow: isDark
                   ? [
                       BoxShadow(
-                        color: Colors.black.withOpacity(0.6), // Outer shadow for dark
-                        blurRadius: 30,
+                        color: Colors.black.withOpacity(0.5),
+                        blurRadius: 24,
                         offset: const Offset(0, 8),
-                        spreadRadius: 0,
-                      ),
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.4), // Inner shadow hint
-                        blurRadius: 20,
-                        offset: const Offset(0, -2),
-                        spreadRadius: -5,
                       ),
                     ]
                   : [
-                      // Subtle shadow - soft and diffused (matching image)
                       BoxShadow(
-                        color: Colors.black.withOpacity(0.06), // Very subtle shadow
-                        blurRadius: 24,
-                        offset: const Offset(0, 4),
-                        spreadRadius: 0,
-                      ),
-                      // Light greenish-teal outline/glow (wallet page design)
-                      BoxShadow(
-                        color: (backgroundColor).withOpacity(0.25),
+                        color: Colors.black.withOpacity(0.08),
                         blurRadius: 20,
-                        spreadRadius: -2,
+                        offset: const Offset(0, 6),
                       ),
                     ],
             ),
-            child: Container(
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: RadialGradient(
-                  colors: Theme.of(context).brightness == Brightness.dark
-                      ? [
-                          AppColors.surfaceDark, // Slate-800 center #1E293B
-                          AppColors.surfaceDark.withOpacity(0.95),
-                          AppColors.backgroundDeepNavy, // Deep navy edge #0F172A
-                        ]
-                      : [
-                          // Soft gradient: light teal center to white edge (matching image)
-                          const Color(0xFFE0F7FA), // Light teal center (#E0F7FA)
-                          const Color(0xFFF0FDFA), // Very light mint
-                          Colors.white, // Almost white edge
-                        ],
-                  stops: const [0.0, 0.6, 1.0],
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(24),
+              child: Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: isDark
+                        ? [
+                            AppColors.surfaceDark,
+                            AppColors.surfaceDark.withOpacity(0.95),
+                            AppColors.backgroundDeepNavy,
+                          ]
+                        : [
+                            widget.backgroundColor.withOpacity(0.95),
+                            widget.backgroundColor.withOpacity(0.75),
+                            widget.backgroundColor.withOpacity(0.55),
+                          ],
+                  ),
                 ),
-                // Border adapts to theme - very subtle for light mode
-                border: Border.all(
-                  color: Theme.of(context).brightness == Brightness.dark
-                      ? Colors.grey.withOpacity(0.3) // Silver-metallic border for dark
-                      : Colors.white.withOpacity(0.4), // Very subtle white border
-                  width: 1,
-                ),
-              ),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  // Currency label - show only primary currency (professional uppercase)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 32),
-                    child: Text(
-                      currency.toUpperCase(), // Uppercase for professional look
-                      style: TextStyle(
-                        color: colors.textSecondary, // Theme-aware secondary text
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
-                        letterSpacing: 1.2, // Increased letter spacing for premium feel
+                child: Stack(
+                  children: [
+                    // Decorative circles — app teal accent, not FlowPay blue
+                    Positioned(
+                      top: -cardHeight * 0.12,
+                      right: -cardWidth * 0.08,
+                      child: Container(
+                        width: cardWidth * 0.5,
+                        height: cardWidth * 0.5,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: widget.backgroundColor.withOpacity(isDark ? 0.12 : 0.18),
+                        ),
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 12),
-                  
-                  // Balance or Loading/Error
-                  if (loading)
-                    SizedBox(
-                      height: 40,
-                      width: 40,
-                      child: CircularProgressIndicator(
-                        color: colors.onPrimary,
-                        strokeWidth: 3,
-                      ),
-                    )
-                  else if (error != null)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 32),
-                      child: Text(
-                        error!,
-                        style: TextStyle(
-                          color: colors.onPrimary,
-                          fontSize: 11,
+                    Positioned(
+                      bottom: -cardHeight * 0.18,
+                      left: -cardWidth * 0.12,
+                      child: Container(
+                        width: cardWidth * 0.42,
+                        height: cardWidth * 0.42,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: widget.backgroundColor.withOpacity(isDark ? 0.08 : 0.12),
                         ),
-                        textAlign: TextAlign.center,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
                       ),
-                    )
-                  else
-                        // Primary balance - large, bold, theme-aware color
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 32),
-                          child: Text(
-                            balance.toStringAsFixed(2),
-                            style: TextStyle(
-                              fontSize: 42,
-                              color: colors.textPrimary, // Theme-aware primary text
-                              fontWeight: FontWeight.bold,
-                              letterSpacing: 1.0,
-                            ),
-                            textAlign: TextAlign.center,
+                    ),
+                    // Subtle diagonal sheen
+                    Positioned.fill(
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topRight,
+                            end: Alignment.bottomLeft,
+                            colors: [
+                              Colors.white.withOpacity(isDark ? 0.06 : 0.12),
+                              Colors.transparent,
+                              Colors.transparent,
+                            ],
+                            stops: const [0.0, 0.35, 1.0],
                           ),
                         ),
-                  
-                  const SizedBox(height: 16),
-                  
-                  // Action buttons inside circle - aligned on same axis
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      // Top Up Button - glassmorphism design for light mode
-                      _CircularActionButton(
-                        icon: Icons.add_circle_outline,
-                        label: 'Top Up',
-                        onPressed: onTopUp,
-                        backgroundColor: Theme.of(context).brightness == Brightness.dark
-                            ? AppColors.surfaceBorder // Dark gray #2D3748 for dark mode
-                            : colors.primary, // Uniform primary color (teal/green from financial icons)
-                        foregroundColor: Theme.of(context).brightness == Brightness.dark
-                            ? AppColors.textTertiaryLight // Light gray for dark mode
-                            : Colors.white, // White icon for light mode on teal
-                        labelColor: Theme.of(context).brightness == Brightness.dark
-                            ? AppColors.textTertiaryLight
-                            : Colors.black, // Black label text for visibility in light mode
-                        isCompact: true,
                       ),
-                      
-                      const SizedBox(width: 20),
-                      
-                      // Withdraw (swap control moved to Financial Services)
-                      _CircularActionButton(
-                        icon: FontAwesomeIcons.moneyBillTransfer,
-                        label: 'Withdraw',
-                        onPressed: onWithdraw,
-                        isFontAwesome: true,
-                        backgroundColor: Theme.of(context).brightness == Brightness.dark
-                            ? Colors.transparent
-                            : Colors.white.withOpacity(0.9), // Light background for light mode
-                        foregroundColor: Theme.of(context).brightness == Brightness.dark
-                            ? AppColors.textTertiaryLight // Light gray for dark mode
-                            : colors.primary, // Uniform primary color (teal/green) for icon
-                        borderColor: Theme.of(context).brightness == Brightness.dark
-                            ? Colors.grey.withOpacity(0.4) // Subtle border for dark
-                            : const Color(0xFFE5E7EB), // Light gray border for light mode
-                        labelColor: Theme.of(context).brightness == Brightness.dark
-                            ? AppColors.textTertiaryLight
-                            : colors.textPrimary,
-                        isCompact: true,
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.all(22),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Top row: brand logo + balance toggle
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              _BrandLogo(isDark: isDark),
+                              const Spacer(),
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.end,
+                                children: [
+                                  GestureDetector(
+                                    onTap: () => setState(
+                                      () => _balanceVisible = !_balanceVisible,
+                                    ),
+                                    child: Icon(
+                                      _balanceVisible
+                                          ? Icons.visibility_outlined
+                                          : Icons.visibility_off_outlined,
+                                      color: colors.textPrimary.withOpacity(0.85),
+                                      size: 18,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    'Balance',
+                                    style: TextStyle(
+                                      color: colors.textSecondary,
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w400,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  if (widget.loading)
+                                    SizedBox(
+                                      width: 20,
+                                      height: 20,
+                                      child: CircularProgressIndicator(
+                                        color: colors.textPrimary,
+                                        strokeWidth: 2,
+                                      ),
+                                    )
+                                  else if (widget.error != null)
+                                    Text(
+                                      '—',
+                                      style: TextStyle(
+                                        color: colors.textPrimary,
+                                        fontSize: 22,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    )
+                                  else
+                                    Text(
+                                      _displayBalance,
+                                      style: TextStyle(
+                                        color: colors.textPrimary,
+                                        fontSize: 22,
+                                        fontWeight: FontWeight.w700,
+                                        letterSpacing: 0.5,
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            ],
+                          ),
+                          const Spacer(),
+                          // Card number
+                          Text(
+                            'Card Number',
+                            style: TextStyle(
+                              color: colors.textSecondary,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w400,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            _maskedCardNumber,
+                            style: TextStyle(
+                              color: colors.textPrimary,
+                              fontSize: 15,
+                              fontWeight: FontWeight.w500,
+                              letterSpacing: 1.5,
+                            ),
+                          ),
+                          const Spacer(),
+                          // Bottom row: expiry, CVC, network logo
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              _CardDetailColumn(
+                                label: 'Expiry Date',
+                                value: '**/**',
+                                colors: colors,
+                              ),
+                              const SizedBox(width: 28),
+                              _CardDetailColumn(
+                                label: 'CVC',
+                                value: '***',
+                                colors: colors,
+                              ),
+                              const Spacer(),
+                              const _MastercardLogo(),
+                            ],
+                          ),
+                        ],
                       ),
-                    ],
-                  ),
-                ],
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
-          
+          const SizedBox(height: 12),
+          // FlowPay-style action buttons below the card
+          Row(
+            children: [
+              Expanded(
+                child: _FlowPayActionButton(
+                  label: 'Add Money',
+                  isPrimary: true,
+                  onPressed: widget.onTopUp,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _FlowPayActionButton(
+                  label: 'Withdraw',
+                  isPrimary: false,
+                  onPressed: widget.onWithdraw,
+                ),
+              ),
+            ],
+          ),
         ],
       ),
     );
   }
 }
 
-/// Circular action button with icon and label
-class _CircularActionButton extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final VoidCallback onPressed;
-  final Color backgroundColor;
-  final Color foregroundColor;
-  final Color? borderColor;
-  final Color? labelColor; // Optional separate color for label text
-  final bool isCompact;
-  final bool isFontAwesome;
+class _BrandLogo extends StatelessWidget {
+  const _BrandLogo({required this.isDark});
 
-  const _CircularActionButton({
-    required this.icon,
-    required this.label,
-    required this.onPressed,
-    required this.backgroundColor,
-    required this.foregroundColor,
-    this.borderColor,
-    this.labelColor,
-    this.isCompact = false,
-    this.isFontAwesome = false,
-  });
+  final bool isDark;
 
   @override
   Widget build(BuildContext context) {
-    final buttonSize = isCompact ? 48.0 : 64.0;
-    final iconSize = isCompact ? 22.0 : 28.0;
-    final fontSize = isCompact ? 11.0 : 13.0;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
     final colors = AppColors.getThemeColors(context);
-    
-    return Column(
+
+    return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         Container(
-          width: buttonSize,
-          height: buttonSize,
-          decoration: BoxDecoration(
-            color: backgroundColor,
+          width: 32,
+          height: 32,
+          decoration: const BoxDecoration(
+            color: Colors.white,
             shape: BoxShape.circle,
-            border: borderColor != null
-                ? Border.all(color: borderColor!, width: 2)
-                : null,
-            boxShadow: isDark
-                ? [
-                    BoxShadow(
-                      color: colors.shadow,
-                      blurRadius: 8,
-                      offset: const Offset(0, 2),
-                    ),
-                  ]
-                : [
-                    // Subtle shadow for light mode buttons
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.04),
-                      blurRadius: 6,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
           ),
-          child: IconButton(
-            onPressed: onPressed,
-            icon: isFontAwesome
-                ? FaIcon(
-                    icon,
-                    color: foregroundColor,
-                    size: iconSize,
-                  )
-                : Icon(
-                    icon,
-                    color: foregroundColor,
-                    size: iconSize,
-                  ),
-            padding: EdgeInsets.zero,
+          padding: const EdgeInsets.all(5),
+          child: Image.asset(
+            'assets/images/troupay_logo.png',
+            fit: BoxFit.contain,
+            errorBuilder: (_, __, ___) => Icon(
+              Icons.account_balance_wallet,
+              size: 18,
+              color: Theme.of(context).colorScheme.primary,
+            ),
           ),
         ),
-        if (label.isNotEmpty) ...[
-          const SizedBox(height: 6),
-          Text(
-            label,
-            style: TextStyle(
-              color: labelColor ?? foregroundColor,
-              fontSize: fontSize,
-              fontWeight: FontWeight.w600,
-              letterSpacing: 0.3,
+        const SizedBox(width: 8),
+        Text(
+          'TruePay',
+          style: TextStyle(
+            color: colors.textPrimary,
+            fontSize: 16,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.2,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _CardDetailColumn extends StatelessWidget {
+  const _CardDetailColumn({
+    required this.label,
+    required this.value,
+    required this.colors,
+  });
+
+  final String label;
+  final String value;
+  final AppThemeColors colors;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            color: colors.textSecondary,
+            fontSize: 11,
+            fontWeight: FontWeight.w400,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          value,
+          style: TextStyle(
+            color: colors.textPrimary,
+            fontSize: 14,
+            fontWeight: FontWeight.w500,
+            letterSpacing: 1.0,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _MastercardLogo extends StatelessWidget {
+  const _MastercardLogo();
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 38,
+      height: 24,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Positioned(
+            left: 0,
+            top: 2,
+            child: Container(
+              width: 20,
+              height: 20,
+              decoration: const BoxDecoration(
+                color: Color(0xFFEB001B),
+                shape: BoxShape.circle,
+              ),
+            ),
+          ),
+          Positioned(
+            left: 14,
+            top: 2,
+            child: Container(
+              width: 20,
+              height: 20,
+              decoration: const BoxDecoration(
+                color: Color(0xFFF79E1B),
+                shape: BoxShape.circle,
+              ),
             ),
           ),
         ],
-      ],
+      ),
+    );
+  }
+}
+
+class _FlowPayActionButton extends StatelessWidget {
+  const _FlowPayActionButton({
+    required this.label,
+    required this.isPrimary,
+    required this.onPressed,
+  });
+
+  final String label;
+  final bool isPrimary;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = AppColors.getThemeColors(context);
+    final primary = Theme.of(context).colorScheme.primary;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Material(
+      color: isPrimary
+          ? primary
+          : (isDark ? AppColors.surfaceDark : const Color(0xFFE5E7EB)),
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        onTap: onPressed,
+        borderRadius: BorderRadius.circular(14),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 14),
+          alignment: Alignment.center,
+          child: Text(
+            label,
+            style: TextStyle(
+              color: isPrimary
+                  ? (isDark ? AppColors.backgroundDeepNavy : Colors.white)
+                  : colors.textPrimary,
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
