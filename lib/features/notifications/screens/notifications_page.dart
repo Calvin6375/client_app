@@ -3,10 +3,27 @@ import 'package:flutter/material.dart';
 import 'package:pretium/core/constants/app_colors.dart';
 import 'package:pretium/models/notification_model.dart';
 import 'package:pretium/services/notification_service.dart';
+import 'package:pretium/utils/async_action_guard.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-class NotificationsPage extends StatelessWidget {
+final _markAllAsReadGuard = AsyncActionGuard();
+
+class NotificationsPage extends StatefulWidget {
   const NotificationsPage({super.key});
+
+  @override
+  State<NotificationsPage> createState() => _NotificationsPageState();
+}
+
+class _NotificationsPageState extends State<NotificationsPage> {
+  int _selectedTab = 0;
+
+  List<NotificationModel> _filterNotifications(List<NotificationModel> notifications) {
+    if (_selectedTab == 0) {
+      return notifications.where((n) => n.isSystem).toList();
+    }
+    return notifications.where((n) => n.isPromotion).toList();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -41,8 +58,9 @@ class NotificationsPage extends StatelessWidget {
       stream: NotificationService().getNotificationsStream(user.uid),
       builder: (context, snapshot) {
         final notifications = snapshot.data ?? [];
+        final filtered = _filterNotifications(notifications);
         final loading = snapshot.connectionState == ConnectionState.waiting;
-        final hasUnread = notifications.any((n) => !n.read);
+        final hasUnread = filtered.any((n) => !n.read);
 
         return Scaffold(
           backgroundColor: colors.background,
@@ -63,13 +81,27 @@ class NotificationsPage extends StatelessWidget {
                 ),
             ],
           ),
-          body: _buildBody(
-            context,
-            snapshot,
-            colors,
-            primary,
-            user,
-            notifications,
+          body: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                child: _NotificationTabBar(
+                  selectedIndex: _selectedTab,
+                  onChanged: (index) => setState(() => _selectedTab = index),
+                ),
+              ),
+              Expanded(
+                child: _buildBody(
+                  context,
+                  snapshot,
+                  colors,
+                  primary,
+                  user,
+                  filtered,
+                ),
+              ),
+            ],
           ),
         );
       },
@@ -107,7 +139,11 @@ class NotificationsPage extends StatelessWidget {
       );
     }
     if (notifications.isEmpty) {
-      return _EmptyNotifications(colors: colors, primary: primary);
+      return _EmptyNotifications(
+        colors: colors,
+        primary: primary,
+        isPromotionsTab: _selectedTab == 1,
+      );
     }
     return ListView.separated(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
@@ -124,20 +160,22 @@ class NotificationsPage extends StatelessWidget {
   }
 
   Future<void> _markAllAsRead(BuildContext context, String userId) async {
-    try {
-      await NotificationService().markAllNotificationsAsRead(userId);
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('All notifications marked as read')),
-        );
+    await _markAllAsReadGuard.run(() async {
+      try {
+        await NotificationService().markAllNotificationsAsRead(userId);
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('All notifications marked as read')),
+          );
+        }
+      } catch (e) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Could not update notifications: $e')),
+          );
+        }
       }
-    } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not update notifications: $e')),
-        );
-      }
-    }
+    });
   }
 
   Future<void> _openNotificationDetail(
@@ -555,6 +593,12 @@ class _NotificationDetailSheet extends StatelessWidget {
 
   IconData _iconForType(String type) {
     switch (type.toLowerCase()) {
+      case 'promotion':
+      case 'promo':
+      case 'marketing':
+      case 'offer':
+      case 'campaign':
+        return Icons.local_offer_rounded;
       case 'transaction':
       case 'payment':
         return Icons.payment_rounded;
@@ -572,11 +616,108 @@ class _NotificationDetailSheet extends StatelessWidget {
   }
 }
 
+class _NotificationTabBar extends StatelessWidget {
+  const _NotificationTabBar({
+    required this.selectedIndex,
+    required this.onChanged,
+  });
+
+  final int selectedIndex;
+  final ValueChanged<int> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = AppColors.getThemeColors(context);
+    final primary = Theme.of(context).colorScheme.primary;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Container(
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: isDark ? AppColors.surfaceDark : Colors.white.withValues(alpha: 0.9),
+        borderRadius: BorderRadius.circular(16),
+        border: isDark
+            ? null
+            : Border.all(color: const Color(0xFFE5E7EB)),
+      ),
+      child: Row(
+        children: [
+          _NotificationTab(
+            label: 'System',
+            isSelected: selectedIndex == 0,
+            onTap: () => onChanged(0),
+            primary: primary,
+            unselectedColor: colors.textSecondary,
+          ),
+          const SizedBox(width: 4),
+          _NotificationTab(
+            label: 'Promotions',
+            isSelected: selectedIndex == 1,
+            onTap: () => onChanged(1),
+            primary: primary,
+            unselectedColor: colors.textSecondary,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _NotificationTab extends StatelessWidget {
+  const _NotificationTab({
+    required this.label,
+    required this.isSelected,
+    required this.onTap,
+    required this.primary,
+    required this.unselectedColor,
+  });
+
+  final String label;
+  final bool isSelected;
+  final VoidCallback onTap;
+  final Color primary;
+  final Color unselectedColor;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Expanded(
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(
+            color: isSelected ? primary : Colors.transparent,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Text(
+            label,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: isSelected
+                  ? (isDark ? AppColors.backgroundDeepNavy : Colors.white)
+                  : unselectedColor,
+              fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+              fontSize: 14,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _EmptyNotifications extends StatelessWidget {
   final AppThemeColors colors;
   final Color primary;
+  final bool isPromotionsTab;
 
-  const _EmptyNotifications({required this.colors, required this.primary});
+  const _EmptyNotifications({
+    required this.colors,
+    required this.primary,
+    required this.isPromotionsTab,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -592,11 +733,17 @@ class _EmptyNotifications extends StatelessWidget {
                 color: primary.withValues(alpha: 0.1),
                 shape: BoxShape.circle,
               ),
-              child: Icon(Icons.notifications_none_rounded, size: 56, color: primary),
+              child: Icon(
+                isPromotionsTab
+                    ? Icons.local_offer_outlined
+                    : Icons.notifications_none_rounded,
+                size: 56,
+                color: primary,
+              ),
             ),
             const SizedBox(height: 24),
             Text(
-              'No notifications yet',
+              isPromotionsTab ? 'No promotions yet' : 'No system notifications',
               style: TextStyle(
                 color: colors.textPrimary,
                 fontSize: 18,
@@ -606,7 +753,9 @@ class _EmptyNotifications extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             Text(
-              'When you get notifications, they\'ll show up here.',
+              isPromotionsTab
+                  ? 'Offers and rewards will appear here when available.'
+                  : 'Payment and account updates will show up here.',
               style: TextStyle(
                 color: colors.textSecondary,
                 fontSize: 14,
@@ -727,6 +876,12 @@ class _NotificationTile extends StatelessWidget {
 
   IconData _iconForType(String type) {
     switch (type.toLowerCase()) {
+      case 'promotion':
+      case 'promo':
+      case 'marketing':
+      case 'offer':
+      case 'campaign':
+        return Icons.local_offer_rounded;
       case 'transaction':
       case 'payment':
         return Icons.payment_rounded;

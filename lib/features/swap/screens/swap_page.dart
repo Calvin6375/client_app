@@ -6,6 +6,7 @@ import 'package:pretium/features/swap/services/swap_order_service.dart';
 import 'package:pretium/features/swap/widgets/currency_picker_bottom_sheet.dart';
 import 'package:pretium/repositories/wallet_repository.dart';
 import 'package:pretium/utils/logger.dart';
+import 'package:pretium/utils/async_action_guard.dart';
 import 'package:pretium/core/constants/app_colors.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:pretium/utils/firebase_utils.dart';
@@ -60,77 +61,78 @@ class _SwapPageState extends State<SwapPage> {
     if (_step == _SwapStep.input) {
       setState(() => _step = _SwapStep.confirmation);
     } else if (_step == _SwapStep.confirmation) {
-      final user = FirebaseAuth.instance.currentUser;
-      if (user == null) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Please sign in to swap')),
-          );
-        }
-        return;
-      }
+      await runGuardedAsync(
+        this,
+        isSubmitting: () => _isSubmittingSwap,
+        setSubmitting: (value) => setState(() => _isSubmittingSwap = value),
+        action: () async {
+          final user = FirebaseAuth.instance.currentUser;
+          if (user == null) {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Please sign in to swap')),
+              );
+            }
+            return;
+          }
 
-      final fromAmount = double.tryParse(_fromCtrl.text) ?? 0;
-      if (fromAmount <= 0) return;
+          final fromAmount = double.tryParse(_fromCtrl.text) ?? 0;
+          if (fromAmount <= 0) return;
 
-      setState(() => _isSubmittingSwap = true);
+          try {
+            final fee = fromAmount * 0.005;
+            final toAmount = fromAmount * _rate;
 
-      try {
-        final fee = fromAmount * 0.005;
-        final toAmount = fromAmount * _rate;
+            final result = await createSwapOrder(
+              fromCurrency: _fromCurrency,
+              toCurrency: _toCurrency,
+              fromAmount: fromAmount,
+              exchangeRate: _rate,
+              feeRate: 0.005,
+              fee: fee,
+              toAmount: toAmount,
+            );
 
-        final result = await createSwapOrder(
-          fromCurrency: _fromCurrency,
-          toCurrency: _toCurrency,
-          fromAmount: fromAmount,
-          exchangeRate: _rate,
-          feeRate: 0.005,
-          fee: fee,
-          toAmount: toAmount,
-        );
+            if (!mounted) return;
 
-        if (!mounted) return;
+            if (result.newBalances != null) {
+              final nb = result.newBalances!;
+              final fromBal = nb[_fromCurrency];
+              final toBal = nb[_toCurrency];
+              if (fromBal != null) _fromBalance = (fromBal as num).toDouble();
+              if (toBal != null) _toBalance = (toBal as num).toDouble();
+              setState(() {});
+            } else {
+              await _loadBalances();
+            }
 
-        if (result.newBalances != null) {
-          final nb = result.newBalances!;
-          final fromBal = nb[_fromCurrency];
-          final toBal = nb[_toCurrency];
-          if (fromBal != null) _fromBalance = (fromBal as num).toDouble();
-          if (toBal != null) _toBalance = (toBal as num).toDouble();
-          setState(() {});
-        } else {
-          await _loadBalances();
-        }
-
-        setState(() {
-          _isSubmittingSwap = false;
-          _step = _SwapStep.success;
-        });
-        _showSuccessDialog();
-      } on FirebaseFunctionsException catch (e) {
-        if (!mounted) return;
-        setState(() => _isSubmittingSwap = false);
-        final message = switch (e.code) {
-          'unauthenticated' => 'Please sign in to swap.',
-          'invalid-argument' => 'Invalid swap request. Please check your input.',
-          'failed-precondition' => 'Insufficient balance. You don\'t have enough $_fromCurrency to complete this swap.',
-          'internal' => 'Something went wrong. Please try again.',
-          _ => 'Swap failed. Please try again.',
-        };
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(message), backgroundColor: Colors.red.shade700),
-        );
-      } catch (e, st) {
-        Logger.error('Swap order failed', e, st);
-        if (!mounted) return;
-        setState(() => _isSubmittingSwap = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Swap failed. Please try again.'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
+            setState(() => _step = _SwapStep.success);
+            _showSuccessDialog();
+          } on FirebaseFunctionsException catch (e) {
+            if (!mounted) return;
+            final message = switch (e.code) {
+              'unauthenticated' => 'Please sign in to swap.',
+              'invalid-argument' => 'Invalid swap request. Please check your input.',
+              'failed-precondition' =>
+                'Insufficient balance. You don\'t have enough $_fromCurrency to complete this swap.',
+              'internal' => 'Something went wrong. Please try again.',
+              _ => 'Swap failed. Please try again.',
+            };
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text(message), backgroundColor: Colors.red.shade700),
+            );
+          } catch (e, st) {
+            Logger.error('Swap order failed', e, st);
+            if (!mounted) return;
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Swap failed. Please try again.'),
+                backgroundColor: Colors.red,
+              ),
+            );
+          }
+        },
+      );
     }
   }
 

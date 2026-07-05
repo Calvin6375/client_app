@@ -52,13 +52,17 @@ dependencies:
   provider: ^6.1.1
   gal: ^2.3.2
   image: ^4.8.0
-  share_plus: ^12.0.2
+  share_plus: ^13.2.0
   uuid: ^4.5.1
+  flutter_secure_storage: ^10.3.1
+  local_auth: ^3.0.1
 
-# Transitive (path_provider_windows, shared_preferences_windows, etc.): Dart 3.5+ removed
-# UnmodifiableUint8ListView; win32 <5.5.1 still references it and breaks iOS kernel snapshot.
+# Transitive: flutter_secure_storage_windows 4.2.x requires win32 ^6.0.1.
+# win32 <5.5.1 breaks Dart 3.5+ (UnmodifiableUint8ListView); use 6.x, not 5.x.
 dependency_overrides:
-  win32: ^5.10.0
+  win32: ^6.0.1
+  # 2.2.x depends on win32 5.x; 2.3.0+ uses direct FFI (compatible with win32 6.x override).
+  path_provider_windows: ^2.3.0
   # Old 6.3.0 uses removed PluginRegistry.Registrar (Flutter v1 embedding); need 6.3.10+.
   url_launcher_android: ^6.3.16
 

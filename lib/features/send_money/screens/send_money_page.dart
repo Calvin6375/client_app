@@ -6,6 +6,7 @@ import 'package:pretium/features/send_money/screens/recipient_details_screen.dar
 import 'package:pretium/models/transaction_details_model.dart';
 import 'package:pretium/core/constants/app_colors.dart';
 import 'package:pretium/services/payment_service.dart';
+import 'package:pretium/utils/async_action_guard.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 /// Maps UI payment method to [createDirectPayout] `payoutMethod` (server expects `bank` | `mobile_money`).
@@ -111,74 +112,78 @@ class _SendMoneyPageState extends State<SendMoneyPage> {
     } else if (_step == SendMoneyStep.recipientDetails) {
       setState(() => _step = SendMoneyStep.review);
     } else if (_step == SendMoneyStep.review) {
-      final user = FirebaseAuth.instance.currentUser;
-      if (user == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Please sign in to send money')),
-        );
-        return;
-      }
-      final amount = _transactionDetails.amountToSend;
-      if (amount <= 0) return;
-      final phone = _transactionDetails.recipientPhoneNumber.trim();
-      if (phone.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Recipient phone number is required')),
-        );
-        return;
-      }
+      await runGuardedAsync(
+        this,
+        isSubmitting: () => _isSubmittingSendMoney,
+        setSubmitting: (value) => setState(() => _isSubmittingSendMoney = value),
+        action: () async {
+          final user = FirebaseAuth.instance.currentUser;
+          if (user == null) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Please sign in to send money')),
+            );
+            return;
+          }
+          final amount = _transactionDetails.amountToSend;
+          if (amount <= 0) return;
+          final phone = _transactionDetails.recipientPhoneNumber.trim();
+          if (phone.isEmpty) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Recipient phone number is required')),
+            );
+            return;
+          }
 
-      setState(() => _isSubmittingSendMoney = true);
-      try {
-        final paymentService = PaymentService();
-        final phoneE164 = phone.startsWith('+') ? phone : '+$phone';
-        final result = await paymentService.createDirectPayout(
-          amount: amount,
-          currency: _transactionDetails.fromCurrency,
-          phoneNumber: phoneE164,
-          note: _sendMoneyPayoutNote(_transactionDetails),
-          payoutMethod: _sendMoneyPayoutMethodApi(_transactionDetails.paymentMethod),
-          metadata: _sendMoneyPayoutMetadata(_transactionDetails),
-        );
-        if (!mounted) return;
-        setState(() => _isSubmittingSendMoney = false);
-        if (result['success'] != true) {
-          final code = result['code']?.toString();
-          final raw = result['error']?.toString() ?? 'Payout failed';
-          final message = switch (code) {
-            'unauthenticated' => 'Please sign in to send money.',
-            'invalid-argument' => raw,
-            'not-found' => 'Recipient not found. Please check the phone number.',
-            'failed-precondition' =>
-              'Insufficient balance. You don\'t have enough funds to send this amount.',
-            'internal' => 'Something went wrong. Please try again.',
-            _ => raw,
-          };
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(message), backgroundColor: Colors.red.shade700),
-          );
-          return;
-        }
-        final cur = result['currency']?.toString() ?? _transactionDetails.fromCurrency;
-        final amt = result['amount'];
-        final amtStr = amt is num ? amt.toString() : amount.toString();
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Payout submitted: $amtStr $cur'),
-            backgroundColor: Colors.green.shade700,
-          ),
-        );
-        Navigator.of(context).pop();
-      } catch (e) {
-        if (!mounted) return;
-        setState(() => _isSubmittingSendMoney = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Send money failed. Please try again.'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
+          final paymentService = PaymentService();
+          final phoneE164 = phone.startsWith('+') ? phone : '+$phone';
+          try {
+            final result = await paymentService.createDirectPayout(
+              amount: amount,
+              currency: _transactionDetails.fromCurrency,
+              phoneNumber: phoneE164,
+              note: _sendMoneyPayoutNote(_transactionDetails),
+              payoutMethod: _sendMoneyPayoutMethodApi(_transactionDetails.paymentMethod),
+              metadata: _sendMoneyPayoutMetadata(_transactionDetails),
+            );
+            if (!mounted) return;
+            if (result['success'] != true) {
+              final code = result['code']?.toString();
+              final raw = result['error']?.toString() ?? 'Payout failed';
+              final message = switch (code) {
+                'unauthenticated' => 'Please sign in to send money.',
+                'invalid-argument' => raw,
+                'not-found' => 'Recipient not found. Please check the phone number.',
+                'failed-precondition' =>
+                  'Insufficient balance. You don\'t have enough funds to send this amount.',
+                'internal' => 'Something went wrong. Please try again.',
+                _ => raw,
+              };
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text(message), backgroundColor: Colors.red.shade700),
+              );
+              return;
+            }
+            final cur = result['currency']?.toString() ?? _transactionDetails.fromCurrency;
+            final amt = result['amount'];
+            final amtStr = amt is num ? amt.toString() : amount.toString();
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Payout submitted: $amtStr $cur'),
+                backgroundColor: Colors.green.shade700,
+              ),
+            );
+            Navigator.of(context).pop();
+          } catch (_) {
+            if (!mounted) return;
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Send money failed. Please try again.'),
+                backgroundColor: Colors.red,
+              ),
+            );
+          }
+        },
+      );
     }
   }
 

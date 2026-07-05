@@ -10,5 +10,6 @@ class RouteNames {
   static const notifications = '/notifications';
   static const transactions = '/transactions';
   static const walletSettings = '/wallet_settings';
+  static const contactSupport = '/contact_support';
   static const wallet = '/wallet';
 }

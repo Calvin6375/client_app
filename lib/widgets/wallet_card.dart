@@ -592,9 +592,10 @@ class _WalletCardWidgetState extends State<WalletCardWidget> {
   String get _currencySymbol {
     switch (widget.currency.toUpperCase()) {
       case 'USD':
+        return '\$';
       case 'USDT':
       case 'USDC':
-        return '\$';
+        return '${widget.currency.toUpperCase()} ';
       case 'KES':
         return 'KSh ';
       case 'NGN':
@@ -604,7 +605,7 @@ class _WalletCardWidgetState extends State<WalletCardWidget> {
       case 'UGX':
         return 'USh ';
       default:
-        return '${widget.currency} ';
+        return '${widget.currency.toUpperCase()} ';
     }
   }
 
@@ -806,7 +807,7 @@ class _WalletCardWidgetState extends State<WalletCardWidget> {
                             ),
                           ),
                           const Spacer(),
-                          // Bottom row: expiry, CVC, network logo
+                          // Bottom row: expiry, CVC, SafariCard brand
                           Row(
                             crossAxisAlignment: CrossAxisAlignment.end,
                             children: [
@@ -822,7 +823,7 @@ class _WalletCardWidgetState extends State<WalletCardWidget> {
                                 colors: colors,
                               ),
                               const Spacer(),
-                              const _MastercardLogo(),
+                              const _SafariCardBrand(),
                             ],
                           ),
                         ],
@@ -944,43 +945,76 @@ class _CardDetailColumn extends StatelessWidget {
   }
 }
 
-class _MastercardLogo extends StatelessWidget {
-  const _MastercardLogo();
+class _SafariCardBrand extends StatelessWidget {
+  const _SafariCardBrand();
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: 38,
-      height: 24,
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          Positioned(
-            left: 0,
-            top: 2,
-            child: Container(
-              width: 20,
-              height: 20,
-              decoration: const BoxDecoration(
-                color: Color(0xFFEB001B),
-                shape: BoxShape.circle,
+    final primary = Theme.of(context).colorScheme.primary;
+    final colors = AppColors.getThemeColors(context);
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Image.asset(
+          'assets/images/card.png',
+          height: 52,
+          width: 52,
+          fit: BoxFit.contain,
+          errorBuilder: (_, __, ___) => Icon(
+            Icons.credit_card,
+            size: 40,
+            color: primary,
+          ),
+        ),
+        const SizedBox(width: 4),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            RichText(
+              text: TextSpan(
+                style: const TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w700,
+                  height: 1.1,
+                ),
+                children: [
+                  TextSpan(
+                    text: 'Safari',
+                    style: TextStyle(color: colors.textPrimary),
+                  ),
+                  TextSpan(
+                    text: 'Card',
+                    style: TextStyle(color: primary),
+                  ),
+                ],
               ),
             ),
-          ),
-          Positioned(
-            left: 14,
-            top: 2,
-            child: Container(
-              width: 20,
-              height: 20,
-              decoration: const BoxDecoration(
-                color: Color(0xFFF79E1B),
-                shape: BoxShape.circle,
+            const SizedBox(height: 2),
+            RichText(
+              text: TextSpan(
+                style: const TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w500,
+                  height: 1,
+                ),
+                children: [
+                  TextSpan(
+                    text: 'by ',
+                    style: TextStyle(color: colors.textPrimary),
+                  ),
+                  TextSpan(
+                    text: 'truepay',
+                    style: TextStyle(color: primary),
+                  ),
+                ],
               ),
             ),
-          ),
-        ],
-      ),
+          ],
+        ),
+      ],
     );
   }
 }

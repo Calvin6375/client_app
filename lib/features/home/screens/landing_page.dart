@@ -93,7 +93,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final colors = AppColors.getThemeColors(context);
     final primary = Theme.of(context).colorScheme.primary;
     return Scaffold(
-      extendBody: true,
       backgroundColor: colors.background,
       body: Column(
         children: [
@@ -164,7 +163,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 const RecentTransactionsHeader(),
                 const SizedBox(height: 16),
                 PlaceholderTransactions(key: _transactionsKey),
-                SizedBox(height: MediaQuery.of(context).padding.bottom + 96),
+                const SizedBox(height: 24),
               ],
             ),
             ),
@@ -186,73 +185,88 @@ class _DashboardScreenState extends State<DashboardScreen> {
         : Colors.white.withValues(alpha: 0.92);
 
     return SafeArea(
-      minimum: const EdgeInsets.fromLTRB(20, 0, 20, 12),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(36),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
-          child: Container(
-            height: 62,
-            decoration: BoxDecoration(
-              color: barColor,
-              borderRadius: BorderRadius.circular(36),
-              border: Border.all(
-                color: isDark
-                    ? Colors.white.withValues(alpha: 0.08)
-                    : Colors.white.withValues(alpha: 0.6),
+      top: false,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(36),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+            child: Container(
+              height: 62,
+              decoration: BoxDecoration(
+                color: barColor,
+                borderRadius: BorderRadius.circular(36),
+                border: Border.all(
+                  color: isDark
+                      ? Colors.white.withValues(alpha: 0.08)
+                      : Colors.white.withValues(alpha: 0.6),
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: isDark ? 0.35 : 0.1),
+                    blurRadius: 24,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
               ),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: isDark ? 0.35 : 0.1),
-                  blurRadius: 24,
-                  offset: const Offset(0, 8),
-                ),
-              ],
-            ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: _FloatingNavItem(
-                    icon: Icons.account_balance_wallet_outlined,
-                    isSelected: _selectedIndex == 0,
-                    primary: primary,
-                    inactiveColor: colors.textTertiary,
-                    onTap: () {
-                      _onItemTapped(0);
-                      Navigator.of(context).pushNamed(RouteNames.wallet);
-                    },
+              child: Row(
+                children: [
+                  Expanded(
+                    child: _FloatingNavItem(
+                      icon: Icons.account_balance_wallet_outlined,
+                      isSelected: _selectedIndex == 0,
+                      primary: primary,
+                      inactiveColor: colors.textTertiary,
+                      onTap: () {
+                        _onItemTapped(0);
+                        Navigator.of(context).pushNamed(RouteNames.wallet);
+                      },
+                    ),
                   ),
-                ),
-                Expanded(
-                  child: _FloatingNavItem(
-                    faIcon: FontAwesomeIcons.paperPlane,
-                    isSelected: _selectedIndex == 1,
-                    primary: primary,
-                    inactiveColor: colors.textTertiary,
-                    onTap: () {
-                      _onItemTapped(1);
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (context) =>
-                              const SendMoneyPage(initialFromCurrency: 'USD'),
-                        ),
-                      );
-                    },
+                  Expanded(
+                    child: _FloatingNavItem(
+                      faIcon: FontAwesomeIcons.paperPlane,
+                      isSelected: _selectedIndex == 1,
+                      primary: primary,
+                      inactiveColor: colors.textTertiary,
+                      onTap: () {
+                        _onItemTapped(1);
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (context) =>
+                                const SendMoneyPage(initialFromCurrency: 'USD'),
+                          ),
+                        );
+                      },
+                    ),
                   ),
-                ),
-                Expanded(
-                  child: _FloatingNavItem(
-                    icon: Icons.receipt_long_outlined,
-                    isSelected: _selectedIndex == 2,
-                    primary: primary,
-                    inactiveColor: colors.textTertiary,
-                    onTap: () {
-                      _onItemTapped(2);
-                      Navigator.of(context).pushNamed(RouteNames.transactions);
-                    },
+                  Expanded(
+                    child: _FloatingNavItem(
+                      icon: Icons.history_outlined,
+                      isSelected: _selectedIndex == 2,
+                      primary: primary,
+                      inactiveColor: colors.textTertiary,
+                      onTap: () {
+                        _onItemTapped(2);
+                        Navigator.of(context).pushNamed(RouteNames.transactions);
+                      },
+                    ),
                   ),
-                ),
-              ],
+                  Expanded(
+                    child: _FloatingNavItem(
+                      icon: Icons.person_outline,
+                      isSelected: _selectedIndex == 3,
+                      primary: primary,
+                      inactiveColor: colors.textTertiary,
+                      onTap: () {
+                        _onItemTapped(3);
+                        Navigator.of(context).pushNamed(RouteNames.walletSettings);
+                      },
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),

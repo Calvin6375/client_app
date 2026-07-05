@@ -4,6 +4,7 @@ import 'package:pretium/features/auth/widgets/custom_text_field.dart';
 import 'package:pretium/features/auth/widgets/wallet_icon_header.dart';
 import 'package:pretium/services/auth_service.dart';
 import 'package:pretium/utils/logger.dart';
+import 'package:pretium/utils/async_action_guard.dart';
 
 /// Password reset via [AuthService.sendPasswordResetEmail] (Firebase Auth).
 class ForgotPasswordPage extends StatefulWidget {
@@ -47,36 +48,40 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
       return;
     }
 
-    setState(() => _isLoading = true);
-    try {
-      await _authService.sendPasswordResetEmail(email);
-      if (!mounted) return;
-      setState(() => _sentNeutralSuccess = true);
-    } on FirebaseAuthException catch (e) {
-      if (e.code == 'user-not-found') {
-        if (!mounted) return;
-        setState(() => _sentNeutralSuccess = true);
-        return;
-      }
-      final message = AuthService.getPasswordResetErrorMessage(e);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(message)),
-        );
-      }
-    } catch (e, st) {
-      Logger.error('Password reset request failed', e, st);
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Something went wrong. Please check your connection and try again.',
-          ),
-        ),
-      );
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
-    }
+    await runGuardedAsync(
+      this,
+      isSubmitting: () => _isLoading,
+      setSubmitting: (value) => setState(() => _isLoading = value),
+      action: () async {
+        try {
+          await _authService.sendPasswordResetEmail(email);
+          if (!mounted) return;
+          setState(() => _sentNeutralSuccess = true);
+        } on FirebaseAuthException catch (e) {
+          if (e.code == 'user-not-found') {
+            if (!mounted) return;
+            setState(() => _sentNeutralSuccess = true);
+            return;
+          }
+          final message = AuthService.getPasswordResetErrorMessage(e);
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text(message)),
+            );
+          }
+        } catch (e, st) {
+          Logger.error('Password reset request failed', e, st);
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Something went wrong. Please check your connection and try again.',
+              ),
+            ),
+          );
+        }
+      },
+    );
   }
 
   @override

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:pretium/core/constants/app_colors.dart';
 import 'package:pretium/features/crypto/models/crypto_send_result.dart';
 import 'package:pretium/features/crypto/services/crypto_api_service.dart';
+import 'package:pretium/utils/async_action_guard.dart';
 import 'package:uuid/uuid.dart';
 
 class UsdcSendScreen extends StatefulWidget {
@@ -63,6 +64,7 @@ class _UsdcSendScreenState extends State<UsdcSendScreen> {
   }
 
   Future<void> _confirmSend() async {
+    if (_submitting) return;
     if (!_formKey.currentState!.validate()) return;
 
     await _refreshBalance();
@@ -94,40 +96,41 @@ class _UsdcSendScreenState extends State<UsdcSendScreen> {
 
     if (confirmed != true || !mounted) return;
 
-    setState(() => _submitting = true);
-    final idempotencyKey = const Uuid().v4();
+    await runGuardedAsync(
+      this,
+      isSubmitting: () => _submitting,
+      setSubmitting: (value) => setState(() => _submitting = value),
+      action: () async {
+        final idempotencyKey = const Uuid().v4();
 
-    try {
-      final result = await _cryptoApi.sendUsdc(
-        toAddress: _addressCtrl.text.trim(),
-        amount: amount,
-        idempotencyKey: idempotencyKey,
-      );
-      if (!mounted) return;
-      setState(() {
-        _submitting = false;
-        _pendingResult = result;
-      });
-      _showPendingDialog(result);
-    } on CryptoApiException catch (e) {
-      if (!mounted) return;
-      setState(() => _submitting = false);
-      final message = switch (e.statusCode) {
-        429 => 'Too many sends. Please wait a minute and try again.',
-        409 => 'Send already in progress. Please wait.',
-        400 => e.message ?? 'Invalid send request',
-        _ => e.message ?? 'Send failed',
-      };
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(message), backgroundColor: Colors.red.shade700),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _submitting = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Send failed: $e'), backgroundColor: Colors.red.shade700),
-      );
-    }
+        try {
+          final result = await _cryptoApi.sendUsdc(
+            toAddress: _addressCtrl.text.trim(),
+            amount: amount,
+            idempotencyKey: idempotencyKey,
+          );
+          if (!mounted) return;
+          setState(() => _pendingResult = result);
+          _showPendingDialog(result);
+        } on CryptoApiException catch (e) {
+          if (!mounted) return;
+          final message = switch (e.statusCode) {
+            429 => 'Too many sends. Please wait a minute and try again.',
+            409 => 'Send already in progress. Please wait.',
+            400 => e.message ?? 'Invalid send request',
+            _ => e.message ?? 'Send failed',
+          };
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(message), backgroundColor: Colors.red.shade700),
+          );
+        } catch (e) {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Send failed: $e'), backgroundColor: Colors.red.shade700),
+          );
+        }
+      },
+    );
   }
 
   void _showPendingDialog(CryptoSendResult result) {

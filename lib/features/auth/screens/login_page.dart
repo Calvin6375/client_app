@@ -6,8 +6,10 @@ import 'package:pretium/features/auth/widgets/wallet_icon_header.dart';
 import 'package:pretium/features/auth/widgets/welcome_text_section.dart';
 import 'package:pretium/features/auth/utils/post_auth_routing.dart';
 import 'package:pretium/services/auth_service.dart';
+import 'package:pretium/services/biometric_session_service.dart';
 import 'package:pretium/services/notification_service.dart';
 import 'package:pretium/utils/logger.dart';
+import 'package:pretium/utils/async_action_guard.dart';
 import 'package:pretium/core/constants/app_colors.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
@@ -23,8 +25,159 @@ class _LoginScreenState extends State<LoginPage> {
   final TextEditingController _passwordController = TextEditingController();
   bool _rememberMe = false;
   bool _isLoading = false;
+  bool _biometricLoginAvailable = false;
 
   final AuthService _authService = AuthService();
+  final BiometricSessionService _biometricSession =
+      BiometricSessionService.instance;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadBiometricAvailability();
+  }
+
+  Future<void> _loadBiometricAvailability() async {
+    final available = await _biometricSession.canUseBiometricLogin();
+    if (mounted) {
+      setState(() => _biometricLoginAvailable = available);
+    }
+  }
+
+  Future<void> _completeLogin(
+    UserCredential credential, {
+    required String email,
+    required String password,
+  }) async {
+    if (credential.user?.uid != null) {
+      try {
+        await NotificationService().setupNotifications(credential.user!.uid);
+      } catch (e) {
+        Logger.warning('Failed to setup notifications after login: $e');
+      }
+    }
+
+    if (!mounted) return;
+
+    await _biometricSession.maybePromptEnableAfterLogin(
+      context,
+      email: email,
+      password: password,
+    );
+
+    if (!mounted) return;
+    await _loadBiometricAvailability();
+    if (!mounted) return;
+    await completeAuthAndRoute(context);
+  }
+
+  Future<void> _signInWithBiometrics() async {
+    if (!_biometricLoginAvailable || _isLoading) return;
+
+    setState(() => _isLoading = true);
+    try {
+      final verified = await _biometricSession.authenticate(
+        reason: 'Sign in with biometrics',
+      );
+      if (!verified) return;
+
+      final credentials = await _biometricSession.readStoredCredentials();
+      if (credentials == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Biometric login is not set up. Sign in with your password.'),
+            ),
+          );
+        }
+        return;
+      }
+
+      final credential = await _authService.signIn(
+        email: credentials.email,
+        password: credentials.password,
+      );
+
+      if (!mounted) return;
+      await _completeLogin(
+        credential,
+        email: credentials.email,
+        password: credentials.password,
+      );
+    } on FirebaseAuthException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(AuthService.getErrorMessage(e))),
+        );
+      }
+    } catch (e) {
+      Logger.error('Biometric login failed', e);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Biometric sign-in failed. Try your password instead.'),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _signInWithPassword() async {
+    final email = _emailController.text.trim();
+    final password = _passwordController.text;
+    if (email.isEmpty || password.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Enter email and password')),
+      );
+      return;
+    }
+
+    await runGuardedAsync(
+      this,
+      isSubmitting: () => _isLoading,
+      setSubmitting: (value) => setState(() => _isLoading = value),
+      action: () async {
+        try {
+          final credential = await _authService.signIn(
+            email: email,
+            password: password,
+          );
+
+          if (!mounted) return;
+          await _completeLogin(
+            credential,
+            email: email,
+            password: password,
+          );
+        } on FirebaseAuthException catch (e) {
+          final message = AuthService.getErrorMessage(e);
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text(message)),
+            );
+          }
+        } catch (e) {
+          Logger.error('Login failed', e);
+          if (!mounted) return;
+          final String message;
+          if (e is FirebaseAuthException) {
+            message = AuthService.getErrorMessage(e);
+          } else {
+            message =
+                'Unable to sign in. Please check your connection and try again.';
+          }
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(message),
+              duration: const Duration(seconds: 4),
+            ),
+          );
+        }
+      },
+    );
+  }
 
   @override
   void dispose() {
@@ -118,89 +271,56 @@ class _LoginScreenState extends State<LoginPage> {
               ),
               const SizedBox(height: 48),
 
-              // Login button
-              SizedBox(
-                width: double.infinity,
-                height: 52,
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Theme.of(context).colorScheme.primary,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
+              // Login button + biometric shortcut
+              Row(
+                children: [
+                  Expanded(
+                    child: SizedBox(
+                      height: 52,
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Theme.of(context).colorScheme.primary,
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        onPressed: _isLoading ? null : _signInWithPassword,
+                        child: _isLoading
+                            ? const CircularProgressIndicator(color: Colors.white)
+                            : const Text(
+                              'Login',
+                              style: TextStyle(fontSize: 18, color: Colors.white),
+                            ),
+                      ),
                     ),
                   ),
-                  onPressed:
-                      _isLoading
-                          ? null
-                          : () async {
-                            final email = _emailController.text.trim();
-                            final password = _passwordController.text;
-                            if (email.isEmpty || password.isEmpty) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('Enter email and password'),
-                                ),
-                              );
-                              return;
-                            }
-
-                            setState(() => _isLoading = true);
-                            try {
-                              final credential = await _authService.signIn(
-                                email: email,
-                                password: password,
-                              );
-                              
-                              // Setup notifications after successful login
-                              if (credential.user?.uid != null) {
-                                try {
-                                  await NotificationService()
-                                      .setupNotifications(credential.user!.uid);
-                                } catch (e) {
-                                  Logger.warning(
-                                      'Failed to setup notifications after login: $e');
-                                  // Don't block login if notification setup fails
-                                }
-                              }
-                              
-                              if (!mounted) return;
-                              await completeAuthAndRoute(context);
-                            } on FirebaseAuthException catch (e) {
-                              final message = AuthService.getErrorMessage(e);
-                              if (mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(content: Text(message)),
-                                );
-                              }
-                            } catch (e) {
-                              Logger.error('Login failed', e);
-                              if (!mounted) return;
-                              final String message;
-                              if (e is FirebaseAuthException) {
-                                message = AuthService.getErrorMessage(e);
-                              } else {
-                                message =
-                                    'Unable to sign in. Please check your connection and try again.';
-                              }
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text(message),
-                                  duration: const Duration(seconds: 4),
-                                ),
-                              );
-                            } finally {
-                              if (mounted) setState(() => _isLoading = false);
-                            }
-                          },
-                  child:
-                      _isLoading
-                          ? const CircularProgressIndicator(color: Colors.white)
-                          : const Text(
-                            'Login',
-                            style: TextStyle(fontSize: 18, color: Colors.white),
+                  if (_biometricLoginAvailable) ...[
+                    const SizedBox(width: 12),
+                    SizedBox(
+                      height: 52,
+                      width: 52,
+                      child: OutlinedButton(
+                        style: OutlinedButton.styleFrom(
+                          padding: EdgeInsets.zero,
+                          side: BorderSide(
+                            color: Theme.of(context).colorScheme.primary,
+                            width: 1.5,
                           ),
-                ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        onPressed: _isLoading ? null : _signInWithBiometrics,
+                        child: Icon(
+                          Icons.fingerprint,
+                          size: 28,
+                          color: Theme.of(context).colorScheme.primary,
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
               ),
               const SizedBox(height: 24),
 

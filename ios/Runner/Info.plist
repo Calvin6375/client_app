@@ -49,5 +49,13 @@
 	<string>Save transaction receipts to your photo library.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Save transaction receipts to your photo library.</string>
+	<key>NSFaceIDUsageDescription</key>
+	<string>Authenticate with Face ID to sign in quickly and securely.</string>
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<string>whatsapp</string>
+		<string>tel</string>
+		<string>mailto</string>
+	</array>
 </dict>
 </plist>

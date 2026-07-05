@@ -8,6 +8,8 @@ import 'package:pretium/core/theme/theme_provider.dart';
 import 'package:pretium/repositories/user_repository.dart';
 import 'package:pretium/repositories/wallet_repository.dart';
 import 'package:pretium/services/auth_service.dart';
+import 'package:pretium/services/biometric_session_service.dart';
+import 'package:pretium/utils/async_action_guard.dart';
 import 'package:pretium/app/route_names.dart';
 
 class WalletSettingsPage extends StatefulWidget {
@@ -21,8 +23,12 @@ class _WalletSettingsPageState extends State<WalletSettingsPage> {
   final UserRepository _userRepository = UserRepository();
   final WalletRepository _walletRepository = WalletRepository();
   final AuthService _authService = AuthService();
+  final BiometricSessionService _biometricSession =
+      BiometricSessionService.instance;
+  final _biometricToggleGuard = AsyncActionGuard();
+  final _signOutGuard = AsyncActionGuard();
 
-  bool _biometricEnabled = true;
+  bool _biometricEnabled = false;
   bool _pushNotificationsEnabled = true;
   String _balance = '0.00';
   String _userName = '';
@@ -44,11 +50,13 @@ class _WalletSettingsPageState extends State<WalletSettingsPage> {
     try {
       final profile = await _userRepository.getUserProfile(user.uid);
       final wallet = await _walletRepository.getWalletBalance(user.uid);
+      final biometricEnabled = await _biometricSession.isBiometricLoginEnabled();
       if (mounted) {
         setState(() {
           _userName = profile?.fullName ?? 'User';
           _userEmail = profile?.email ?? user.email ?? '';
           _balance = wallet?.balance.toStringAsFixed(2) ?? '0.00';
+          _biometricEnabled = biometricEnabled;
           _loading = false;
         });
       }
@@ -57,33 +65,97 @@ class _WalletSettingsPageState extends State<WalletSettingsPage> {
     }
   }
 
-  Future<void> _signOut() async {
-    final confirm = await showDialog<bool>(
+  Future<void> _toggleBiometric(bool enabled) async {
+    await _biometricToggleGuard.run(() async {
+      if (!enabled) {
+        await _biometricSession.disableBiometricLogin();
+        if (mounted) setState(() => _biometricEnabled = false);
+        return;
+      }
+
+      if (!await _biometricSession.isDeviceSupported()) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Biometrics are not available on this device.')),
+        );
+        return;
+      }
+
+      final password = await _promptForPassword();
+      if (password == null || password.isEmpty) return;
+
+      final verified = await _biometricSession.authenticate(
+        reason: 'Verify your identity to enable biometric login',
+      );
+      if (!verified) return;
+
+      await _biometricSession.enableBiometricLogin(
+        email: _userEmail,
+        password: password,
+      );
+      if (mounted) setState(() => _biometricEnabled = true);
+    });
+  }
+
+  Future<String?> _promptForPassword() async {
+    final controller = TextEditingController();
+    final result = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Sign Out'),
-        content: const Text('Are you sure you want to sign out?'),
+        title: const Text('Confirm password'),
+        content: TextField(
+          controller: controller,
+          obscureText: true,
+          decoration: const InputDecoration(
+            labelText: 'Password',
+            hintText: 'Enter your account password',
+          ),
+        ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
+            onPressed: () => Navigator.of(ctx).pop(),
             child: const Text('Cancel'),
           ),
           FilledButton(
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('Sign Out'),
+            onPressed: () => Navigator.of(ctx).pop(controller.text),
+            child: const Text('Confirm'),
           ),
         ],
       ),
     );
-    if (confirm == true) {
-      await _authService.signOut();
-      if (mounted) {
-        Navigator.of(context).pushNamedAndRemoveUntil(
-          RouteNames.login,
-          (route) => false,
-        );
+    controller.dispose();
+    return result;
+  }
+
+  Future<void> _signOut() async {
+    await _signOutGuard.run(() async {
+      final confirm = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Sign Out'),
+          content: const Text('Are you sure you want to sign out?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: const Text('Sign Out'),
+            ),
+          ],
+        ),
+      );
+      if (confirm == true) {
+        await _authService.signOut();
+        if (mounted) {
+          Navigator.of(context).pushNamedAndRemoveUntil(
+            RouteNames.login,
+            (route) => false,
+          );
+        }
       }
-    }
+    });
   }
 
   @override
@@ -112,7 +184,8 @@ class _WalletSettingsPageState extends State<WalletSettingsPage> {
         actions: [
           IconButton(
             icon: const Icon(Icons.help_outline),
-            onPressed: () {},
+            onPressed: () =>
+                Navigator.of(context).pushNamed(RouteNames.contactSupport),
             color: colors.textPrimary,
           ),
         ],
@@ -263,7 +336,7 @@ class _WalletSettingsPageState extends State<WalletSettingsPage> {
                     title: 'Biometric Authentication',
                     trailing: Switch(
                       value: _biometricEnabled,
-                      onChanged: (v) => setState(() => _biometricEnabled = v),
+                      onChanged: _toggleBiometric,
                       activeColor: primary,
                     ),
                   ),

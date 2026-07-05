@@ -13,6 +13,7 @@ import 'package:pretium/repositories/wallet_repository.dart';
 import 'package:pretium/repositories/user_repository.dart';
 import 'package:pretium/services/payment_service.dart';
 import 'package:pretium/utils/firebase_utils.dart';
+import 'package:pretium/utils/async_action_guard.dart';
 import 'package:pretium/core/constants/app_colors.dart';
 import 'package:pretium/features/topup/models/topup_deposit_country.dart';
 import 'package:pretium/features/topup/screens/direct_fiat_deposit_flow.dart';
@@ -61,6 +62,7 @@ class _TopUpPageState extends State<TopUpPage> {
   String _selectedCurrency = 'USD';
   bool _isProcessingPayment = false;
   bool _isLoadingBalance = false;
+  final _paymentConfirmGuard = AsyncActionGuard();
 
   // IntaSend configuration — used only by "fiat topup" (intasend_service.dart).
   static const String intaSendPublicKey ='ISPubKey_live_c2dbd636-a9a5-4a90-bdb8-dc7e7c7401a2';
@@ -249,6 +251,8 @@ class _TopUpPageState extends State<TopUpPage> {
     print('  Email: ${_emailCtrl.text.trim()}');
     print('  Name: ${_firstNameCtrl.text.trim()} ${_lastNameCtrl.text.trim()}');
 
+    if (_isProcessingPayment) return;
+
     setState(() {
       _isProcessingPayment = true;
     });
@@ -351,6 +355,8 @@ class _TopUpPageState extends State<TopUpPage> {
       _showError('TransFi is not configured. Please set TransFi keys and payment link ID.');
       return;
     }
+
+    if (_isProcessingPayment) return;
 
     setState(() {
       _isProcessingPayment = true;
@@ -641,23 +647,23 @@ class _TopUpPageState extends State<TopUpPage> {
               foregroundColor: Colors.white,
             ),
             onPressed: () async {
-              Navigator.of(context).pop();
-              
-              // Mark payment as completed in Firebase
-              print('✅ User confirmed payment completion');
-              final paymentService = PaymentService();
-              await paymentService.handlePaymentWebhook(
-                paymentId: paymentId,
-                status: 'completed',
-                transactionId: 'user_confirmed_${DateTime.now().millisecondsSinceEpoch}',
-                webhookData: {
-                  'completion_method': 'user_confirmation',
-                  'confirmed_at': DateTime.now().toIso8601String(),
-                },
-              );
-              
-              // Show success dialog
-              _showSuccess();
+              await _paymentConfirmGuard.run(() async {
+                Navigator.of(context).pop();
+
+                print('✅ User confirmed payment completion');
+                final paymentService = PaymentService();
+                await paymentService.handlePaymentWebhook(
+                  paymentId: paymentId,
+                  status: 'completed',
+                  transactionId: 'user_confirmed_${DateTime.now().millisecondsSinceEpoch}',
+                  webhookData: {
+                    'completion_method': 'user_confirmation',
+                    'confirmed_at': DateTime.now().toIso8601String(),
+                  },
+                );
+
+                _showSuccess();
+              });
             },
             child: const Text('Payment Completed'),
           ),

@@ -17,6 +17,7 @@ import 'package:pretium/features/wallet_verification/screens/wallet_verification
 import 'package:pretium/features/notifications/screens/notifications_page.dart';
 import 'package:pretium/features/transactions/screens/transactions_page.dart';
 import 'package:pretium/features/wallet_settings/screens/wallet_settings_page.dart';
+import 'package:pretium/features/wallet_settings/screens/contact_support_page.dart';
 import 'package:pretium/features/wallet/screens/wallet_page.dart';
 import 'package:pretium/services/notification_service.dart';
 import 'package:provider/provider.dart';
@@ -260,6 +261,7 @@ class _MyAppState extends State<MyApp> {
               RouteNames.notifications: (context) => const NotificationsPage(),
               RouteNames.transactions: (context) => const TransactionsPage(),
               RouteNames.walletSettings: (context) => const WalletSettingsPage(),
+              RouteNames.contactSupport: (context) => const ContactSupportPage(),
               RouteNames.wallet: (context) => const WalletPage(),
             },
           );

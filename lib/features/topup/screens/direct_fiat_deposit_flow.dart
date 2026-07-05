@@ -9,6 +9,7 @@ import 'package:pretium/features/topup/models/topup_deposit_country.dart';
 import 'package:pretium/features/topup/utils/receipt_image_export.dart';
 import 'package:pretium/features/topup/utils/receipt_save_helper.dart';
 import 'package:pretium/services/payment_service.dart';
+import 'package:pretium/utils/async_action_guard.dart';
 
 /// Direct fiat deposit (top-up) or [DirectFiatFlowKind.withdraw] (Kenya KES payout wizard).
 enum DirectFiatFlowKind { deposit, withdraw }
@@ -596,60 +597,60 @@ class _DirectFiatDepositScreenState extends State<DirectFiatDepositScreen> {
   }
 
   Future<void> _submitReview() async {
-    if (_submittingDirectTopup) return;
-    setState(() => _submittingDirectTopup = true);
+    await runGuardedAsync(
+      this,
+      isSubmitting: () => _submittingDirectTopup,
+      setSubmitting: (value) => setState(() => _submittingDirectTopup = value),
+      action: () async {
+        final paymentService = PaymentService();
+        final Map<String, dynamic> result;
+        if (_isWithdraw) {
+          result = await paymentService.createDirectPayout(
+            amount: _amountParsed,
+            currency: _country?.code ?? 'KES',
+            phoneNumber: _phoneE164ForDirectTopup(),
+            note: _noteForDirectTopup(),
+            payoutMethod: _payoutMethodApiValue(),
+            metadata: _metadataForDirectPayout(),
+          );
+        } else {
+          result = await paymentService.createDirectTopup(
+            amount: _amountParsed,
+            currency: _country?.code,
+            phoneNumber: _phoneE164ForDirectTopup(),
+            note: _noteForDirectTopup(),
+            metadata: _metadataForDirectTopup(),
+            processingFee: _feeAmount,
+            totalDue: _total,
+          );
+        }
 
-    final paymentService = PaymentService();
-    final Map<String, dynamic> result;
-    if (_isWithdraw) {
-      result = await paymentService.createDirectPayout(
-        amount: _amountParsed,
-        currency: _country?.code ?? 'KES',
-        phoneNumber: _phoneE164ForDirectTopup(),
-        note: _noteForDirectTopup(),
-        payoutMethod: _payoutMethodApiValue(),
-        metadata: _metadataForDirectPayout(),
-      );
-    } else {
-      result = await paymentService.createDirectTopup(
-        amount: _amountParsed,
-        currency: _country?.code,
-        phoneNumber: _phoneE164ForDirectTopup(),
-        note: _noteForDirectTopup(),
-        metadata: _metadataForDirectTopup(),
-        processingFee: _feeAmount,
-        totalDue: _total,
-      );
-    }
+        if (!mounted) return;
 
-    if (!mounted) return;
+        if (result['success'] != true) {
+          _snack(
+            result['error']?.toString() ??
+                (_isWithdraw ? 'Could not create withdrawal order' : 'Could not create deposit order'),
+          );
+          return;
+        }
 
-    if (result['success'] != true) {
-      setState(() => _submittingDirectTopup = false);
-      _snack(
-        result['error']?.toString() ??
-            (_isWithdraw ? 'Could not create withdrawal order' : 'Could not create deposit order'),
-      );
-      return;
-    }
+        final ref = result['referenceId']?.toString();
+        final order = result['orderId']?.toString();
+        _receiptId = (ref != null && ref.isNotEmpty)
+            ? ref
+            : (order != null && order.isNotEmpty)
+                ? order
+                : '—';
 
-    final ref = result['referenceId']?.toString();
-    final order = result['orderId']?.toString();
-    _receiptId = (ref != null && ref.isNotEmpty)
-        ? ref
-        : (order != null && order.isNotEmpty)
-            ? order
-            : '—';
+        final createdStr = result['createdAt']?.toString();
+        _receiptTime = createdStr != null ? (DateTime.tryParse(createdStr) ?? DateTime.now()) : DateTime.now();
 
-    final createdStr = result['createdAt']?.toString();
-    _receiptTime = createdStr != null ? (DateTime.tryParse(createdStr) ?? DateTime.now()) : DateTime.now();
+        _applyMaskedAccountForReceipt();
 
-    _applyMaskedAccountForReceipt();
-
-    setState(() {
-      _submittingDirectTopup = false;
-      _showReceipt = true;
-    });
+        setState(() => _showReceipt = true);
+      },
+    );
   }
 
   String _phoneDisplayLine() {

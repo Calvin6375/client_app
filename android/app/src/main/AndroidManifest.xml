@@ -2,6 +2,7 @@
     package="com.example.pretium_mock">
     <!-- Internet permission for Firebase -->
     <uses-permission android:name="android.permission.INTERNET"/>
+    <uses-permission android:name="android.permission.USE_BIOMETRIC"/>
     <!-- Firebase Cloud Messaging -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <!-- Save receipt images to gallery (gal) -->
@@ -68,6 +69,18 @@
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.DIAL"/>
+            <data android:scheme="tel"/>
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.SENDTO"/>
+            <data android:scheme="mailto"/>
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+            <data android:scheme="https"/>
         </intent>
     </queries>
 </manifest>

@@ -4,6 +4,7 @@ import 'package:pretium/services/auth_service.dart';
 import 'package:pretium/services/notification_service.dart';
 import 'package:pretium/repositories/user_repository.dart';
 import 'package:pretium/utils/logger.dart';
+import 'package:pretium/utils/async_action_guard.dart';
 import 'package:pretium/core/constants/app_colors.dart';
 import '../widgets/custom_text_field.dart';
 import '../widgets/nationality_field.dart';
@@ -143,10 +144,14 @@ class _RegisterPageState extends State<RegisterPage> {
       return;
     }
 
-    setState(() => _isSubmitting = true);
-    try {
-      // Log complete registration request (matches API body except password is omitted)
-      final registrationRequest = {
+    await runGuardedAsync(
+      this,
+      isSubmitting: () => _isSubmitting,
+      setSubmitting: (value) => setState(() => _isSubmitting = value),
+      action: () async {
+        try {
+          // Log complete registration request (matches API body except password is omitted)
+          final registrationRequest = {
         'firstName': firstName,
         'lastName': lastName,
         'email': email,
@@ -230,30 +235,30 @@ class _RegisterPageState extends State<RegisterPage> {
       // 5) Route by userType claim (customer stays in app; partner/admin → web dashboard)
       if (!mounted) return;
       await completeAuthAndRoute(context);
-    } on RegistrationApiException catch (e) {
-      Logger.error('Backend registration failed', e);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.message)),
-        );
-      }
-    } on FirebaseAuthException catch (e) {
-      final message = AuthService.getErrorMessage(e);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(message)),
-        );
-      }
-    } catch (e) {
-      Logger.error('Registration failed', e);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Registration failed: ${e.toString()}')),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _isSubmitting = false);
-    }
+        } on RegistrationApiException catch (e) {
+          Logger.error('Backend registration failed', e);
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text(e.message)),
+            );
+          }
+        } on FirebaseAuthException catch (e) {
+          final message = AuthService.getErrorMessage(e);
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text(message)),
+            );
+          }
+        } catch (e) {
+          Logger.error('Registration failed', e);
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Registration failed: ${e.toString()}')),
+            );
+          }
+        }
+      },
+    );
   }
 
   @override

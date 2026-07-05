@@ -89,4 +89,29 @@ class NotificationModel {
   String toString() {
     return 'NotificationModel(id: $id, type: $type, title: $title, read: $read)';
   }
+
+  /// Whether this notification is a promotional/marketing message.
+  bool get isPromotion {
+    final category = metadata['category']?.toString().toLowerCase();
+    if (category == 'promotion' ||
+        category == 'promo' ||
+        category == 'marketing') {
+      return true;
+    }
+
+    final normalizedType = type.toLowerCase();
+    const promoTypes = {
+      'promotion',
+      'promo',
+      'marketing',
+      'offer',
+      'campaign',
+      'reward',
+      'bonus',
+      'deal',
+    };
+    return promoTypes.contains(normalizedType);
+  }
+
+  bool get isSystem => !isPromotion;
 }

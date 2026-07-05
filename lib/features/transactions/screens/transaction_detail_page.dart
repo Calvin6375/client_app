@@ -6,6 +6,7 @@ import 'package:pretium/core/constants/app_colors.dart';
 import 'package:pretium/features/topup/utils/receipt_image_export.dart';
 import 'package:pretium/features/topup/utils/receipt_save_helper.dart';
 import 'package:pretium/models/transaction_model.dart';
+import 'package:pretium/utils/async_action_guard.dart';
 
 class TransactionDetailPage extends StatefulWidget {
   final Transaction transaction;
@@ -296,43 +297,46 @@ class _TransactionDetailPageState extends State<TransactionDetailPage> {
   }
 
   Future<void> _downloadReceipt() async {
-    if (_savingReceipt) return;
-    setState(() => _savingReceipt = true);
-    try {
-      await Future<void>.delayed(Duration.zero);
-      await WidgetsBinding.instance.endOfFrame;
-      final raw = await ReceiptImageExport.captureRepaintBoundaryPng(_receiptCardKey);
-      if (raw == null || raw.isEmpty) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Could not capture receipt. Try again.')),
-          );
-        }
-        return;
-      }
-      final logoBytes = await rootBundle.load('assets/images/troupay_logo.png');
-      final out = ReceiptImageExport.applyTroupayWatermark(
-        receiptPng: raw,
-        logoPng: logoBytes.buffer.asUint8List(),
-      );
-      final stamp = DateTime.now().millisecondsSinceEpoch;
-      await saveReceiptPngToGalleryOrShare(
-        pngBytes: out,
-        fileBaseName: 'troupay_tx_${_t.id}_$stamp',
-        onMessage: (m) {
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m)));
+    await runGuardedAsync(
+      this,
+      isSubmitting: () => _savingReceipt,
+      setSubmitting: (value) => setState(() => _savingReceipt = value),
+      action: () async {
+        try {
+          await Future<void>.delayed(Duration.zero);
+          await WidgetsBinding.instance.endOfFrame;
+          final raw = await ReceiptImageExport.captureRepaintBoundaryPng(_receiptCardKey);
+          if (raw == null || raw.isEmpty) {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Could not capture receipt. Try again.')),
+              );
+            }
+            return;
           }
-        },
-      );
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not save receipt: $e')),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _savingReceipt = false);
-    }
+          final logoBytes = await rootBundle.load('assets/images/troupay_logo.png');
+          final out = ReceiptImageExport.applyTroupayWatermark(
+            receiptPng: raw,
+            logoPng: logoBytes.buffer.asUint8List(),
+          );
+          final stamp = DateTime.now().millisecondsSinceEpoch;
+          await saveReceiptPngToGalleryOrShare(
+            pngBytes: out,
+            fileBaseName: 'troupay_tx_${_t.id}_$stamp',
+            onMessage: (m) {
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m)));
+              }
+            },
+          );
+        } catch (e) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Could not save receipt: $e')),
+            );
+          }
+        }
+      },
+    );
   }
 }
