@@ -20,12 +20,14 @@ class LoginPage extends StatefulWidget {
   State<LoginPage> createState() => _LoginScreenState();
 }
 
-class _LoginScreenState extends State<LoginPage> {
+class _LoginScreenState extends State<LoginPage> with WidgetsBindingObserver {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   bool _rememberMe = false;
   bool _isLoading = false;
   bool _biometricLoginAvailable = false;
+  bool _biometricDeviceSupported = false;
+  IconData _biometricIcon = Icons.fingerprint;
 
   final AuthService _authService = AuthService();
   final BiometricSessionService _biometricSession =
@@ -34,14 +36,52 @@ class _LoginScreenState extends State<LoginPage> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _loadBiometricAvailability();
   }
 
-  Future<void> _loadBiometricAvailability() async {
-    final available = await _biometricSession.canUseBiometricLogin();
-    if (mounted) {
-      setState(() => _biometricLoginAvailable = available);
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _emailController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _loadBiometricAvailability();
     }
+  }
+
+  Future<void> _loadBiometricAvailability() async {
+    final deviceSupported = await _biometricSession.isDeviceSupported();
+    final available = await _biometricSession.canUseBiometricLogin();
+    final icon = await _biometricSession.preferredBiometricIcon();
+    if (mounted) {
+      setState(() {
+        _biometricDeviceSupported = deviceSupported;
+        _biometricLoginAvailable = available;
+        _biometricIcon = icon;
+      });
+    }
+  }
+
+  void _onBiometricButtonPressed() {
+    if (_isLoading) return;
+    if (_biometricLoginAvailable) {
+      _signInWithBiometrics();
+      return;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+          'Biometric login is not set up yet. Sign in with your password, '
+          'then enable it in Wallet Settings.',
+        ),
+      ),
+    );
   }
 
   Future<void> _completeLogin(
@@ -180,13 +220,6 @@ class _LoginScreenState extends State<LoginPage> {
   }
 
   @override
-  void dispose() {
-    _emailController.dispose();
-    _passwordController.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
     return Scaffold(
       body: SafeArea(
@@ -287,15 +320,22 @@ class _LoginScreenState extends State<LoginPage> {
                         ),
                         onPressed: _isLoading ? null : _signInWithPassword,
                         child: _isLoading
-                            ? const CircularProgressIndicator(color: Colors.white)
+                            ? const SizedBox(
+                                height: 22,
+                                width: 22,
+                                child: CircularProgressIndicator(
+                                  color: Colors.white,
+                                  strokeWidth: 2,
+                                ),
+                              )
                             : const Text(
-                              'Login',
-                              style: TextStyle(fontSize: 18, color: Colors.white),
-                            ),
+                                'Login',
+                                style: TextStyle(fontSize: 18, color: Colors.white),
+                              ),
                       ),
                     ),
                   ),
-                  if (_biometricLoginAvailable) ...[
+                  if (_biometricDeviceSupported) ...[
                     const SizedBox(width: 12),
                     SizedBox(
                       height: 52,
@@ -304,18 +344,22 @@ class _LoginScreenState extends State<LoginPage> {
                         style: OutlinedButton.styleFrom(
                           padding: EdgeInsets.zero,
                           side: BorderSide(
-                            color: Theme.of(context).colorScheme.primary,
+                            color: _biometricLoginAvailable
+                                ? Theme.of(context).colorScheme.primary
+                                : AppColors.getThemeColors(context).textTertiary,
                             width: 1.5,
                           ),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12),
                           ),
                         ),
-                        onPressed: _isLoading ? null : _signInWithBiometrics,
+                        onPressed: _isLoading ? null : _onBiometricButtonPressed,
                         child: Icon(
-                          Icons.fingerprint,
+                          _biometricIcon,
                           size: 28,
-                          color: Theme.of(context).colorScheme.primary,
+                          color: _biometricLoginAvailable
+                              ? Theme.of(context).colorScheme.primary
+                              : AppColors.getThemeColors(context).textTertiary,
                         ),
                       ),
                     ),

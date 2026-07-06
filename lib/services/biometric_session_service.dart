@@ -36,6 +36,7 @@ class BiometricSessionService {
   }
 
   Future<bool> canUseBiometricLogin() async {
+    if (!await isDeviceSupported()) return false;
     if (!await isBiometricLoginEnabled()) return false;
     final email = await _storage.read(key: _keyEmail);
     final password = await _storage.read(key: _keyPassword);
@@ -43,6 +44,21 @@ class BiometricSessionService {
         email.isNotEmpty &&
         password != null &&
         password.isNotEmpty;
+  }
+
+  /// Face ID on iOS when available; fingerprint otherwise.
+  Future<IconData> preferredBiometricIcon() async {
+    try {
+      final types = await _localAuth.getAvailableBiometrics();
+      if (types.contains(BiometricType.face)) {
+        return Icons.face_rounded;
+      }
+      if (types.contains(BiometricType.strong) ||
+          types.contains(BiometricType.weak)) {
+        return Icons.fingerprint;
+      }
+    } catch (_) {}
+    return Icons.fingerprint;
   }
 
   Future<bool> authenticate({

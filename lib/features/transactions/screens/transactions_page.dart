@@ -7,6 +7,7 @@ import 'package:pretium/core/constants/app_colors.dart';
 import 'package:pretium/models/transaction_model.dart';
 import 'package:pretium/services/transactions_service.dart';
 import 'package:pretium/features/transactions/screens/transaction_detail_page.dart';
+import 'package:pretium/features/transactions/widgets/transaction_charts.dart';
 import 'package:pretium/app/route_names.dart';
 
 class TransactionsPage extends StatefulWidget {
@@ -19,6 +20,7 @@ class TransactionsPage extends StatefulWidget {
 class _TransactionsPageState extends State<TransactionsPage> {
   final TransactionsService _transactionsService = TransactionsService();
   TransactionsResponse? _response;
+  List<Transaction> _chartTransactions = const [];
   bool _isLoading = true;
   String? _error;
   String _filter = 'all'; // 'all' | 'income' | 'expenses' | 'pending'
@@ -43,6 +45,7 @@ class _TransactionsPageState extends State<TransactionsPage> {
       _error = null;
     });
     try {
+      final chartRes = await _transactionsService.getTransactions(limit: 50);
       TransactionsResponse res;
       switch (_filter) {
         case 'income':
@@ -59,6 +62,7 @@ class _TransactionsPageState extends State<TransactionsPage> {
       }
       if (mounted) {
         setState(() {
+          _chartTransactions = chartRes.transactions;
           _response = res;
           _isLoading = false;
         });
@@ -181,10 +185,10 @@ class _TransactionsPageState extends State<TransactionsPage> {
         color: primary,
         child: CustomScrollView(
           slivers: [
-            // Spending Overview
+            // Charts overview (always from full transaction set)
             SliverToBoxAdapter(
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
+                padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -209,7 +213,44 @@ class _TransactionsPageState extends State<TransactionsPage> {
                       ],
                     ),
                     const SizedBox(height: 16),
-                    _SpendingChart(transactions: _response?.transactions ?? []),
+                    TransactionWeeklyBarChart(transactions: _chartTransactions),
+                    const SizedBox(height: 24),
+                    Text(
+                      'Income vs Expenses',
+                      style: TextStyle(
+                        color: colors.textPrimary,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 16,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TransactionIncomeExpenseChart(
+                      transactions: _chartTransactions,
+                    ),
+                    const SizedBox(height: 24),
+                    Text(
+                      'Volume by currency',
+                      style: TextStyle(
+                        color: colors.textPrimary,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 16,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TransactionCurrencyChart(transactions: _chartTransactions),
+                    const SizedBox(height: 24),
+                    Text(
+                      'By status',
+                      style: TextStyle(
+                        color: colors.textPrimary,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 16,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TransactionStatusDonutChart(
+                      transactions: _chartTransactions,
+                    ),
                   ],
                 ),
               ),
@@ -319,68 +360,6 @@ class _TransactionsPageState extends State<TransactionsPage> {
               )
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _SpendingChart extends StatelessWidget {
-  final List<Transaction> transactions;
-
-  const _SpendingChart({required this.transactions});
-
-  @override
-  Widget build(BuildContext context) {
-    final primary = Theme.of(context).colorScheme.primary;
-    final colors = AppColors.getThemeColors(context);
-    final days = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
-    final now = DateTime.now();
-    final amounts = List<double>.filled(7, 0);
-    for (var i = 0; i < 7; i++) {
-      final d = now.subtract(Duration(days: 6 - i));
-      final dayStart = DateTime(d.year, d.month, d.day);
-      final dayEnd = dayStart.add(const Duration(days: 1));
-      for (final t in transactions) {
-        if (t.createdAt != null && t.isDebit) {
-          if (!t.createdAt!.isBefore(dayStart) && t.createdAt!.isBefore(dayEnd)) {
-            amounts[i] += t.amount;
-          }
-        }
-      }
-    }
-    final maxVal = amounts.reduce((a, b) => a > b ? a : b);
-    final maxHeight = 80.0;
-
-    return Container(
-      height: 100,
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: List.generate(7, (i) {
-          final h = maxVal > 0 ? (amounts[i] / maxVal) * maxHeight : 0.0;
-          return Column(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              Container(
-                width: 24,
-                height: h.clamp(4.0, maxHeight),
-                decoration: BoxDecoration(
-                  color: primary.withOpacity(0.8),
-                  borderRadius: BorderRadius.circular(4),
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                days[i],
-                style: TextStyle(
-                  fontSize: 12,
-                  color: colors.textSecondary,
-                ),
-              ),
-            ],
-          );
-        }),
       ),
     );
   }

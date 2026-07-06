@@ -1,5 +1,5 @@
 /// Supported fiat top-up / direct-deposit countries.
-/// Kept in one place so [SelectCountryTopUpScreen] and [DirectFiatDepositScreen] stay aligned.
+/// Kept in one place so deposit/withdraw flows stay aligned.
 ///
 /// The backend `/api/countries` may return ISO 3166-1 alpha-2 codes and/or
 /// ISO 4217 currency codes; [fromIsoAlpha2] and [forDepositCode] map them.
@@ -95,6 +95,23 @@ class TopupDepositCountry {
     flagEmoji: '🇨🇩',
   );
 
+  static const TopupDepositCountry euro = TopupDepositCountry(
+    name: 'Eurozone',
+    currencyName: 'Euro',
+    code: 'EUR',
+    flagEmoji: '🇪🇺',
+  );
+
+  static const TopupDepositCountry unitedKingdom = TopupDepositCountry(
+    name: 'United Kingdom',
+    currencyName: 'British Pound',
+    code: 'GBP',
+    flagEmoji: '🇬🇧',
+  );
+
+  /// Flag emoji for a currency code (used in top-up currency picker).
+  static String flagEmojiForCode(String code) => resolve(code).flagEmoji;
+
   /// Countries available for direct fiat deposit (top-up) when chosen from the in-flow wizard.
   static const List<TopupDepositCountry> depositSupported =
       <TopupDepositCountry>[
@@ -161,6 +178,8 @@ class TopupDepositCountry {
   /// Unknown codes get a generic fallback so the backend list is never dropped.
   static TopupDepositCountry resolve(String code) {
     final trimmed = code.trim().toUpperCase();
+    if (trimmed == 'EUR') return euro;
+    if (trimmed == 'GBP') return unitedKingdom;
     return fromIsoAlpha2(trimmed) ??
         forDepositCode(trimmed) ??
         TopupDepositCountry(

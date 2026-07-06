@@ -1,5 +1,6 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:pretium/core/constants/app_colors.dart';
 import 'package:pretium/models/notification_model.dart';
 import 'package:pretium/services/notification_service.dart';
@@ -8,6 +9,44 @@ import 'package:url_launcher/url_launcher.dart';
 
 final _markAllAsReadGuard = AsyncActionGuard();
 
+IconData _notificationIconFor(NotificationModel notification) {
+  if (notification.isPromotion) return Icons.local_offer_rounded;
+  if (notification.isSystem) return Icons.info_outline_rounded;
+
+  final type = notification.type.toLowerCase();
+  switch (type) {
+    case 'transaction':
+    case 'payment':
+    case 'payment_completed':
+    case 'payment_failed':
+      return Icons.payment_rounded;
+    case 'transfer':
+      return Icons.swap_horiz_rounded;
+    case 'topup':
+    case 'top_up':
+    case 'top-up':
+    case 'deposit':
+    case 'direct_topup':
+    case 'direct_top_up':
+      return Icons.add_circle_outline_rounded;
+    case 'wallet_funded':
+    case 'wallet_credited':
+    case 'funding':
+    case 'funding_success':
+      return Icons.account_balance_wallet_outlined;
+    case 'funding_failed':
+    case 'transaction_failed':
+      return Icons.error_outline_rounded;
+    case 'payout':
+    case 'withdraw':
+    case 'withdrawal':
+      return Icons.outbound_rounded;
+    default:
+      if (notification.isTransaction) return Icons.receipt_long_outlined;
+      return Icons.notifications_rounded;
+  }
+}
+
 class NotificationsPage extends StatefulWidget {
   const NotificationsPage({super.key});
 
@@ -15,14 +54,20 @@ class NotificationsPage extends StatefulWidget {
   State<NotificationsPage> createState() => _NotificationsPageState();
 }
 
+enum _NotificationFilterTab { transaction, system, promotions }
+
 class _NotificationsPageState extends State<NotificationsPage> {
-  int _selectedTab = 0;
+  _NotificationFilterTab _selectedTab = _NotificationFilterTab.transaction;
 
   List<NotificationModel> _filterNotifications(List<NotificationModel> notifications) {
-    if (_selectedTab == 0) {
-      return notifications.where((n) => n.isSystem).toList();
+    switch (_selectedTab) {
+      case _NotificationFilterTab.transaction:
+        return notifications.where((n) => n.isTransaction).toList();
+      case _NotificationFilterTab.system:
+        return notifications.where((n) => n.isSystem).toList();
+      case _NotificationFilterTab.promotions:
+        return notifications.where((n) => n.isPromotion).toList();
     }
-    return notifications.where((n) => n.isPromotion).toList();
   }
 
   @override
@@ -87,8 +132,8 @@ class _NotificationsPageState extends State<NotificationsPage> {
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
                 child: _NotificationTabBar(
-                  selectedIndex: _selectedTab,
-                  onChanged: (index) => setState(() => _selectedTab = index),
+                  selectedTab: _selectedTab,
+                  onChanged: (tab) => setState(() => _selectedTab = tab),
                 ),
               ),
               Expanded(
@@ -142,7 +187,7 @@ class _NotificationsPageState extends State<NotificationsPage> {
       return _EmptyNotifications(
         colors: colors,
         primary: primary,
-        isPromotionsTab: _selectedTab == 1,
+        tab: _selectedTab,
       );
     }
     return ListView.separated(
@@ -275,7 +320,7 @@ class _NotificationDetailSheet extends StatelessWidget {
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Icon(
-                          _iconForType(notification.type),
+                          _notificationIconFor(notification),
                           color: primary,
                           size: 24,
                         ),
@@ -344,7 +389,11 @@ class _NotificationDetailSheet extends StatelessWidget {
                       ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: _metadataReceiptRows(colors, notification.metadata),
+                        children: _metadataReceiptRows(
+                          context,
+                          colors,
+                          notification.metadata,
+                        ),
                       ),
                     ),
                   ],
@@ -411,7 +460,11 @@ class _NotificationDetailSheet extends StatelessWidget {
   }
 
   /// Receipt-style rows (label left, value right) — same pattern as transaction receipt.
-  static List<Widget> _metadataReceiptRows(AppThemeColors colors, Map<String, dynamic> raw) {
+  static List<Widget> _metadataReceiptRows(
+    BuildContext context,
+    AppThemeColors colors,
+    Map<String, dynamic> raw,
+  ) {
     final entries = _flattenMetadataEntries(raw);
     if (entries.isEmpty) {
       return [
@@ -422,11 +475,18 @@ class _NotificationDetailSheet extends StatelessWidget {
       ];
     }
     return [
-      for (final e in entries) _receiptRow(colors, e.key, e.value),
+      for (final e in entries)
+        _receiptRow(context, colors, e.label, e.value, copyable: e.copyable),
     ];
   }
 
-  static Widget _receiptRow(AppThemeColors colors, String label, String value) {
+  static Widget _receiptRow(
+    BuildContext context,
+    AppThemeColors colors,
+    String label,
+    String value, {
+    bool copyable = false,
+  }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Row(
@@ -441,14 +501,33 @@ class _NotificationDetailSheet extends StatelessWidget {
           ),
           Expanded(
             flex: 3,
-            child: SelectableText(
-              value,
-              textAlign: TextAlign.right,
-              style: TextStyle(
-                color: colors.textPrimary,
-                fontWeight: FontWeight.w500,
-                fontSize: 14,
-              ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Flexible(
+                  child: SelectableText(
+                    value,
+                    textAlign: TextAlign.right,
+                    style: TextStyle(
+                      color: colors.textPrimary,
+                      fontWeight: FontWeight.w500,
+                      fontSize: 14,
+                    ),
+                  ),
+                ),
+                if (copyable) ...[
+                  const SizedBox(width: 4),
+                  IconButton(
+                    visualDensity: VisualDensity.compact,
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                    tooltip: 'Copy $label',
+                    icon: Icon(Icons.copy, size: 16, color: colors.textSecondary),
+                    onPressed: () => _copyMetadataValue(context, label, value),
+                  ),
+                ],
+              ],
             ),
           ),
         ],
@@ -456,8 +535,32 @@ class _NotificationDetailSheet extends StatelessWidget {
     );
   }
 
+  static Future<void> _copyMetadataValue(
+    BuildContext context,
+    String label,
+    String value,
+  ) async {
+    await Clipboard.setData(ClipboardData(text: value));
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('$label copied')),
+    );
+  }
+
+  static bool _isCopyableMetadataKey(String key) {
+    const keys = {
+      'correlationId',
+      'correlation_id',
+      'fundingOrderId',
+      'funding_order_id',
+    };
+    return keys.contains(key);
+  }
+
   /// Flattens notification metadata (and nested `review`) into ordered label/value pairs.
-  static List<MapEntry<String, String>> _flattenMetadataEntries(Map<String, dynamic> raw) {
+  static List<({String label, String value, bool copyable})> _flattenMetadataEntries(
+    Map<String, dynamic> raw,
+  ) {
     final flat = <String, dynamic>{};
     raw.forEach((k, v) {
       if (k == 'review' && v is Map) {
@@ -471,14 +574,14 @@ class _NotificationDetailSheet extends StatelessWidget {
     });
 
     final consumed = <String>{};
-    final out = <MapEntry<String, String>>[];
+    final out = <({String label, String value, bool copyable})>[];
 
     void take(String key, String label, String Function() build) {
       if (!flat.containsKey(key) || consumed.contains(key)) return;
       final s = build();
       if (s.isEmpty) return;
       consumed.add(key);
-      out.add(MapEntry(label, s));
+      out.add((label: label, value: s, copyable: _isCopyableMetadataKey(key)));
     }
 
     // Prefer combined amount line when both present
@@ -487,7 +590,7 @@ class _NotificationDetailSheet extends StatelessWidget {
       final a = flat['amount'];
       consumed.add('amount');
       consumed.add('currency');
-      out.add(MapEntry('Amount', '$cur ${_formatNumberish(a)}'));
+      out.add((label: 'Amount', value: '$cur ${_formatNumberish(a)}', copyable: false));
     } else if (flat.containsKey('amount')) {
       take('amount', 'Amount', () => _formatNumberish(flat['amount']));
     }
@@ -498,10 +601,14 @@ class _NotificationDetailSheet extends StatelessWidget {
       for (final k in ['referenceId', 'reference_id', 'reference']) {
         if (flat.containsKey(k)) consumed.add(k);
       }
-      out.add(MapEntry('Reference', refVal.toString()));
+      out.add((label: 'Reference', value: refVal.toString(), copyable: false));
     }
 
     const orderedPairs = <(String, String)>[
+      ('correlationId', 'Correlation ID'),
+      ('correlation_id', 'Correlation ID'),
+      ('fundingOrderId', 'Funding order ID'),
+      ('funding_order_id', 'Funding order ID'),
       ('orderId', 'Order ID'),
       ('transactionId', 'Transaction ID'),
       ('currency', 'Currency'),
@@ -552,7 +659,11 @@ class _NotificationDetailSheet extends StatelessWidget {
     for (final k in remaining) {
       if (k == 'review') continue;
       final label = _humanizeKey(k.replaceFirst(RegExp(r'^review\.'), ''));
-      out.add(MapEntry(label, _stringifyFlatValue(flat[k])));
+      out.add((
+        label: label,
+        value: _stringifyFlatValue(flat[k]),
+        copyable: _isCopyableMetadataKey(k),
+      ));
     }
 
     return out;
@@ -590,40 +701,16 @@ class _NotificationDetailSheet extends StatelessWidget {
     final min = local.minute.toString().padLeft(2, '0');
     return '$y-$mo-$day · $h:$min';
   }
-
-  IconData _iconForType(String type) {
-    switch (type.toLowerCase()) {
-      case 'promotion':
-      case 'promo':
-      case 'marketing':
-      case 'offer':
-      case 'campaign':
-        return Icons.local_offer_rounded;
-      case 'transaction':
-      case 'payment':
-        return Icons.payment_rounded;
-      case 'transfer':
-        return Icons.swap_horiz_rounded;
-      case 'topup':
-        return Icons.add_circle_outline_rounded;
-      case 'payout':
-      case 'withdraw':
-      case 'withdrawal':
-        return Icons.outbound_rounded;
-      default:
-        return Icons.notifications_rounded;
-    }
-  }
 }
 
 class _NotificationTabBar extends StatelessWidget {
   const _NotificationTabBar({
-    required this.selectedIndex,
+    required this.selectedTab,
     required this.onChanged,
   });
 
-  final int selectedIndex;
-  final ValueChanged<int> onChanged;
+  final _NotificationFilterTab selectedTab;
+  final ValueChanged<_NotificationFilterTab> onChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -643,17 +730,25 @@ class _NotificationTabBar extends StatelessWidget {
       child: Row(
         children: [
           _NotificationTab(
+            label: 'Transaction',
+            isSelected: selectedTab == _NotificationFilterTab.transaction,
+            onTap: () => onChanged(_NotificationFilterTab.transaction),
+            primary: primary,
+            unselectedColor: colors.textSecondary,
+          ),
+          const SizedBox(width: 4),
+          _NotificationTab(
             label: 'System',
-            isSelected: selectedIndex == 0,
-            onTap: () => onChanged(0),
+            isSelected: selectedTab == _NotificationFilterTab.system,
+            onTap: () => onChanged(_NotificationFilterTab.system),
             primary: primary,
             unselectedColor: colors.textSecondary,
           ),
           const SizedBox(width: 4),
           _NotificationTab(
             label: 'Promotions',
-            isSelected: selectedIndex == 1,
-            onTap: () => onChanged(1),
+            isSelected: selectedTab == _NotificationFilterTab.promotions,
+            onTap: () => onChanged(_NotificationFilterTab.promotions),
             primary: primary,
             unselectedColor: colors.textSecondary,
           ),
@@ -694,12 +789,14 @@ class _NotificationTab extends StatelessWidget {
           child: Text(
             label,
             textAlign: TextAlign.center,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             style: TextStyle(
               color: isSelected
                   ? (isDark ? AppColors.backgroundDeepNavy : Colors.white)
                   : unselectedColor,
               fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
-              fontSize: 14,
+              fontSize: 13,
             ),
           ),
         ),
@@ -711,16 +808,34 @@ class _NotificationTab extends StatelessWidget {
 class _EmptyNotifications extends StatelessWidget {
   final AppThemeColors colors;
   final Color primary;
-  final bool isPromotionsTab;
+  final _NotificationFilterTab tab;
 
   const _EmptyNotifications({
     required this.colors,
     required this.primary,
-    required this.isPromotionsTab,
+    required this.tab,
   });
 
   @override
   Widget build(BuildContext context) {
+    final (icon, title, subtitle) = switch (tab) {
+      _NotificationFilterTab.transaction => (
+          Icons.receipt_long_outlined,
+          'No transactions yet',
+          'Payments, transfers, and top-ups will show up here.',
+        ),
+      _NotificationFilterTab.system => (
+          Icons.notifications_none_rounded,
+          'No system notifications',
+          'Maintenance windows, outages, and service notices will show up here.',
+        ),
+      _NotificationFilterTab.promotions => (
+          Icons.local_offer_outlined,
+          'No promotions yet',
+          'Offers and rewards will appear here when available.',
+        ),
+    };
+
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(32.0),
@@ -734,16 +849,14 @@ class _EmptyNotifications extends StatelessWidget {
                 shape: BoxShape.circle,
               ),
               child: Icon(
-                isPromotionsTab
-                    ? Icons.local_offer_outlined
-                    : Icons.notifications_none_rounded,
+                icon,
                 size: 56,
                 color: primary,
               ),
             ),
             const SizedBox(height: 24),
             Text(
-              isPromotionsTab ? 'No promotions yet' : 'No system notifications',
+              title,
               style: TextStyle(
                 color: colors.textPrimary,
                 fontSize: 18,
@@ -753,9 +866,7 @@ class _EmptyNotifications extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             Text(
-              isPromotionsTab
-                  ? 'Offers and rewards will appear here when available.'
-                  : 'Payment and account updates will show up here.',
+              subtitle,
               style: TextStyle(
                 color: colors.textSecondary,
                 fontSize: 14,
@@ -816,7 +927,7 @@ class _NotificationTile extends StatelessWidget {
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Icon(
-                  _iconForType(notification.type),
+                  _notificationIconFor(notification),
                   color: primary,
                   size: 22,
                 ),
@@ -872,30 +983,6 @@ class _NotificationTile extends StatelessWidget {
         ),
       ),
     );
-  }
-
-  IconData _iconForType(String type) {
-    switch (type.toLowerCase()) {
-      case 'promotion':
-      case 'promo':
-      case 'marketing':
-      case 'offer':
-      case 'campaign':
-        return Icons.local_offer_rounded;
-      case 'transaction':
-      case 'payment':
-        return Icons.payment_rounded;
-      case 'transfer':
-        return Icons.swap_horiz_rounded;
-      case 'topup':
-        return Icons.add_circle_outline_rounded;
-      case 'payout':
-      case 'withdraw':
-      case 'withdrawal':
-        return Icons.outbound_rounded;
-      default:
-        return Icons.notifications_rounded;
-    }
   }
 
   String _formatDate(DateTime date) {

@@ -4,9 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:pretium/features/crypto/screens/usdc_receive_screen.dart';
 import 'package:pretium/features/crypto/screens/usdc_send_screen.dart';
 import 'package:pretium/features/crypto/services/crypto_api_service.dart';
-import 'package:pretium/features/topup/models/topup_deposit_country.dart';
 import 'package:pretium/features/topup/screens/direct_fiat_deposit_flow.dart';
-import 'package:pretium/features/topup/screens/select_country_topup_screen.dart';
 import 'package:pretium/features/topup/screens/topup_page.dart';
 import 'package:pretium/models/wallet_model.dart';
 import 'package:pretium/repositories/wallet_repository.dart';
@@ -55,15 +53,43 @@ class _WalletCardState extends State<WalletCard> {
   static const List<String> _supportedFiatCurrencies = ['USD', 'KES', 'NGN', 'GHS', 'UGX'];
   static const List<String> _supportedCryptoCurrencies = ['USDT', 'USDC'];
   static const double _cardAspectRatio = 1.586; // ISO/IEC 7810 ID-1 card ratio
-  static const double _actionButtonsHeight = 56;
 
   double _cardHeight(BuildContext context) {
     final cardWidth = MediaQuery.of(context).size.width - 40;
     return cardWidth / _cardAspectRatio;
   }
 
-  double _pageItemHeight(BuildContext context) {
-    return _cardHeight(context) + _actionButtonsHeight + 12;
+  Widget _buildActionButtons(
+    BuildContext context, {
+    required VoidCallback onTopUp,
+    required VoidCallback onWithdraw,
+  }) {
+    final cardWidth = MediaQuery.of(context).size.width - 40;
+
+    return Center(
+      child: SizedBox(
+        width: cardWidth,
+        child: Row(
+          children: [
+            Expanded(
+              child: _FlowPayActionButton(
+                label: 'Add Money',
+                isPrimary: true,
+                onPressed: onTopUp,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _FlowPayActionButton(
+                label: 'Withdraw',
+                isPrimary: false,
+                onPressed: onWithdraw,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
   
   @override
@@ -298,27 +324,36 @@ class _WalletCardState extends State<WalletCard> {
       if (_availableFiatCurrencies.isEmpty) {
         // Show default USD wallet while loading
         final defaultWallet = _fiatWallet ?? Wallet(currencyCode: 'USD', balance: 0.0);
-        return WalletCardWidget(
-          title: "Fiat Wallet",
-          currency: defaultWallet.currencyCode,
-          balance: defaultWallet.balance,
-          secondaryCurrency: null,
-          secondaryBalance: null,
-          updatedAt: _lastRefreshedAt,
-          loading: _loading,
-          error: _fiatError,
-          backgroundColor: primary,
-          onTopUp: _openTopUpFlow,
-          onWithdraw: () => _openKenyaWithdraw(context),
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            WalletCardWidget(
+              title: "Fiat Wallet",
+              currency: defaultWallet.currencyCode,
+              balance: defaultWallet.balance,
+              secondaryCurrency: null,
+              secondaryBalance: null,
+              updatedAt: _lastRefreshedAt,
+              loading: _loading,
+              error: _fiatError,
+              backgroundColor: primary,
+            ),
+            const SizedBox(height: 12),
+            _buildActionButtons(
+              context,
+              onTopUp: _openTopUpFlow,
+              onWithdraw: () => _openKenyaWithdraw(context),
+            ),
+          ],
         );
       }
       
-      // Swipable fiat wallets with page indicator (height aligned with Crypto layout - no extra space)
+      // Swipable fiat wallets — only the card slides; buttons stay fixed
       return Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           SizedBox(
-            height: _pageItemHeight(context),
+            height: _cardHeight(context),
             child: PageView.builder(
               controller: _fiatPageController,
               onPageChanged: (index) {
@@ -364,11 +399,15 @@ class _WalletCardState extends State<WalletCard> {
               loading: _loading && index == _currentFiatIndex,
               error: _fiatError,
               backgroundColor: primary,
-              onTopUp: _openTopUpFlow,
-              onWithdraw: () => _openKenyaWithdraw(context),
             );
           },
             ),
+          ),
+          const SizedBox(height: 12),
+          _buildActionButtons(
+            context,
+            onTopUp: _openTopUpFlow,
+            onWithdraw: () => _openKenyaWithdraw(context),
           ),
           // Page indicator dots — FlowPay-style circular indicators
           if (_availableFiatCurrencies.length > 1)
@@ -397,24 +436,36 @@ class _WalletCardState extends State<WalletCard> {
     } else {
       // Crypto wallets — swipable PageView (USDT + USDC)
       if (_availableCryptoCurrencies.isEmpty) {
-        return WalletCardWidget(
-          title: "Crypto Wallet",
-          currency: 'USDT',
-          balance: 0,
-          updatedAt: _lastRefreshedAt,
-          loading: _loading,
-          error: _cryptoError,
-          backgroundColor: primary,
-          onTopUp: () => _openCryptoTopUp('USDT'),
-          onWithdraw: () => _openCryptoWithdraw('USDT'),
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            WalletCardWidget(
+              title: "Crypto Wallet",
+              currency: 'USDT',
+              balance: 0,
+              updatedAt: _lastRefreshedAt,
+              loading: _loading,
+              error: _cryptoError,
+              backgroundColor: primary,
+            ),
+            const SizedBox(height: 12),
+            _buildActionButtons(
+              context,
+              onTopUp: () => _openCryptoTopUp('USDT'),
+              onWithdraw: () => _openCryptoWithdraw('USDT'),
+            ),
+          ],
         );
       }
+
+      final currentCryptoCurrency =
+          _availableCryptoCurrencies[_currentCryptoIndex.clamp(0, _availableCryptoCurrencies.length - 1)];
 
       return Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           SizedBox(
-            height: _pageItemHeight(context),
+            height: _cardHeight(context),
             child: PageView.builder(
               controller: _cryptoPageController,
               onPageChanged: (index) {
@@ -445,11 +496,15 @@ class _WalletCardState extends State<WalletCard> {
                   loading: _loading && index == _currentCryptoIndex,
                   error: _cryptoError,
                   backgroundColor: primary,
-                  onTopUp: () => _openCryptoTopUp(currency),
-                  onWithdraw: () => _openCryptoWithdraw(currency),
                 );
               },
             ),
+          ),
+          const SizedBox(height: 12),
+          _buildActionButtons(
+            context,
+            onTopUp: () => _openCryptoTopUp(currentCryptoCurrency),
+            onWithdraw: () => _openCryptoWithdraw(currentCryptoCurrency),
           ),
           if (_availableCryptoCurrencies.length > 1)
             Padding(
@@ -505,15 +560,9 @@ class _WalletCardState extends State<WalletCard> {
   }
 
   Future<void> _openTopUpFlow() async {
-    final country = await Navigator.of(context).push<TopupDepositCountry>(
-      MaterialPageRoute<TopupDepositCountry>(
-        builder: (_) => const SelectCountryTopUpScreen(),
-      ),
-    );
-    if (!mounted || country == null) return;
     await Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
-        builder: (_) => TopUpPage(initialDepositCountry: country),
+        builder: (_) => const TopUpPage(),
       ),
     );
     if (mounted) await _refreshBalance(forceRefresh: true);
@@ -564,8 +613,6 @@ class WalletCardWidget extends StatefulWidget {
   final bool loading;
   final String? error;
   final Color backgroundColor;
-  final VoidCallback onTopUp;
-  final VoidCallback onWithdraw;
 
   const WalletCardWidget({
     super.key,
@@ -578,8 +625,6 @@ class WalletCardWidget extends StatefulWidget {
     this.loading = false,
     this.error,
     required this.backgroundColor,
-    required this.onTopUp,
-    required this.onWithdraw,
   });
 
   @override
@@ -630,232 +675,206 @@ class _WalletCardWidgetState extends State<WalletCardWidget> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: cardWidth,
-            height: cardHeight,
+      child: Container(
+        width: cardWidth,
+        height: cardHeight,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(24),
+          boxShadow: isDark
+              ? [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.5),
+                    blurRadius: 24,
+                    offset: const Offset(0, 8),
+                  ),
+                ]
+              : [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.08),
+                    blurRadius: 20,
+                    offset: const Offset(0, 6),
+                  ),
+                ],
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(24),
+          child: Container(
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(24),
-              boxShadow: isDark
-                  ? [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.5),
-                        blurRadius: 24,
-                        offset: const Offset(0, 8),
-                      ),
-                    ]
-                  : [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.08),
-                        blurRadius: 20,
-                        offset: const Offset(0, 6),
-                      ),
-                    ],
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: isDark
+                    ? [
+                        AppColors.surfaceDark,
+                        AppColors.surfaceDark.withOpacity(0.95),
+                        AppColors.backgroundDeepNavy,
+                      ]
+                    : [
+                        widget.backgroundColor.withOpacity(0.95),
+                        widget.backgroundColor.withOpacity(0.75),
+                        widget.backgroundColor.withOpacity(0.55),
+                      ],
+              ),
             ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(24),
-              child: Container(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: isDark
-                        ? [
-                            AppColors.surfaceDark,
-                            AppColors.surfaceDark.withOpacity(0.95),
-                            AppColors.backgroundDeepNavy,
-                          ]
-                        : [
-                            widget.backgroundColor.withOpacity(0.95),
-                            widget.backgroundColor.withOpacity(0.75),
-                            widget.backgroundColor.withOpacity(0.55),
-                          ],
+            child: Stack(
+              children: [
+                // Decorative circles — app teal accent, not FlowPay blue
+                Positioned(
+                  top: -cardHeight * 0.12,
+                  right: -cardWidth * 0.08,
+                  child: Container(
+                    width: cardWidth * 0.5,
+                    height: cardWidth * 0.5,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: widget.backgroundColor.withOpacity(isDark ? 0.12 : 0.18),
+                    ),
                   ),
                 ),
-                child: Stack(
-                  children: [
-                    // Decorative circles — app teal accent, not FlowPay blue
-                    Positioned(
-                      top: -cardHeight * 0.12,
-                      right: -cardWidth * 0.08,
-                      child: Container(
-                        width: cardWidth * 0.5,
-                        height: cardWidth * 0.5,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: widget.backgroundColor.withOpacity(isDark ? 0.12 : 0.18),
-                        ),
+                Positioned(
+                  bottom: -cardHeight * 0.18,
+                  left: -cardWidth * 0.12,
+                  child: Container(
+                    width: cardWidth * 0.42,
+                    height: cardWidth * 0.42,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: widget.backgroundColor.withOpacity(isDark ? 0.08 : 0.12),
+                    ),
+                  ),
+                ),
+                // Subtle diagonal sheen
+                Positioned.fill(
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topRight,
+                        end: Alignment.bottomLeft,
+                        colors: [
+                          Colors.white.withOpacity(isDark ? 0.06 : 0.12),
+                          Colors.transparent,
+                          Colors.transparent,
+                        ],
+                        stops: const [0.0, 0.35, 1.0],
                       ),
                     ),
-                    Positioned(
-                      bottom: -cardHeight * 0.18,
-                      left: -cardWidth * 0.12,
-                      child: Container(
-                        width: cardWidth * 0.42,
-                        height: cardWidth * 0.42,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: widget.backgroundColor.withOpacity(isDark ? 0.08 : 0.12),
-                        ),
-                      ),
-                    ),
-                    // Subtle diagonal sheen
-                    Positioned.fill(
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            begin: Alignment.topRight,
-                            end: Alignment.bottomLeft,
-                            colors: [
-                              Colors.white.withOpacity(isDark ? 0.06 : 0.12),
-                              Colors.transparent,
-                              Colors.transparent,
-                            ],
-                            stops: const [0.0, 0.35, 1.0],
-                          ),
-                        ),
-                      ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.all(22),
-                      child: Column(
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.all(22),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Top row: brand logo + balance toggle
+                      Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // Top row: brand logo + balance toggle
-                          Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              _BrandLogo(isDark: isDark),
-                              const Spacer(),
-                              Column(
-                                crossAxisAlignment: CrossAxisAlignment.end,
-                                children: [
-                                  GestureDetector(
-                                    onTap: () => setState(
-                                      () => _balanceVisible = !_balanceVisible,
-                                    ),
-                                    child: Icon(
-                                      _balanceVisible
-                                          ? Icons.visibility_outlined
-                                          : Icons.visibility_off_outlined,
-                                      color: colors.textPrimary.withOpacity(0.85),
-                                      size: 18,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 6),
-                                  Text(
-                                    'Balance',
-                                    style: TextStyle(
-                                      color: colors.textSecondary,
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w400,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 2),
-                                  if (widget.loading)
-                                    SizedBox(
-                                      width: 20,
-                                      height: 20,
-                                      child: CircularProgressIndicator(
-                                        color: colors.textPrimary,
-                                        strokeWidth: 2,
-                                      ),
-                                    )
-                                  else if (widget.error != null)
-                                    Text(
-                                      '—',
-                                      style: TextStyle(
-                                        color: colors.textPrimary,
-                                        fontSize: 22,
-                                        fontWeight: FontWeight.w700,
-                                      ),
-                                    )
-                                  else
-                                    Text(
-                                      _displayBalance,
-                                      style: TextStyle(
-                                        color: colors.textPrimary,
-                                        fontSize: 22,
-                                        fontWeight: FontWeight.w700,
-                                        letterSpacing: 0.5,
-                                      ),
-                                    ),
-                                ],
-                              ),
-                            ],
-                          ),
+                          _BrandLogo(isDark: isDark),
                           const Spacer(),
-                          // Card number
-                          Text(
-                            'Card Number',
-                            style: TextStyle(
-                              color: colors.textSecondary,
-                              fontSize: 11,
-                              fontWeight: FontWeight.w400,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            _maskedCardNumber,
-                            style: TextStyle(
-                              color: colors.textPrimary,
-                              fontSize: 15,
-                              fontWeight: FontWeight.w500,
-                              letterSpacing: 1.5,
-                            ),
-                          ),
-                          const Spacer(),
-                          // Bottom row: expiry, CVC, SafariCard brand
-                          Row(
+                          Column(
                             crossAxisAlignment: CrossAxisAlignment.end,
                             children: [
-                              _CardDetailColumn(
-                                label: 'Expiry Date',
-                                value: '**/**',
-                                colors: colors,
+                              GestureDetector(
+                                onTap: () => setState(
+                                  () => _balanceVisible = !_balanceVisible,
+                                ),
+                                child: Icon(
+                                  _balanceVisible
+                                      ? Icons.visibility_outlined
+                                      : Icons.visibility_off_outlined,
+                                  color: colors.textPrimary.withOpacity(0.85),
+                                  size: 18,
+                                ),
                               ),
-                              const SizedBox(width: 28),
-                              _CardDetailColumn(
-                                label: 'CVC',
-                                value: '***',
-                                colors: colors,
+                              const SizedBox(height: 6),
+                              Text(
+                                'Balance',
+                                style: TextStyle(
+                                  color: colors.textSecondary,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w400,
+                                ),
                               ),
-                              const Spacer(),
-                              const _SafariCardBrand(),
+                              const SizedBox(height: 2),
+                              if (widget.loading)
+                                SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    color: colors.textPrimary,
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              else if (widget.error != null)
+                                Text(
+                                  '—',
+                                  style: TextStyle(
+                                    color: colors.textPrimary,
+                                    fontSize: 22,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                )
+                              else
+                                Text(
+                                  _displayBalance,
+                                  style: TextStyle(
+                                    color: colors.textPrimary,
+                                    fontSize: 22,
+                                    fontWeight: FontWeight.w700,
+                                    letterSpacing: 0.5,
+                                  ),
+                                ),
                             ],
                           ),
                         ],
                       ),
-                    ),
-                  ],
+                      const Spacer(),
+                      // Card number
+                      Text(
+                        'Card Number',
+                        style: TextStyle(
+                          color: colors.textSecondary,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w400,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        _maskedCardNumber,
+                        style: TextStyle(
+                          color: colors.textPrimary,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w500,
+                          letterSpacing: 1.5,
+                        ),
+                      ),
+                      const Spacer(),
+                      // Bottom row: expiry, CVC, SafariCard brand
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          _CardDetailColumn(
+                            label: 'Expiry Date',
+                            value: '**/**',
+                            colors: colors,
+                          ),
+                          const SizedBox(width: 28),
+                          _CardDetailColumn(
+                            label: 'CVC',
+                            value: '***',
+                            colors: colors,
+                          ),
+                          const Spacer(),
+                          const _SafariCardBrand(),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
-              ),
+              ],
             ),
           ),
-          const SizedBox(height: 12),
-          // FlowPay-style action buttons below the card
-          Row(
-            children: [
-              Expanded(
-                child: _FlowPayActionButton(
-                  label: 'Add Money',
-                  isPrimary: true,
-                  onPressed: widget.onTopUp,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _FlowPayActionButton(
-                  label: 'Withdraw',
-                  isPrimary: false,
-                  onPressed: widget.onWithdraw,
-                ),
-              ),
-            ],
-          ),
-        ],
+        ),
       ),
     );
   }

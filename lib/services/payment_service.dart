@@ -49,18 +49,15 @@ class PaymentService {
     await Future.delayed(const Duration(milliseconds: 800));
   }
 
-  /// Create a payment via Cloud Function
-  /// This calls the server-side createPayment function
+  /// Create a C2B wallet top-up via Cloud Function (Paystack hosted checkout).
+  /// Sends only amount, currency, and optional customer fields — no client checkout URL.
   Future<Map<String, dynamic>> createPayment({
     required double amount,
     required String currency,
-    required String email,
-    required String firstName,
-    required String lastName,
+    String? email,
+    String? firstName,
+    String? lastName,
     String? phoneNumber,
-    String? checkoutUrl,
-    String? intasendCheckoutId,
-    Map<String, dynamic>? metadata,
   }) async {
     try {
       Logger.info('🚀 ===== CREATING PAYMENT VIA CLOUD FUNCTION =====');
@@ -96,12 +93,10 @@ class PaymentService {
       Logger.info('📋 Request payload:');
       Logger.info('   amount: $amount');
       Logger.info('   currency: ${currency.toUpperCase()}');
-      Logger.info('   email: $email');
-      Logger.info('   firstName: $firstName');
-      Logger.info('   lastName: $lastName');
+      Logger.info('   email: ${email ?? currentUser.email ?? "N/A"}');
+      Logger.info('   firstName: ${firstName ?? "N/A"}');
+      Logger.info('   lastName: ${lastName ?? "N/A"}');
       Logger.info('   phoneNumber: ${phoneNumber ?? "N/A"}');
-      Logger.info('   checkoutUrl: ${checkoutUrl ?? "N/A"}');
-      Logger.info('   intasendCheckoutId: ${intasendCheckoutId ?? "N/A"}');
       Logger.info('');
       Logger.info('📡 Sending request to Cloud Function...');
       
@@ -109,13 +104,10 @@ class PaymentService {
       final result = await callable.call({
         'amount': amount,
         'currency': currency.toUpperCase(),
-        'email': email,
-        'firstName': firstName,
-        'lastName': lastName,
-        if (phoneNumber != null) 'phoneNumber': phoneNumber,
-        if (checkoutUrl != null) 'checkoutUrl': checkoutUrl,
-        if (intasendCheckoutId != null) 'intasendCheckoutId': intasendCheckoutId,
-        if (metadata != null) 'metadata': metadata,
+        if (email != null && email.trim().isNotEmpty) 'email': email.trim(),
+        if (firstName != null && firstName.trim().isNotEmpty) 'firstName': firstName.trim(),
+        if (lastName != null && lastName.trim().isNotEmpty) 'lastName': lastName.trim(),
+        if (phoneNumber != null && phoneNumber.trim().isNotEmpty) 'phoneNumber': phoneNumber.trim(),
       });
       
       final duration = DateTime.now().difference(startTime);
@@ -128,58 +120,48 @@ class PaymentService {
       Logger.info('   Response keys: ${data.keys.toList()}');
       Logger.debug('   Full response: $data');
       
-      // Handle different response formats - check both camelCase and snake_case
-      // The Cloud Function returns: { success: true, paymentId: "...", checkoutUrl: "...", data: {...} }
-      // So paymentId should be at the top level, but also check nested data object as fallback
-      String? paymentId;
-      
-      // First try top-level camelCase
-      if (data.containsKey('paymentId') && data['paymentId'] != null) {
-        paymentId = data['paymentId'].toString();
-      }
-      // Then try top-level snake_case
-      else if (data.containsKey('payment_id') && data['payment_id'] != null) {
-        paymentId = data['payment_id'].toString();
-      }
-      // Then try nested data object
-      else if (data['data'] != null) {
-        final nestedData = data['data'] as Map<String, dynamic>?;
-        if (nestedData != null) {
-          if (nestedData.containsKey('payment_id') && nestedData['payment_id'] != null) {
-            paymentId = nestedData['payment_id'].toString();
-          } else if (nestedData.containsKey('paymentId') && nestedData['paymentId'] != null) {
-            paymentId = nestedData['paymentId'].toString();
-          }
-        }
-      }
-      
-      // Extract checkoutUrl from response (use different name to avoid conflict with parameter)
-      final responseCheckoutUrl = data['checkoutUrl'] as String? ?? 
-                                  data['checkout_url'] as String? ??
-                                  (data['data'] as Map<String, dynamic>?)?['checkout_url'] as String? ??
-                                  (data['data'] as Map<String, dynamic>?)?['checkoutUrl'] as String?;
-      
-      if (paymentId == null) {
-        Logger.error('Payment created but paymentId is null. Full response: $data');
-        Logger.error('Available keys in response: ${data.keys.toList()}');
-        if (data['data'] != null) {
-          final nestedData = data['data'] as Map<String, dynamic>?;
-          Logger.error('Nested data keys: ${nestedData?.keys.toList()}');
-        }
+      final invoiceId = data['invoiceId']?.toString() ??
+          data['paymentId']?.toString() ??
+          data['orderId']?.toString() ??
+          data['fundingOrderId']?.toString();
+
+      final checkoutUrl = data['checkoutUrl']?.toString() ??
+          data['checkout_url']?.toString() ??
+          data['url']?.toString() ??
+          data['authorization_url']?.toString();
+
+      if (checkoutUrl == null || checkoutUrl.isEmpty) {
+        Logger.error('createPayment: empty checkoutUrl. Full response: $data');
         return {
           'success': false,
-          'error': 'Payment created but payment ID is missing from response',
+          'error': 'No checkout URL returned from server',
           'code': 'invalid-response',
           'data': data,
         };
       }
-      
-      Logger.success('Payment created successfully: $paymentId');
-      
+
+      if (invoiceId == null || invoiceId.isEmpty) {
+        Logger.error('createPayment: missing invoiceId. Full response: $data');
+        return {
+          'success': false,
+          'error': 'Payment reference is missing from server response',
+          'code': 'invalid-response',
+          'data': data,
+        };
+      }
+
+      Logger.success('Payment created successfully: $invoiceId');
+
       return {
         'success': true,
-        'paymentId': paymentId,
-        'checkoutUrl': responseCheckoutUrl ?? checkoutUrl, // Use response value or fallback to parameter
+        'invoiceId': invoiceId,
+        'paymentId': invoiceId,
+        'orderId': data['orderId']?.toString() ?? data['fundingOrderId']?.toString(),
+        'checkoutUrl': checkoutUrl,
+        'amount': data['amount'],
+        'currency': data['currency']?.toString(),
+        'paystackAmount': data['paystackAmount'],
+        'paystackCurrency': data['paystackCurrency']?.toString(),
         'data': data,
       };
     } on FirebaseFunctionsException catch (e) {
@@ -226,6 +208,10 @@ Diagnostic steps:
       } else if (e.code == 'invalid-argument') {
         errorMessage = 'Invalid payment data: ${e.message ?? "Please check your input"}';
         diagnosticInfo = 'Verify all required fields are provided and valid';
+        Logger.warning('⚠️ $diagnosticInfo');
+      } else if (e.code == 'failed-precondition') {
+        errorMessage = e.message ?? 'Payment setup failed. Please update the app and try again.';
+        diagnosticInfo = 'The server rejected legacy IntaSend fields or payment configuration is invalid';
         Logger.warning('⚠️ $diagnosticInfo');
       }
       
@@ -434,29 +420,27 @@ Diagnostic steps:
     }
   }
 
-  /// Handle payment webhook via Cloud Function. Used by the IntaSend flow
-  /// (e.g. when the user opens the checkout link or when IntaSend sends
-  /// success/failure). See IntaSendService and topup_page.dart.
+  /// Confirm a Paystack top-up after deep link return ([PaymentCallbackService]).
+  /// Sends only invoiceId — no client-side link_opened / status fields.
+  /// Server webhook may already have credited the wallet; this call is idempotent.
   Future<Map<String, dynamic>> handlePaymentWebhook({
-    required String paymentId,
-    required String status,
-    String? transactionId,
-    Map<String, dynamic>? webhookData,
+    required String invoiceId,
   }) async {
     try {
-      Logger.info('Handling payment webhook via Cloud Function: $paymentId');
-      
+      Logger.info('Handling payment webhook via Cloud Function: $invoiceId');
+
+      await _ensureAuthenticated();
+
       final callable = _functions.httpsCallable('handlePaymentWebhook');
-      
+
       final result = await callable.call({
-        'paymentId': paymentId,
-        'status': status,
-        if (transactionId != null) 'transactionId': transactionId,
-        if (webhookData != null) 'webhookData': webhookData,
+        'invoiceId': invoiceId,
+        'paymentId': invoiceId,
+        'orderId': invoiceId,
       });
-      
+
       final data = result.data as Map<String, dynamic>;
-      Logger.success('Payment webhook handled: $paymentId');
+      Logger.success('Payment webhook handled: $invoiceId');
       
       return {
         'success': true,

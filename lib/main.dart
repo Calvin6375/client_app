@@ -20,6 +20,7 @@ import 'package:pretium/features/wallet_settings/screens/wallet_settings_page.da
 import 'package:pretium/features/wallet_settings/screens/contact_support_page.dart';
 import 'package:pretium/features/wallet/screens/wallet_page.dart';
 import 'package:pretium/services/notification_service.dart';
+import 'package:pretium/services/payment_callback_service.dart';
 import 'package:provider/provider.dart';
 
 Future<void> main() async {
@@ -61,6 +62,7 @@ class _MyAppState extends State<MyApp> {
     // Initialize NotificationService after first frame
     WidgetsBinding.instance.addPostFrameCallback((_) {
       NotificationService().initialize(navigatorKey: _navigatorKey);
+      PaymentCallbackService.instance.initialize(navigatorKey: _navigatorKey);
     });
   }
 
