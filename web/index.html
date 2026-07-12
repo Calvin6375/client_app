@@ -1,38 +1,236 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
   <!--
-    If you are serving your web app in a path other than the root, change the
-    href value below to reflect the base path you are serving from.
-
-    The path provided below has to start and end with a slash "/" in order for
-    it to work correctly.
-
-    For more details:
-    * https://developer.mozilla.org/en-US/docs/Web/HTML/Element/base
-
-    This is a placeholder for base href that will be replaced by the value of
-    the `--base-href` argument provided to `flutter build`.
+    Base href is replaced by `flutter build web --base-href=...`.
+    Production host: https://app.truepay.live/
   -->
   <base href="$FLUTTER_BASE_HREF">
 
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
-  <meta name="description" content="A new Flutter project.">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=5.0">
 
-  <!-- iOS meta tags & icons -->
+  <!-- Primary SEO -->
+  <title>SafariCard — Digital Wallet</title>
+  <meta name="description" content="SafariCard digital wallet by TruePay. Send money, swap currencies, top up securely, and manage USDC — on the web or installed as an app.">
+  <meta name="keywords" content="SafariCard, TruePay, digital wallet, USDC, Paystack, Transak, send money, crypto wallet">
+  <meta name="author" content="TruePay">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://app.truepay.live/">
+
+  <!-- Theme / browser chrome -->
+  <meta name="theme-color" content="#0F172A" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#26A69A" media="(prefers-color-scheme: light)">
+  <meta name="color-scheme" content="dark light">
+
+  <!-- PWA / Android installability -->
   <meta name="mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black">
-  <meta name="apple-mobile-web-app-title" content="SafariTap">
-  <link rel="apple-touch-icon" href="icons/Icon-192.png">
+  <meta name="application-name" content="SafariCard">
 
-  <!-- Favicon -->
-  <link rel="icon" type="image/png" href="favicon.png"/>
+  <!-- iOS Home Screen / standalone -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="SafariCard">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="format-detection" content="telephone=no">
 
-  <title>SafariTap</title>
+  <!-- Open Graph -->
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://app.truepay.live/">
+  <meta property="og:title" content="SafariCard — Digital Wallet">
+  <meta property="og:description" content="Send money, swap currencies, top up securely, and manage USDC with SafariCard.">
+  <meta property="og:image" content="https://app.truepay.live/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:site_name" content="SafariCard">
+  <meta property="og:locale" content="en_US">
+
+  <!-- Twitter -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="SafariCard — Digital Wallet">
+  <meta name="twitter:description" content="Send money, swap currencies, top up securely, and manage USDC with SafariCard.">
+  <meta name="twitter:image" content="https://app.truepay.live/og-image.png">
+
+  <!-- Favicons -->
+  <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
+  <link rel="shortcut icon" type="image/png" href="favicon.png">
+
+  <!-- Apple touch icons -->
+  <link rel="apple-touch-icon" href="icons/Icon-180.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="icons/Icon-180.png">
+  <link rel="apple-touch-icon" sizes="152x152" href="icons/Icon-152.png">
+  <link rel="apple-touch-icon" sizes="167x167" href="icons/Icon-167.png">
+  <link rel="apple-touch-icon" sizes="128x128" href="icons/Icon-128.png">
+
   <link rel="manifest" href="manifest.json">
+
+  <!-- Prevent white flash; match TruePay dark navy -->
+  <style>
+    :root {
+      --sc-bg: #0F172A;
+      --sc-teal: #26A69A;
+      --sc-teal-dim: #00897B;
+      --sc-text: #94A3B8;
+    }
+
+    html, body {
+      height: 100%;
+      width: 100%;
+      margin: 0;
+      padding: 0;
+      background-color: var(--sc-bg);
+      overflow: hidden;
+      overscroll-behavior: none;
+      -webkit-tap-highlight-color: transparent;
+      -webkit-text-size-adjust: 100%;
+    }
+
+    /* Flutter paints into flt-glass-pane / canvas — keep shell dark underneath */
+    body {
+      position: fixed;
+      inset: 0;
+    }
+
+    #splash {
+      position: fixed;
+      inset: 0;
+      z-index: 9999;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background:
+        radial-gradient(ellipse 80% 60% at 50% 40%, rgba(38, 166, 154, 0.18), transparent 70%),
+        var(--sc-bg);
+      transition: opacity 420ms ease, visibility 420ms ease;
+      opacity: 1;
+      visibility: visible;
+      pointer-events: none;
+    }
+
+    #splash.is-hidden {
+      opacity: 0;
+      visibility: hidden;
+    }
+
+    #splash .logo {
+      width: 112px;
+      height: 112px;
+      object-fit: contain;
+      border-radius: 24px;
+      animation: splash-breathe 1.8s ease-in-out infinite;
+      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+    }
+
+    #splash .brand {
+      margin-top: 20px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      color: #FFFFFF;
+    }
+
+    #splash .tagline {
+      margin-top: 8px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--sc-text);
+    }
+
+    #splash .loader {
+      margin-top: 28px;
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      border: 3px solid rgba(38, 166, 154, 0.22);
+      border-top-color: var(--sc-teal);
+      animation: splash-spin 0.85s linear infinite;
+    }
+
+    #splash .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+
+    @keyframes splash-spin {
+      to { transform: rotate(360deg); }
+    }
+
+    @keyframes splash-breathe {
+      0%, 100% { transform: scale(1); opacity: 1; }
+      50% { transform: scale(1.04); opacity: 0.92; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      #splash .logo,
+      #splash .loader {
+        animation: none;
+      }
+    }
+  </style>
 </head>
 <body>
-  <script src="flutter_bootstrap.js" async></script>
+  <div id="splash" role="status" aria-live="polite" aria-busy="true">
+    <img class="logo" src="splash/logo.png" width="112" height="112" alt="SafariCard">
+    <div class="brand">SafariCard</div>
+    <div class="tagline">Secure digital wallet</div>
+    <div class="loader" aria-hidden="true"></div>
+    <span class="sr-only">Loading SafariCard…</span>
+  </div>
+
+  <script>
+    (function () {
+      var splash = document.getElementById('splash');
+      var hidden = false;
+
+      function hideSplash() {
+        if (hidden || !splash) return;
+        hidden = true;
+        splash.classList.add('is-hidden');
+        splash.setAttribute('aria-busy', 'false');
+        window.setTimeout(function () {
+          if (splash && splash.parentNode) {
+            splash.parentNode.removeChild(splash);
+          }
+        }, 480);
+      }
+
+      // Flutter fires this after the first frame is rendered.
+      window.addEventListener('flutter-first-frame', hideSplash, { once: true });
+
+      // Safety: never leave users stuck on the splash if the event is missed.
+      window.setTimeout(hideSplash, 12000);
+    })();
+  </script>
+
+  <!--
+    Custom bootstrap: Flutter build substitutes loader tokens in the script below.
+    Keeps the generated service worker (app-shell offline cache) with a branded splash.
+  -->
+  <script>
+    {{flutter_js}}
+    {{flutter_build_config}}
+
+    _flutter.loader.load({
+      serviceWorkerSettings: {
+        serviceWorkerVersion: {{flutter_service_worker_version}}
+      },
+      onEntrypointLoaded: async function (engineInitializer) {
+        // Uses the renderer from the release build (CanvasKit by default).
+        var appRunner = await engineInitializer.initializeEngine();
+        await appRunner.runApp();
+      }
+    });
+  </script>
 </body>
 </html>

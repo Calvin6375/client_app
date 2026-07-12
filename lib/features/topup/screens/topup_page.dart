@@ -1,6 +1,6 @@
-// Top-up screen: fiat (Paystack C2B or TransFi) and crypto options.
-// Fiat top-up: PaymentService.createPayment → Paystack hosted checkout (browser).
-// TransFi: uses TransFiService only; standalone, no Cloud Function.
+// Top-up screen: fiat (Paystack / Transak card checkout, direct fiat, crypto).
+// Card/mobile money: PaymentService.createPayment → hosted checkout in browser.
+// African currencies → Paystack; USD, GBP, EUR, and other non-African → Transak.
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -10,6 +10,8 @@ import 'package:firebase_database/firebase_database.dart';
 import 'package:pretium/repositories/wallet_repository.dart';
 import 'package:pretium/repositories/user_repository.dart';
 import 'package:pretium/services/payment_service.dart';
+import 'package:pretium/services/dashboard_session_cache.dart';
+import 'package:pretium/models/wallet_model.dart';
 import 'package:pretium/utils/firebase_utils.dart';
 import 'package:pretium/core/constants/app_colors.dart';
 import 'package:pretium/features/topup/models/topup_deposit_country.dart';
@@ -60,15 +62,29 @@ class _TopUpPageState extends State<TopUpPage> {
   final UserRepository _userRepository = UserRepository();
 
   bool _hideBalance = false;
-  double _fiatBalance = 0.00;
-  double _cryptoBalance = 0.00;
+  /// Per-currency fiat balances so Available matches the selected currency.
+  final Map<String, double> _fiatBalances = {};
   String _selectedCurrency = 'USD';
   bool _isProcessingPayment = false;
   bool _isLoadingBalance = false;
+  bool _hasBalanceData = false;
   _TopUpPaymentMethod _selectedMethod = _TopUpPaymentMethod.cardMobileMoney;
+
+  static const List<String> _supportedFiatCurrencies = [
+    'USD',
+    'KES',
+    'NGN',
+    'GHS',
+    'UGX',
+    'GBP',
+    'EUR',
+  ];
 
   /// Minimum Set amount for Fiat Option actions when currency is KES.
   static const double _kesFiatOptionMinimumAmount = 150;
+
+  double get _availableBalanceForSelected =>
+      _fiatBalances[_selectedCurrency] ?? 0.0;
 
   @override
   void initState() {
@@ -77,17 +93,35 @@ class _TopUpPageState extends State<TopUpPage> {
     if (country != null) {
       _selectedCurrency = _coerceTopupFiatCurrency(country.code);
     }
-    _loadWalletBalance();
+    _hydrateBalancesFromCache();
+    _loadWalletBalance(silent: _hasBalanceData);
     _loadUserProfile();
   }
-  
+
+  void _hydrateBalancesFromCache() {
+    final snap = DashboardSessionCache.instance.readWalletLastKnown();
+    if (snap == null) return;
+
+    for (final entry in snap.fiatWallets.entries) {
+      _fiatBalances[entry.key] = entry.value.balance;
+    }
+    _hasBalanceData = _fiatBalances.isNotEmpty;
+
+    // Only pick a default currency from cache when the caller did not preset one.
+    if (widget.initialDepositCountry == null &&
+        snap.availableFiatCurrencies.isNotEmpty) {
+      _selectedCurrency =
+          _coerceTopupFiatCurrency(snap.availableFiatCurrencies.first);
+    }
+  }
+
   Future<void> _loadUserProfile() async {
     if (!isFirebaseInitialized()) return;
-    
+
     try {
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) return;
-      
+
       final userProfile = await _userRepository.getUserProfile(user.uid);
       if (userProfile != null && mounted) {
         // Auto-fill user data from Firestore
@@ -101,25 +135,54 @@ class _TopUpPageState extends State<TopUpPage> {
     }
   }
 
-  Future<void> _loadWalletBalance() async {
+  Future<void> _loadWalletBalance({bool silent = false}) async {
     if (_isLoadingBalance || !isFirebaseInitialized()) return;
 
-    setState(() {
-      _isLoadingBalance = true;
-    });
+    if (!silent) {
+      setState(() {
+        _isLoadingBalance = true;
+      });
+    }
 
     try {
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) return;
 
-      // Load both fiat (USD) and crypto (USDT) balances
-      final fiatWallet = await _walletRepository.getWalletBalance(user.uid);
-      var cryptoWallet = await _walletRepository.getCryptoWalletBalance(user.uid, 'USDT');
-      
+      final fiatWallets = <String, Wallet>{};
+      final availableCurrencies = <String>[];
+
+      for (final currency in _supportedFiatCurrencies) {
+        try {
+          final wallet =
+              await _walletRepository.getWalletBalance(user.uid, currency: currency);
+          if (wallet != null) {
+            fiatWallets[currency] = wallet;
+            availableCurrencies.add(currency);
+          }
+        } catch (_) {
+          continue;
+        }
+      }
+
+      // Ensure USD is present so the dropdown always has a balance entry.
+      if (!fiatWallets.containsKey('USD')) {
+        final usd =
+            await _walletRepository.getWalletBalance(user.uid, currency: 'USD');
+        fiatWallets['USD'] =
+            usd ?? Wallet(currencyCode: 'USD', balance: 0.0);
+        if (!availableCurrencies.contains('USD')) {
+          availableCurrencies.insert(0, 'USD');
+        }
+      }
+
+      var cryptoWallet =
+          await _walletRepository.getCryptoWalletBalance(user.uid, 'USDT');
+
       // Create default USDT wallet if it doesn't exist (as a holding place)
-      final cryptoWalletRef = FirebaseDatabase.instance.ref('wallet/${user.uid}/crypto/USDT');
+      final cryptoWalletRef =
+          FirebaseDatabase.instance.ref('wallet/${user.uid}/crypto/USDT');
       final cryptoSnapshot = await cryptoWalletRef.get();
-      
+
       if (!cryptoSnapshot.exists) {
         try {
           final timestamp = DateTime.now().toIso8601String();
@@ -129,46 +192,65 @@ class _TopUpPageState extends State<TopUpPage> {
             'updatedAt': timestamp,
             'createdAt': timestamp,
           });
-          debugPrint('TopUpPage - Created default USDT wallet for user ${user.uid}');
-          
-          // Reload the wallet after creating it
-          cryptoWallet = await _walletRepository.getCryptoWalletBalance(user.uid, 'USDT');
+          cryptoWallet =
+              await _walletRepository.getCryptoWalletBalance(user.uid, 'USDT');
         } catch (e) {
           debugPrint('TopUpPage - Failed to create default USDT wallet: $e');
-          // Continue with default 0 balance if creation fails
         }
       }
-      
-      debugPrint('TopUpPage - Fiat wallet: ${fiatWallet?.balance ?? 0.0} ${fiatWallet?.currencyCode ?? "USD"}');
-      debugPrint('TopUpPage - Crypto wallet: ${cryptoWallet?.balance ?? 0.0} ${cryptoWallet?.currencyCode ?? "USDT"}');
-      
+
+      final existing = DashboardSessionCache.instance.readWalletLastKnown();
+      final cryptoWallets = <String, Wallet>{
+        ...?existing?.cryptoWallets,
+        'USDT': cryptoWallet ?? Wallet(currencyCode: 'USDT', balance: 0.0),
+      };
+
+      DashboardSessionCache.instance.recordWalletSnapshot(
+        fiatWallets: {
+          ...?existing?.fiatWallets,
+          ...fiatWallets,
+        },
+        availableFiatCurrencies: availableCurrencies.isNotEmpty
+            ? availableCurrencies
+            : (existing?.availableFiatCurrencies ?? ['USD']),
+        cryptoWallets: cryptoWallets,
+        availableCryptoCurrencies: existing?.availableCryptoCurrencies.isNotEmpty == true
+            ? existing!.availableCryptoCurrencies
+            : const ['USDT', 'USDC'],
+        cachedFiatWallet: fiatWallets[_selectedCurrency] ??
+            fiatWallets[availableCurrencies.isNotEmpty
+                ? availableCurrencies.first
+                : 'USD'] ??
+            existing?.cachedFiatWallet,
+        cachedCryptoWallet: cryptoWallets['USDT'] ?? existing?.cachedCryptoWallet,
+      );
+
       if (!mounted) return;
 
       setState(() {
-        _fiatBalance = fiatWallet?.balance ?? 0.0;
-        _cryptoBalance = cryptoWallet?.balance ?? 0.0;
-        _selectedCurrency = widget.initialDepositCountry != null
-            ? _coerceTopupFiatCurrency(widget.initialDepositCountry!.code)
-            : _coerceTopupFiatCurrency(fiatWallet?.currencyCode);
+        _fiatBalances
+          ..clear()
+          ..addEntries(
+            fiatWallets.entries.map((e) => MapEntry(e.key, e.value.balance)),
+          );
+        _hasBalanceData = true;
+        // Keep the user's selected currency; do not overwrite after init.
       });
-      
-      debugPrint('TopUpPage - State updated: Fiat=$_fiatBalance, Crypto=$_cryptoBalance');
     } catch (e) {
       debugPrint('Failed to load wallet balances on TopUpPage: $e');
-      // Set default values on error
-      if (!mounted) return;
+      if (!mounted || silent) return;
       setState(() {
-        _fiatBalance = 0.0;
-        _cryptoBalance = 0.0;
-        _selectedCurrency = widget.initialDepositCountry != null
-            ? _coerceTopupFiatCurrency(widget.initialDepositCountry!.code)
-            : 'USD';
+        if (!_hasBalanceData) {
+          _fiatBalances.clear();
+        }
       });
     } finally {
       if (!mounted) return;
-      setState(() {
-        _isLoadingBalance = false;
-      });
+      if (!silent) {
+        setState(() {
+          _isLoadingBalance = false;
+        });
+      }
     }
   }
 
@@ -186,13 +268,26 @@ class _TopUpPageState extends State<TopUpPage> {
     return double.tryParse(text) ?? 0.0;
   }
 
-  /// Fiat Option (Paystack, TransFi, direct fiat): KES requires at least [_kesFiatOptionMinimumAmount].
+  /// Fiat Option (Paystack, Transak, direct fiat): KES requires at least [_kesFiatOptionMinimumAmount].
   bool _meetsKesFiatOptionMinimum() {
     if (_selectedCurrency != 'KES') return true;
     return _parsedSetAmount() >= _kesFiatOptionMinimumAmount;
   }
 
-  /// Paystack C2B flow: createPayment (Cloud Function) → open checkout.paystack.com.
+  String get _cardMobileMoneyProvider =>
+      TopupDepositCountry.cardMobileMoneyProviderFor(_selectedCurrency);
+
+  String get _cardMobileMoneyProviderLabel =>
+      TopupDepositCountry.cardMobileMoneyProviderLabelFor(_selectedCurrency);
+
+  String get _cardMobileMoneySubtitle {
+    if (_cardMobileMoneyProvider == 'transak') {
+      return 'Pay with card via Transak';
+    }
+    return 'Pay with card or M-Pesa via Paystack';
+  }
+
+  /// Card checkout: createPayment (Cloud Function) → open hosted checkout in browser.
   Future<void> _processFiatTopUp() async {
     if (_amountCtrl.text.isEmpty) {
       _showError('Please enter an amount');
@@ -239,6 +334,7 @@ class _TopUpPageState extends State<TopUpPage> {
       final result = await paymentService.createPayment(
         amount: amount,
         currency: _selectedCurrency,
+        provider: _cardMobileMoneyProvider,
         email: email,
         firstName: _firstNameCtrl.text.trim().isNotEmpty
             ? _firstNameCtrl.text.trim()
@@ -266,12 +362,21 @@ class _TopUpPageState extends State<TopUpPage> {
 
       final paystackAmount = result['paystackAmount'];
       final paystackCurrency = result['paystackCurrency']?.toString();
+      final providerLabel = _cardMobileMoneyProviderLabel;
       var message = 'Complete payment in your browser.';
-      if (paystackAmount != null &&
+      if (_cardMobileMoneyProvider == 'paystack' &&
+          paystackAmount != null &&
           paystackCurrency != null &&
           _selectedCurrency.toUpperCase() != paystackCurrency.toUpperCase()) {
         message =
             'You will be charged $paystackCurrency $paystackAmount on Paystack.';
+      } else if (_cardMobileMoneyProvider == 'transak') {
+        final chargeAmount = result['amount'];
+        final chargeCurrency = result['currency']?.toString() ?? _selectedCurrency;
+        if (chargeAmount != null) {
+          message =
+              'You will pay $chargeCurrency $chargeAmount on Transak.';
+        }
       }
 
       final launched = await launchUrl(
@@ -284,6 +389,7 @@ class _TopUpPageState extends State<TopUpPage> {
           checkoutUrl,
           invoiceId,
           '$message (automatic launch failed — use options below)',
+          providerLabel: providerLabel,
         );
       }
     } catch (e) {
@@ -321,7 +427,7 @@ class _TopUpPageState extends State<TopUpPage> {
     Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
         builder: (_) => DirectFiatDepositScreen(
-          fiatBalance: _fiatBalance,
+          fiatBalance: _availableBalanceForSelected,
           walletCurrencyCode: _selectedCurrency,
           initialDepositCountry: widget.initialDepositCountry,
         ),
@@ -365,8 +471,12 @@ class _TopUpPageState extends State<TopUpPage> {
     );
   }
 
-  void _showPaymentLaunchedDialog(String checkoutUrl, String paymentId, String? message, {bool isTransFi = false}) {
-    final providerLabel = isTransFi ? 'TransFi' : 'Paystack';
+  void _showPaymentLaunchedDialog(
+    String checkoutUrl,
+    String paymentId,
+    String? message, {
+    required String providerLabel,
+  }) {
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
@@ -412,10 +522,8 @@ class _TopUpPageState extends State<TopUpPage> {
                 const SizedBox(height: 16),
               ],
               Text(
-                isTransFi
-                    ? 'Please complete your payment using one of the options below:'
-                    : 'Complete payment in your browser. When finished, return to SafariTap — '
-                        'confirmation happens automatically via the app link.',
+                'Complete payment in your browser. When finished, return to the app — '
+                'confirmation happens automatically via the app link.',
                 style: const TextStyle(fontSize: 14),
               ),
               const SizedBox(height: 16),
@@ -521,7 +629,7 @@ class _TopUpPageState extends State<TopUpPage> {
     final primary = Theme.of(context).colorScheme.primary;
     final availableLabel = _hideBalance
         ? 'Available: •••• $_selectedCurrency'
-        : 'Available: ${_fiatBalance.toStringAsFixed(2)} $_selectedCurrency';
+        : 'Available: ${_availableBalanceForSelected.toStringAsFixed(2)} $_selectedCurrency';
     final nextEnabled = _selectedMethod != _TopUpPaymentMethod.cryptoDeposit;
     final nextLabel = nextEnabled ? 'Next' : 'Copy address below';
 
@@ -580,7 +688,7 @@ class _TopUpPageState extends State<TopUpPage> {
                     },
                   ),
                   const SizedBox(height: 8),
-                  if (_isLoadingBalance)
+                  if (_isLoadingBalance && !_hasBalanceData)
                     SizedBox(
                       height: 16,
                       width: 16,
@@ -609,7 +717,7 @@ class _TopUpPageState extends State<TopUpPage> {
                   const SizedBox(height: 16),
                   _PaymentMethodTile(
                     title: 'Card / mobile money',
-                    subtitle: 'Pay with card or M-Pesa via Paystack',
+                    subtitle: _cardMobileMoneySubtitle,
                     brandIcon: Icons.payment,
                     selected: _selectedMethod == _TopUpPaymentMethod.cardMobileMoney,
                     onTap: () => setState(

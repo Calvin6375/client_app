@@ -1,10 +1,10 @@
-# TruePay (Pretium) - Digital Wallet Application
+# SafariCard
 
-A comprehensive Flutter-based digital wallet application that enables users to manage fiat and cryptocurrency balances, process payments, send money, swap currencies, and top up their wallets. Built with Firebase backend services and IntaSend payment integration.
+Flutter digital wallet for fiat and crypto: balances, top-ups, transfers, swaps, and Circle USDC. Package name: `pretium`. Backend: Firebase (Auth, Realtime Database, Firestore, Cloud Functions, FCM).
 
 ---
 
-## 📋 Table of Contents
+## Table of Contents
 
 1. [Overview](#overview)
 2. [Features](#features)
@@ -19,732 +19,394 @@ A comprehensive Flutter-based digital wallet application that enables users to m
 11. [Development Guidelines](#development-guidelines)
 12. [Security](#security)
 13. [API Integration](#api-integration)
+14. [Platform Support](#platform-support)
 
 ---
 
-## 🎯 Overview
+## Overview
 
-TruePay is a modern digital wallet application that provides users with a seamless experience for managing both fiat currencies (USD, KES, UGX, TZS, EUR, GBP) and cryptocurrencies (USDT, USDC, BNB). The application features:
+SafariCard is a dual-wallet app for African and international currencies plus stablecoins:
 
-- **Dual Wallet System**: Separate wallets for fiat and crypto currencies
-- **Payment Processing**: Integration with IntaSend for secure payment processing
-- **Money Transfer**: Send money to other users with multiple payment methods
-- **Currency Swap**: Exchange between fiat and crypto currencies
-- **Top-up Functionality**: Add funds via fiat payments or cryptocurrency deposits
-- **Real-time Updates**: Live balance updates using Firebase Realtime Database
-- **Order Management**: Track all transactions and orders in Firestore
-
----
-
-## ✨ Features
-
-### Core Features
-
-1. **Authentication & User Management**
-   - Email/password authentication via Firebase Auth
-   - User profile management in Firestore
-   - Automatic wallet initialization on user registration
-
-2. **Dual Wallet System**
-   - **Fiat Wallet**: Supports USD, KES, UGX, TZS, EUR, GBP
-   - **Crypto Wallet**: Supports USDT, USDC, BNB
-   - Real-time balance synchronization
-   - Side-by-side balance display
-
-3. **Top-up (Add Funds)**
-   - **Fiat Top-up**: Via IntaSend payment gateway
-     - Supports multiple currencies
-     - Card and mobile money payments
-     - Secure checkout flow
-   - **Crypto Top-up**: Direct cryptocurrency deposits
-     - Multiple crypto addresses (USDT, USDC, BNB)
-     - Network-specific addresses (Tron, Solana, BNB Smart Chain)
-     - Copy-to-clipboard functionality
-
-4. **Send Money**
-   - Multi-step transaction flow
-   - Amount selection with currency conversion
-   - Payment method selection
-   - Recipient details collection
-   - Transaction review and confirmation
-   - Order creation in Firestore
-
-5. **Currency Swap**
-   - Real-time exchange rates
-   - Swap between fiat and crypto currencies
-   - Balance validation
-   - Confirmation flow with success animation
-   - Order tracking
-
-6. **Financial Services**
-   - Send Money
-   - Buy Goods
-   - Pay Bills
-   - Airtime Purchase
-
-7. **Transaction History**
-   - Recent transactions display
-   - Order tracking in Firestore
-   - Payment status monitoring
+- **Fiat wallet**: USD, KES, NGN, GHS, UGX (and related deposit countries)
+- **Crypto wallet**: USDT (legacy balances) and **USDC** via Circle
+- **Top-up**: Paystack / Transak hosted checkout, direct fiat deposit, crypto deposit
+- **Send money**: Multi-step transfer flow with order tracking
+- **Swap**: Fiat ↔ crypto with live rates
+- **Realtime balances**: Firebase Realtime Database streams
+- **Push notifications**, biometric login, light/dark theme
 
 ---
 
-## 🏗️ Architecture
+## Features
 
-### Architecture Pattern
+### Authentication & access
 
-The application follows a **Feature-Based Modular Architecture** with clear separation of concerns:
+- Email/password via Firebase Auth
+- Registration through backend HTTP API (`/api/register`)
+- Password reset, biometric session unlock (`local_auth` + secure storage)
+- App access guard (customer claims / KYC-style gates)
+- Wallet verification screen before crypto transfers
+
+### Dual wallet
+
+- Side-by-side fiat and crypto cards on the home dashboard
+- Per-currency fiat balances; swipe between currencies
+- USDT + Circle USDC (send, receive, balance, transaction history)
+- Client is read-only for balances; writes go through Cloud Functions / APIs
+
+### Top-up
+
+- **Card / mobile money**: `PaymentService.createPayment` → Paystack (African currencies) or Transak (USD, GBP, EUR, etc.)
+- **Direct fiat deposit**: Country-aware deposit flow
+- **Crypto deposit**: Deposit addresses / on-chain funding
+- Deep-link / callback handling after hosted checkout (`app_links`, `PaymentCallbackService`)
+- Receipt save / share helpers
+
+### Send money & swap
+
+- Amount → payment method → recipient → review
+- Swap with rates service and order creation
+- Transaction list, detail view, and simple charts
+
+### Settings & notifications
+
+- Wallet settings: profile, theme, biometric toggle, sign out
+- Contact support
+- In-app notifications page + FCM / local notifications
+
+---
+
+## Architecture
+
+Feature-based modules with clear layers:
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│                    Presentation Layer                    │
-│  (Screens, Widgets, UI Components)                      │
-└─────────────────────────────────────────────────────────┘
-                         │
-                         ▼
-┌─────────────────────────────────────────────────────────┐
-│                    Service Layer                         │
-│  (Business Logic, API Calls, Cloud Functions)           │
-└─────────────────────────────────────────────────────────┘
-                         │
-                         ▼
-┌─────────────────────────────────────────────────────────┐
-│                  Repository Layer                        │
-│  (Data Access, Firebase Operations)                      │
-└─────────────────────────────────────────────────────────┘
-                         │
-                         ▼
-┌─────────────────────────────────────────────────────────┐
-│                    Data Layer                            │
-│  (Firebase Realtime DB, Firestore, Models)              │
-└─────────────────────────────────────────────────────────┘
+Presentation (screens / widgets)
+        ↓
+Services (auth, payments, crypto API, notifications)
+        ↓
+Repositories (wallet, user — mostly read)
+        ↓
+Firebase / HTTP Cloud Functions
 ```
 
-### Key Architectural Principles
+**Principles**
 
-1. **Separation of Concerns**: Clear boundaries between UI, business logic, and data access
-2. **Repository Pattern**: All data access goes through repositories
-3. **Service Layer**: Business logic encapsulated in service classes
-4. **Read-Only Client**: Client code cannot directly write to sensitive data (payments, wallets)
-5. **Cloud Functions**: All write operations for payments and wallets handled server-side
-6. **Real-time Updates**: Stream-based data synchronization
+1. Separation of UI, business logic, and data access
+2. Repository pattern for client data reads
+3. Sensitive writes (payments, wallet balances) only on the server
+4. Stream-based realtime balance updates
+5. Theme via `Provider` (`ThemeProvider`)
 
 ---
 
-## 🛠️ Tech Stack
+## Tech Stack
 
 ### Frontend
-- **Framework**: Flutter 3.7.0+
-- **Language**: Dart
-- **State Management**: StatefulWidget (can be extended with Provider/Riverpod/Bloc)
-- **Navigation**: Named routes with MaterialApp
-- **UI Components**: Material Design 3
 
-### Backend & Services
-- **Firebase Authentication**: User authentication
-- **Firebase Realtime Database**: Real-time wallet balances and payment tracking
-- **Cloud Firestore**: User profiles and order management
-- **Firebase Cloud Functions**: Server-side payment and wallet operations
-- **Firebase Cloud Messaging**: Push notifications (configured)
-- **IntaSend API**: Payment processing gateway
+| Area | Choice |
+|------|--------|
+| Framework | Flutter (Dart SDK `^3.1.4`) |
+| State | `StatefulWidget` + `Provider` (theme) |
+| Navigation | Named routes (`RouteNames`) |
+| UI | Material 3, light/dark palettes |
 
-### Key Dependencies
+### Backend & integrations
+
+- Firebase Auth, Realtime Database, Firestore, Cloud Functions, FCM
+- **Paystack** / **Transak** for fiat top-up checkout
+- **Circle** for USDC wallet, balance, send, and history (`cryptoApi`)
+- Binance-backed rates via callable / HTTP APIs (see `api.md`)
+
+### Key dependencies
 
 ```yaml
 # Firebase
-firebase_core: ^3.6.0
-cloud_firestore: ^5.4.3
-firebase_auth: ^5.3.1
-firebase_database: ^11.1.3
-cloud_functions: ^5.1.5
-firebase_messaging: ^15.1.3
+firebase_core, cloud_firestore, firebase_auth, firebase_database
+cloud_functions, firebase_messaging, flutter_local_notifications
 
-# UI & Utilities
-get: ^4.7.2
-font_awesome_flutter: ^10.8.0
-shared_preferences: ^2.2.2
-confetti: ^0.7.0
+# Payments / deep links / crypto helpers
+http, url_launcher, app_links, crypto, uuid
 
-# Network
-http: ^0.13.4
-url_launcher: ^6.2.1
+# UX & security
+provider, confetti, font_awesome_flutter, shared_preferences
+flutter_secure_storage, local_auth, gal, image, share_plus
 ```
+
+Version: **1.0.0+13** (`pubspec.yaml`).
 
 ---
 
-## 📁 Project Structure
+## Project Structure
 
 ```
 lib/
-├── app/                          # App-level configuration
-│   ├── app.dart                  # Main app widget
-│   └── route_names.dart          # Route name constants
-│
-├── core/                         # Core utilities and constants
-│   ├── constants/
-│   │   ├── app_colors.dart       # Color definitions
-│   │   ├── app_strings.dart     # String constants
-│   │   └── app_text_styles.dart # Text style definitions
-│   └── widgets/                  # Reusable core widgets
-│       ├── custom_button.dart
-│       └── input_field.dart
-│
-├── features/                     # Feature modules
-│   ├── auth/                     # Authentication feature
-│   │   ├── screens/
-│   │   │   ├── login_page.dart
-│   │   │   └── register_page.dart
-│   │   └── widgets/              # Auth-specific widgets
-│   │
-│   ├── home/                     # Home/Dashboard feature
-│   │   └── screens/
-│   │       └── landing_page.dart
-│   │
-│   ├── splash/                   # Splash screens
-│   │   └── screens/
-│   │       ├── splash_page.dart
-│   │       ├── splash_page_1.dart
-│   │       └── splash_page_2.dart
-│   │
-│   ├── topup/                     # Top-up feature
-│   │   ├── screens/
-│   │   │   └── topup_page.dart   # Main top-up screen
-│   │   └── services/
-│   │       └── intasend_service.dart  # IntaSend integration
-│   │
-│   ├── send_money/               # Send money feature
-│   │   └── screens/
-│   │       ├── send_money_page.dart
-│   │       ├── send_amount_screen.dart
-│   │       ├── payment_method_screen.dart
-│   │       ├── recipient_details_screen.dart
-│   │       └── review_details_screen.dart
-│   │
-│   └── swap/                      # Currency swap feature
-│       ├── screens/
-│       │   └── swap_page.dart
-│       ├── services/
-│       │   └── rates_service.dart
-│       └── widgets/
-│           └── currency_picker_bottom_sheet.dart
-│
-├── models/                        # Data models
-│   ├── wallet_model.dart          # Wallet data model
-│   ├── user_model.dart            # User profile model
-│   ├── payment_model.dart         # Payment data model
-│   ├── order_model.dart           # Order data model
-│   └── transaction_details_model.dart
-│
-├── repositories/                  # Data access layer
-│   ├── wallet_repository.dart     # Wallet operations (READ-ONLY)
-│   ├── user_repository.dart       # User profile operations
-│   └── payment_repository.dart     # Payment read operations
-│
-├── services/                      # Business logic layer
-│   ├── auth_service.dart          # Authentication service
-│   ├── payment_service.dart       # Payment operations via Cloud Functions
-│   ├── order_service.dart         # Order management
-│   └── firebase_payment_service.dart  # Legacy payment service
-│
-├── utils/                         # Utility classes
-│   ├── logger.dart                # Logging utility
-│   ├── navigation_service.dart    # Navigation helpers
-│   └── validators.dart            # Input validation
-│
-├── widgets/                       # Shared UI widgets
-│   ├── wallet_card.dart           # Wallet balance card
-│   ├── header_widget.dart         # App header
-│   ├── financial_service.dart     # Financial service buttons
-│   └── placeholder_transactions.dart
-│
-└── main.dart                      # Application entry point
+├── app/
+│   └── route_names.dart
+├── core/
+│   ├── constants/          # colors, auth config, Cloud Functions URLs
+│   ├── theme/              # ThemeProvider
+│   └── widgets/
+├── features/
+│   ├── auth/               # login, register, forgot password
+│   ├── splash/
+│   ├── home/               # landing / dashboard
+│   ├── topup/              # Paystack/Transak, direct fiat, crypto deposit
+│   ├── send_money/
+│   ├── swap/
+│   ├── crypto/             # Circle USDC send / receive / history
+│   ├── transactions/
+│   ├── notifications/
+│   ├── wallet/
+│   ├── wallet_settings/
+│   └── wallet_verification/
+├── models/
+├── repositories/           # wallet_repository, user_repository
+├── services/               # auth, payments, notifications, biometrics, …
+├── widgets/                # wallet_card, financial_service, headers, …
+└── main.dart
 ```
 
----
-
-## 🔑 Key Components
-
-### 1. Authentication System
-
-**Location**: `lib/services/auth_service.dart`
-
-- **Email/Password Authentication**: Sign up, sign in, sign out
-- **Password Reset**: Email-based password recovery
-- **Session Management**: Automatic session handling via Firebase Auth
-- **Error Handling**: User-friendly error messages
-
-**Flow**:
-1. User enters credentials on login/register page
-2. `AuthService` handles Firebase Auth operations
-3. On successful registration, Cloud Function creates user profile and wallets
-4. User is redirected to landing page
-
-### 2. Wallet System
-
-**Location**: `lib/repositories/wallet_repository.dart`, `lib/models/wallet_model.dart`
-
-**Dual Wallet Architecture**:
-- **Fiat Wallet**: `wallet/{userId}/fiat/{currency}` in Realtime Database (e.g., `wallet/{userId}/fiat/USD`)
-- **Crypto Wallet**: `wallet/{userId}/crypto/{currencyCode}` in Realtime Database
-
-**Features**:
-- Real-time balance streaming
-- Separate balances for each currency
-- Automatic wallet initialization on user creation
-- Read-only client access (updates via Cloud Functions only)
-
-**Wallet Initialization**:
-- Triggered automatically when a new user is created
-- Creates both fiat (USD) and crypto (USDT) wallets with 0 balance
-- Handled by Cloud Function: `initializeWalletOnUserCreate`
-
-### 3. Payment Processing
-
-**Location**: `lib/services/payment_service.dart`, `lib/features/topup/services/intasend_service.dart`
-
-**Payment Flow**:
-1. User enters amount and payment details on top-up page
-2. `IntaSendService` creates checkout session via IntaSend API
-3. `PaymentService` creates payment record via Cloud Function
-4. User completes payment on IntaSend checkout page
-5. Webhook updates payment status
-6. Cloud Function updates wallet balance on successful payment
-7. Order is created in Firestore for tracking
-
-**Payment Methods**:
-- **Fiat**: Card payments, Mobile Money (via IntaSend)
-- **Crypto**: Direct cryptocurrency deposits to provided addresses
-
-### 4. Top-up Feature
-
-**Location**: `lib/features/topup/screens/topup_page.dart`
-
-**Features**:
-- Dual balance display (Fiat + Crypto side by side)
-- Amount input with quick-add buttons
-- Currency selection for fiat payments
-- Fiat payment form (email, name, currency)
-- Crypto deposit addresses with copy functionality
-- Automatic crypto wallet creation if missing
-- Order creation on payment initiation
-
-**UI Components**:
-- `_BalanceHeader`: Displays both USD and USDT balances
-- `_SetAmountCard`: Amount input with quick-add chips
-- `_FiatOptionCard`: Fiat payment form
-- `_CryptoOptionCard`: Cryptocurrency deposit addresses
-
-### 5. Send Money Feature
-
-**Location**: `lib/features/send_money/screens/`
-
-**Multi-Step Flow**:
-1. **Amount Screen**: Enter amount, select currencies
-2. **Payment Method Screen**: Choose payment method
-3. **Recipient Details Screen**: Enter recipient information
-4. **Review Screen**: Confirm transaction details
-5. **Order Creation**: Transaction saved to Firestore
-
-**Transaction Model**: `TransactionDetails` tracks all transaction data through the flow
-
-### 6. Currency Swap Feature
-
-**Location**: `lib/features/swap/screens/swap_page.dart`
-
-**Features**:
-- Real-time exchange rate calculation
-- Balance validation before swap
-- Currency selection with bottom sheet picker
-- Confirmation dialog with rate details
-- Success animation with confetti
-- Order creation for swap transactions
-
-**Rates Service**: `RatesService` provides exchange rates between currencies
+Cloud Functions live under `functions/` (see also `api.md` for the full HTTP/callable surface).
 
 ---
 
-## 🔥 Firebase Integration
+## Key Components
 
-### Firebase Services Used
+### Authentication
 
-1. **Firebase Authentication**
-   - Email/password authentication
-   - User session management
-   - Password reset functionality
+`lib/services/auth_service.dart`, `lib/features/auth/`
 
-2. **Firebase Realtime Database**
-   - Wallet balances (real-time sync)
-   - Payment tracking
-   - Path structure:
-     ```
-     wallet/
-       {userId}/
-         balance/          # Fiat wallet
-         crypto/
-           USDT/          # Crypto wallets
-           USDC/
-           BNB/
-     payments/
-       {paymentId}/       # Payment records
-     users/
-       {userId}/
-         payments/        # User payment references
-     ```
+- Sign up / sign in / sign out / password reset
+- Post-auth routing and registration API
+- Biometric credential storage: `BiometricSessionService`
 
-3. **Cloud Firestore**
-   - User profiles: `users/{userId}`
-   - Orders: `orders/{orderId}`
-   - Document-based storage for structured data
+### Wallets
 
-4. **Firebase Cloud Functions**
-   - `initializeWalletOnUserCreate`: Auto-creates wallets on user registration
-   - `createPayment`: Creates payment records (server-side)
-   - `handlePaymentWebhook`: Processes payment status updates
-   - `updateWalletAfterPayment`: Updates wallet balance after payment
-   - `initializeCryptoWallet`: Creates crypto wallet for existing users
+`lib/repositories/wallet_repository.dart`, `lib/widgets/wallet_card.dart`
 
-5. **Firebase Cloud Messaging**
-   - Push notification support (configured)
-   - Background message handling
+- Fiat: `wallet/{userId}/fiat/{currency}`
+- Crypto: `wallet/{userId}/crypto/{currencyCode}`
+- USDC also refreshed from Circle HTTP API for send validation
 
-### Database Security Rules
+### Payments & top-up
 
-**Realtime Database** (`database.rules.json`):
-- Users can only read their own wallet data
-- Client writes to wallet balances are blocked (Cloud Functions only)
-- Exception: Crypto wallet initialization (balance must be 0)
-- Payment writes are blocked (Cloud Functions only)
+`lib/services/payment_service.dart`, `lib/features/topup/`
 
-**Firestore** (`firestore.rules`):
-- Users can read/write their own profile
-- Orders are user-scoped
-- Admin access can be configured separately
+1. User enters amount and method on top-up
+2. Callable `createPayment` creates the payment server-side
+3. App opens hosted checkout (Paystack or Transak)
+4. Webhook / callback updates status; wallet credited server-side
+
+### Circle USDC
+
+`lib/features/crypto/`, `CloudFunctionsApiConfig.baseCryptoApiUrl`
+
+- `GET /crypto/wallet`, `/crypto/balance`, `/crypto/transactions`
+- `POST /crypto/send` (idempotency key supported)
+
+### Send money & swap
+
+- Multi-step UI under `features/send_money/`
+- `features/swap/` + `RatesService` / `SwapOrderService`
 
 ---
 
-## 💳 Payment System
+## Firebase Integration
 
-### IntaSend Integration
+| Service | Use |
+|---------|-----|
+| Auth | Sessions, ID tokens for callables / HTTP APIs |
+| Realtime Database | Wallet balances, payment records |
+| Firestore | Profiles, orders, notifications metadata |
+| Cloud Functions | Payments, wallet init, rates, registration, Circle proxy |
+| FCM | Push + background handler in `main.dart` |
 
-**Service**: `lib/features/topup/services/intasend_service.dart`
+**Typical RTDB shape**
 
-**Features**:
-- Checkout session creation
-- Payment URL generation
-- Browser launch for payment completion
-- Support for multiple currencies
-- Test and production modes
+```
+wallet/{userId}/fiat/{currency}
+wallet/{userId}/crypto/{USDT|USDC}
+payments/{paymentId}
+users/{userId}/payments/...
+```
 
-**Payment Flow**:
-1. User fills payment form on top-up page
-2. `IntaSendService.createCheckout()` called with payment details
-3. IntaSend API returns checkout URL
-4. User redirected to IntaSend payment page
-5. Payment completed on IntaSend
-6. Webhook notifies application (via Cloud Function)
-7. Wallet balance updated automatically
+**Notable functions** (local `functions/index.js` and deployed API set):
 
-### Order Management
+- `initializeWalletOnUserCreate`
+- `createPayment`, `handlePaymentWebhook`, `updateWalletAfterPayment`
+- `initializeCryptoWallet`
+- HTTP: `/api/*` (register, countries, rates, …) and `cryptoApi` for Circle
 
-**Service**: `lib/services/order_service.dart`
-
-**Features**:
-- Order creation in Firestore
-- Order status tracking
-- User order history
-- Order metadata storage
-
-**Order Model**: Tracks order type (topup, swap, send_money), amount, currency, status, and metadata
+Rules: see `database.rules.json`, `firestore.rules`, and `SECURITY_RULES_SETUP.md`.
 
 ---
 
-## 💰 Wallet System
+## Payment System
 
-### Wallet Structure
+### Fiat checkout
 
-**Fiat Wallet**:
-- Path: `wallet/{userId}/fiat/{currency}` (e.g., `wallet/{userId}/fiat/USD`)
-- Default currency: USD
-- Supports: USD, KES, UGX, TZS, EUR, GBP
-- Structure:
-  ```json
-  {
-    "balance": 0.0,
-    "currency": "USD",
-    "updatedAt": "2024-01-01T00:00:00Z",
-    "createdAt": "2024-01-01T00:00:00Z"
-  }
-  ```
+- African currencies → **Paystack**
+- USD / GBP / EUR and other non-African → **Transak**
+- Created only via Cloud Functions; client never writes payment docs for settlement
 
-**Crypto Wallet**:
-- Path: `wallet/{userId}/crypto/{currencyCode}`
-- Supports: USDT, USDC, BNB
-- Structure:
-  ```json
-  {
-    "balance": 0.0,
-    "currency": "USDT",
-    "updatedAt": "2024-01-01T00:00:00Z",
-    "createdAt": "2024-01-01T00:00:00Z"
-  }
-  ```
+### Direct fiat & crypto
 
-### Wallet Operations
+- Direct deposit flow: `direct_fiat_deposit_flow.dart`
+- Country catalog: `TopupDepositCountry`
+- Crypto deposit option on the same top-up screen
 
-**Read Operations** (Client):
-- `getWalletBalance(uid)`: Get fiat wallet balance
-- `getCryptoWalletBalance(uid, currencyCode)`: Get crypto wallet balance
-- `streamWalletBalance(uid)`: Stream fiat wallet updates
-- `streamCryptoWalletBalance(uid, currencyCode)`: Stream crypto wallet updates
+### Orders
 
-**Write Operations** (Cloud Functions Only):
-- Wallet initialization on user creation
-- Balance updates after payment completion
-- Crypto wallet creation (if missing)
-
-**Security**:
-- Client code is **READ-ONLY** for wallet data
-- All balance updates happen server-side via Cloud Functions
-- Database rules enforce this restriction
+Historical order tracking remains Firestore-backed for top-ups, swaps, and transfers (see transaction models / services).
 
 ---
 
-## 🚀 Getting Started
+## Wallet System
+
+**Fiat example**
+
+```json
+{
+  "balance": 0.0,
+  "currency": "USD",
+  "updatedAt": "...",
+  "createdAt": "..."
+}
+```
+
+**Crypto**: same shape under `crypto/{USDT|USDC}`; USDC spendable balance also comes from Circle.
+
+Client APIs (repository): get / stream fiat and crypto balances. All balance mutations are server-side.
+
+---
+
+## Getting Started
 
 ### Prerequisites
 
-- Flutter SDK 3.7.0 or higher
-- Dart SDK 3.7.0 or higher
+- Flutter / Dart (SDK `^3.1.4`)
 - Firebase project configured
-- Node.js (for Cloud Functions)
-- Android Studio / Xcode (for mobile development)
+- Node.js (Cloud Functions)
+- Android Studio and/or Xcode for device builds
 
-### Installation
+### Install
 
-1. **Clone the repository**:
-   ```bash
-   git clone <repository-url>
-   cd pretium
-   ```
+```bash
+git clone <repository-url>
+cd pretium
+flutter pub get
+```
 
-2. **Install Flutter dependencies**:
-   ```bash
-   flutter pub get
-   ```
+### Firebase
 
-3. **Firebase Setup**:
-   - Ensure `google-services.json` (Android) and `GoogleService-Info.plist` (iOS) are in place
-   - Verify `lib/firebase_options.dart` is generated
-   - If not, run: `flutterfire configure`
+1. Place `google-services.json` (Android) and `GoogleService-Info.plist` (iOS)
+2. Ensure `lib/firebase_options.dart` exists (`flutterfire configure` if needed)
+3. Deploy functions and rules as needed:
 
-4. **Cloud Functions Setup**:
-   ```bash
-   cd functions
-   npm install
-   ```
+```bash
+cd functions && npm install && cd ..
+firebase deploy --only functions
+firebase deploy --only database,firestore:rules
+```
 
-5. **Deploy Cloud Functions**:
-   ```bash
-   firebase deploy --only functions
-   ```
+### Run
 
-6. **Deploy Database Rules**:
-   ```bash
-   firebase deploy --only database
-   ```
+```bash
+flutter run
+```
 
-7. **Run the application**:
-   ```bash
-   flutter run
-   ```
+### Flutter Web / PWA (Firebase Hosting)
 
-### Configuration
+Production URL: https://app.truepay.live
 
-**IntaSend API Keys**:
-- Update `intaSendPublicKey` in `lib/features/topup/screens/topup_page.dart`
-- Set `isTestMode` to `false` for production
+```bash
+./scripts/build_web.sh
+firebase deploy --only hosting:app
+```
 
-**Firebase Configuration**:
-- Verify Firebase project ID in `firebase.json`
-- Check database URL in `firebase.md`
+This builds a release PWA with Flutter’s offline-first service worker, branded splash (`web/index.html`), and SafariCard manifest/icons. Hosting cache headers live in `firebase.json`.
+
+Payment provider credentials and Circle keys belong in Cloud Functions config / secrets — not in the Flutter client.
 
 ---
 
-## 📝 Development Guidelines
+## Development Guidelines
 
-### Code Organization
-
-1. **Feature-Based Structure**: Each feature is self-contained in its own directory
-2. **Separation of Concerns**: UI, business logic, and data access are separated
-3. **Repository Pattern**: All data access goes through repositories
-4. **Service Layer**: Business logic in service classes
-
-### Naming Conventions
-
-- **Files**: `snake_case.dart`
-- **Classes**: `PascalCase`
-- **Variables/Methods**: `camelCase`
-- **Constants**: `UPPER_SNAKE_CASE`
-
-### State Management
-
-- Currently using `StatefulWidget` for local state
-- Can be extended with Provider, Riverpod, or Bloc for global state
-- Streams used for real-time data (wallet balances)
-
-### Error Handling
-
-- All services include try-catch blocks
-- User-friendly error messages via `Logger`
-- Firebase errors are caught and displayed appropriately
-
-### Logging
-
-- Use `Logger` utility for all logging
-- Levels: `debug`, `info`, `warning`, `error`, `success`
-- Logs include context and error details
+- **Features** own their screens, models, and feature services
+- **Files** `snake_case.dart` · **Classes** `PascalCase` · **members** `camelCase`
+- Prefer streams for wallet UI; cache short-lived dashboard data via `DashboardSessionCache`
+- Log with `Logger` (`debug` / `info` / `warning` / `error` / `success`)
+- Do not write wallet balances or payment settlement from the client
 
 ---
 
-## 🔒 Security
+## Security
 
-### Security Measures
-
-1. **Client-Side Restrictions**:
-   - Wallet balances are READ-ONLY from client
-   - Payment creation/updates via Cloud Functions only
-   - Database rules enforce write restrictions
-
-2. **Server-Side Validation**:
-   - All payment operations validated in Cloud Functions
-   - User authentication required for all operations
-   - Input validation on all API calls
-
-3. **Data Protection**:
-   - User data is scoped to authenticated users
-   - Database rules prevent unauthorized access
-   - Sensitive operations require authentication
-
-4. **Payment Security**:
-   - Payment processing via secure IntaSend gateway
-   - Payment IDs generated server-side
-   - Webhook validation for payment status
-
-### Security Rules
-
-**Realtime Database**:
-- Users can only read their own wallet data
-- Wallet writes blocked (Cloud Functions only)
-- Payment writes blocked (Cloud Functions only)
-- Crypto wallet initialization allowed (balance must be 0)
-
-**Firestore**:
-- Users can read/write their own profile
-- Orders are user-scoped
-- Admin access configurable
+1. Wallet and payment writes blocked for clients (RTDB / Firestore rules + Functions)
+2. Callable and HTTP APIs require Firebase Auth (Bearer ID token)
+3. Biometric login stores credentials in platform secure storage
+4. Hosted checkout and Circle operations run server-side
 
 ---
 
-## 🔌 API Integration
+## API Integration
 
-### IntaSend API
+Full reference: **[api.md](./api.md)**.
 
-**Base URLs**:
-- Test: `https://sandbox.intasend.com/api/v1`
-- Production: `https://payment.intasend.com/api/v1`
+**Cloud Functions HTTP base** (from `CloudFunctionsApiConfig`):
 
-**Endpoints Used**:
-- `POST /checkout/`: Create checkout session
-- Returns checkout URL for payment completion
+```
+https://us-central1-<project-id>.cloudfunctions.net/api
+https://us-central1-<project-id>.cloudfunctions.net/cryptoApi
+```
 
-**Authentication**:
-- Public key authentication
-- Key stored in app (consider environment variables for production)
+**Callable example**
 
-### Firebase Cloud Functions
-
-**Available Functions**:
-- `createPayment`: Create payment record
-- `handlePaymentWebhook`: Process payment webhooks
-- `updateWalletAfterPayment`: Update wallet balance
-- `initializeCryptoWallet`: Initialize crypto wallet
-
-**Calling Functions**:
 ```dart
-final functions = FirebaseFunctions.instance;
-final callable = functions.httpsCallable('functionName');
-final result = await callable.call({'param': 'value'});
+final functions = FirebaseFunctions.instanceFor(region: 'us-central1');
+final callable = functions.httpsCallable('createPayment');
+final result = await callable.call({
+  'amount': 100,
+  'currency': 'KES',
+  'provider': 'paystack',
+});
 ```
 
 ---
 
-## 📱 Platform Support
+## Platform Support
 
-- ✅ Android (min SDK 23)
-- ✅ iOS
-- ✅ Web
-- ✅ Windows
-- ✅ macOS
-- ✅ Linux
+- Android (min SDK 23)
+- iOS
+- Web
+- Windows / macOS / Linux
 
 ---
 
-## 🧪 Testing
-
-### Running Tests
+## Testing
 
 ```bash
 flutter test
 ```
 
-### Test Coverage
+---
 
-- Unit tests for services and repositories
-- Widget tests for UI components
-- Integration tests for critical flows
+## Additional documentation
+
+| Doc | Topic |
+|-----|--------|
+| [api.md](./api.md) | Backend callable + HTTP APIs |
+| [firebase.md](./firebase.md) | Firebase setup and data paths |
+| [SECURITY_RULES_SETUP.md](./SECURITY_RULES_SETUP.md) | Rules deployment |
+| [REFACTORING_GUIDE.md](./REFACTORING_GUIDE.md) | Architecture notes |
 
 ---
 
-## 📄 License
+## Version
 
-[Specify your license here]
-
----
-
-## 🤝 Contributing
-
-[Contributing guidelines]
+- **1.0.0+13** — SafariCard wallet: dual fiat/crypto, Paystack/Transak top-up, Circle USDC, send/swap, notifications, biometrics, light/dark theme
 
 ---
 
-## 📞 Support
-
-For issues and questions:
-- Create an issue in the repository
-- Check `firebase.md` for Firebase-specific documentation
-- Review `REFACTORING_GUIDE.md` for architecture details
-
----
-
-## 🔄 Version History
-
-- **v1.0.0+3**: Current version
-  - Dual wallet system (Fiat + Crypto)
-  - IntaSend payment integration
-  - Send money feature
-  - Currency swap feature
-  - Order management system
-  - Real-time balance updates
-
----
-
-## 📚 Additional Documentation
-
-- `firebase.md`: Comprehensive Firebase setup and usage
-- `REFACTORING_GUIDE.md`: Architecture and refactoring guidelines
-- `SECURITY_RULES_SETUP.md`: Security rules configuration
-- `WARP.md`: Additional project documentation
-
----
-
-**Built with ❤️ using Flutter and Firebase**
+Built with Flutter and Firebase

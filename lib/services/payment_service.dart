@@ -49,8 +49,8 @@ class PaymentService {
     await Future.delayed(const Duration(milliseconds: 800));
   }
 
-  /// Create a C2B wallet top-up via Cloud Function (Paystack hosted checkout).
-  /// Sends only amount, currency, and optional customer fields — no client checkout URL.
+  /// Create a C2B wallet top-up via Cloud Function (Paystack or Transak hosted checkout).
+  /// Sends amount, currency, optional customer fields, and optional [provider] (`paystack` | `transak`).
   Future<Map<String, dynamic>> createPayment({
     required double amount,
     required String currency,
@@ -58,6 +58,7 @@ class PaymentService {
     String? firstName,
     String? lastName,
     String? phoneNumber,
+    String? provider,
   }) async {
     try {
       Logger.info('🚀 ===== CREATING PAYMENT VIA CLOUD FUNCTION =====');
@@ -97,6 +98,7 @@ class PaymentService {
       Logger.info('   firstName: ${firstName ?? "N/A"}');
       Logger.info('   lastName: ${lastName ?? "N/A"}');
       Logger.info('   phoneNumber: ${phoneNumber ?? "N/A"}');
+      Logger.info('   provider: ${provider ?? "server default"}');
       Logger.info('');
       Logger.info('📡 Sending request to Cloud Function...');
       
@@ -108,6 +110,8 @@ class PaymentService {
         if (firstName != null && firstName.trim().isNotEmpty) 'firstName': firstName.trim(),
         if (lastName != null && lastName.trim().isNotEmpty) 'lastName': lastName.trim(),
         if (phoneNumber != null && phoneNumber.trim().isNotEmpty) 'phoneNumber': phoneNumber.trim(),
+        if (provider != null && provider.trim().isNotEmpty)
+          'provider': provider.trim().toLowerCase(),
       });
       
       final duration = DateTime.now().difference(startTime);
@@ -160,6 +164,8 @@ class PaymentService {
         'checkoutUrl': checkoutUrl,
         'amount': data['amount'],
         'currency': data['currency']?.toString(),
+        'status': data['status']?.toString(),
+        'provider': data['provider']?.toString() ?? provider,
         'paystackAmount': data['paystackAmount'],
         'paystackCurrency': data['paystackCurrency']?.toString(),
         'data': data,
@@ -420,7 +426,7 @@ Diagnostic steps:
     }
   }
 
-  /// Confirm a Paystack top-up after deep link return ([PaymentCallbackService]).
+  /// Confirm a Paystack or Transak top-up after deep link return ([PaymentCallbackService]).
   /// Sends only invoiceId — no client-side link_opened / status fields.
   /// Server webhook may already have credited the wallet; this call is idempotent.
   Future<Map<String, dynamic>> handlePaymentWebhook({

@@ -132,6 +132,29 @@ class TopupDepositCountry {
   static List<String> get depositCurrencyCodes =>
       depositSupported.map((c) => c.code).toList(growable: false);
 
+  /// African fiat codes routed to Paystack for card / mobile money top-ups.
+  static const Set<String> africanCurrencyCodes = {
+    'NGN',
+    'KES',
+    'GHS',
+    'UGX',
+    'TZS',
+    'ETB',
+    'BIF',
+    'CDF',
+  };
+
+  static bool isAfricanCurrency(String code) =>
+      africanCurrencyCodes.contains(code.trim().toUpperCase());
+
+  /// Card / mobile money funding provider for [currencyCode].
+  /// African currencies → Paystack; USD, GBP, EUR, and other non-African → Transak.
+  static String cardMobileMoneyProviderFor(String currencyCode) =>
+      isAfricanCurrency(currencyCode) ? 'paystack' : 'transak';
+
+  static String cardMobileMoneyProviderLabelFor(String currencyCode) =>
+      cardMobileMoneyProviderFor(currencyCode) == 'transak' ? 'Transak' : 'Paystack';
+
   /// Withdrawal wizard is Kenya-only.
   static const List<TopupDepositCountry> withdrawSupported =
       <TopupDepositCountry>[kenya];

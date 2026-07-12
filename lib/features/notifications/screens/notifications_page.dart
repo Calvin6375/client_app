@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -8,6 +10,7 @@ import 'package:pretium/utils/async_action_guard.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 final _markAllAsReadGuard = AsyncActionGuard();
+final _openDetailGuard = AsyncActionGuard();
 
 IconData _notificationIconFor(NotificationModel notification) {
   if (notification.isPromotion) return Icons.local_offer_rounded;
@@ -58,6 +61,9 @@ enum _NotificationFilterTab { transaction, system, promotions }
 
 class _NotificationsPageState extends State<NotificationsPage> {
   _NotificationFilterTab _selectedTab = _NotificationFilterTab.transaction;
+  bool _isMarkingAllRead = false;
+  String? _openingNotificationId;
+  final Set<String> _markingReadIds = {};
 
   List<NotificationModel> _filterNotifications(List<NotificationModel> notifications) {
     switch (_selectedTab) {
@@ -104,8 +110,11 @@ class _NotificationsPageState extends State<NotificationsPage> {
       builder: (context, snapshot) {
         final notifications = snapshot.data ?? [];
         final filtered = _filterNotifications(notifications);
-        final loading = snapshot.connectionState == ConnectionState.waiting;
+        final loading = snapshot.connectionState == ConnectionState.waiting &&
+            !snapshot.hasData;
         final hasUnread = filtered.any((n) => !n.read);
+        final interactionLocked =
+            loading || _isMarkingAllRead || _openingNotificationId != null;
 
         return Scaffold(
           backgroundColor: colors.background,
@@ -121,8 +130,19 @@ class _NotificationsPageState extends State<NotificationsPage> {
               if (!loading && hasUnread)
                 IconButton(
                   tooltip: 'Mark all as read',
-                  onPressed: () => _markAllAsRead(context, user.uid),
-                  icon: Icon(Icons.done_all_rounded, color: colors.textPrimary),
+                  onPressed: interactionLocked
+                      ? null
+                      : () => _markAllAsRead(context, user.uid),
+                  icon: _isMarkingAllRead
+                      ? SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: colors.textPrimary,
+                          ),
+                        )
+                      : Icon(Icons.done_all_rounded, color: colors.textPrimary),
                 ),
             ],
           ),
@@ -133,17 +153,35 @@ class _NotificationsPageState extends State<NotificationsPage> {
                 padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
                 child: _NotificationTabBar(
                   selectedTab: _selectedTab,
-                  onChanged: (tab) => setState(() => _selectedTab = tab),
+                  enabled: !interactionLocked,
+                  onChanged: (tab) {
+                    if (interactionLocked) return;
+                    setState(() => _selectedTab = tab);
+                  },
                 ),
               ),
               Expanded(
-                child: _buildBody(
-                  context,
-                  snapshot,
-                  colors,
-                  primary,
-                  user,
-                  filtered,
+                child: Stack(
+                  children: [
+                    _buildBody(
+                      context,
+                      snapshot,
+                      colors,
+                      primary,
+                      user,
+                      filtered,
+                      interactionLocked: interactionLocked,
+                    ),
+                    if (_isMarkingAllRead)
+                      Positioned.fill(
+                        child: ColoredBox(
+                          color: colors.background.withValues(alpha: 0.45),
+                          child: Center(
+                            child: CircularProgressIndicator(color: primary),
+                          ),
+                        ),
+                      ),
+                  ],
                 ),
               ),
             ],
@@ -159,9 +197,11 @@ class _NotificationsPageState extends State<NotificationsPage> {
     AppThemeColors colors,
     Color primary,
     User user,
-    List<NotificationModel> notifications,
-  ) {
-    if (snapshot.connectionState == ConnectionState.waiting) {
+    List<NotificationModel> notifications, {
+    required bool interactionLocked,
+  }) {
+    if (snapshot.connectionState == ConnectionState.waiting &&
+        !snapshot.hasData) {
       return Center(child: CircularProgressIndicator(color: primary));
     }
     if (snapshot.hasError) {
@@ -196,9 +236,13 @@ class _NotificationsPageState extends State<NotificationsPage> {
       separatorBuilder: (_, __) => const SizedBox(height: 12),
       itemBuilder: (context, index) {
         final notification = notifications[index];
+        final isOpening = _openingNotificationId == notification.id;
         return _NotificationTile(
           notification: notification,
-          onTap: () => _openNotificationDetail(context, notification, user),
+          isLoading: isOpening,
+          onTap: interactionLocked
+              ? null
+              : () => _openNotificationDetail(context, notification, user),
         );
       },
     );
@@ -206,6 +250,8 @@ class _NotificationsPageState extends State<NotificationsPage> {
 
   Future<void> _markAllAsRead(BuildContext context, String userId) async {
     await _markAllAsReadGuard.run(() async {
+      if (!mounted) return;
+      setState(() => _isMarkingAllRead = true);
       try {
         await NotificationService().markAllNotificationsAsRead(userId);
         if (context.mounted) {
@@ -219,8 +265,28 @@ class _NotificationsPageState extends State<NotificationsPage> {
             SnackBar(content: Text('Could not update notifications: $e')),
           );
         }
+      } finally {
+        if (mounted) setState(() => _isMarkingAllRead = false);
       }
     });
+  }
+
+  void _markReadInBackground(User user, String notificationId) {
+    if (_markingReadIds.contains(notificationId)) return;
+    _markingReadIds.add(notificationId);
+    unawaited(() async {
+      try {
+        final token = await user.getIdToken();
+        await NotificationService().markNotificationAsRead(
+          notificationId,
+          authToken: token,
+        );
+      } catch (_) {
+        // Best-effort; list stream will reflect unread if it fails.
+      } finally {
+        _markingReadIds.remove(notificationId);
+      }
+    }());
   }
 
   Future<void> _openNotificationDetail(
@@ -228,34 +294,42 @@ class _NotificationsPageState extends State<NotificationsPage> {
     NotificationModel notification,
     User user,
   ) async {
-    if (!notification.read) {
+    await _openDetailGuard.run(() async {
+      if (!mounted) return;
+      setState(() => _openingNotificationId = notification.id);
+
+      // Don't block the sheet on the mark-as-read API (often slow).
+      if (!notification.read) {
+        _markReadInBackground(user, notification.id);
+      }
+
+      if (!context.mounted) {
+        if (mounted) setState(() => _openingNotificationId = null);
+        return;
+      }
+
+      final colors = AppColors.getThemeColors(context);
+      final primary = Theme.of(context).colorScheme.primary;
+      final isDark = Theme.of(context).brightness == Brightness.dark;
+
       try {
-        final token = await user.getIdToken();
-        await NotificationService().markNotificationAsRead(
-          notification.id,
-          authToken: token,
+        await showModalBottomSheet<void>(
+          context: context,
+          isScrollControlled: true,
+          backgroundColor: Colors.transparent,
+          builder: (ctx) {
+            return _NotificationDetailSheet(
+              notification: notification,
+              colors: colors,
+              primary: primary,
+              surfaceColor: isDark ? colors.surface : Colors.white,
+            );
+          },
         );
-      } catch (_) {}
-    }
-    if (!context.mounted) return;
-
-    final colors = AppColors.getThemeColors(context);
-    final primary = Theme.of(context).colorScheme.primary;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) {
-        return _NotificationDetailSheet(
-          notification: notification,
-          colors: colors,
-          primary: primary,
-          surfaceColor: isDark ? colors.surface : Colors.white,
-        );
-      },
-    );
+      } finally {
+        if (mounted) setState(() => _openingNotificationId = null);
+      }
+    });
   }
 }
 
@@ -707,10 +781,12 @@ class _NotificationTabBar extends StatelessWidget {
   const _NotificationTabBar({
     required this.selectedTab,
     required this.onChanged,
+    this.enabled = true,
   });
 
   final _NotificationFilterTab selectedTab;
   final ValueChanged<_NotificationFilterTab> onChanged;
+  final bool enabled;
 
   @override
   Widget build(BuildContext context) {
@@ -718,41 +794,47 @@ class _NotificationTabBar extends StatelessWidget {
     final primary = Theme.of(context).colorScheme.primary;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    return Container(
-      padding: const EdgeInsets.all(4),
-      decoration: BoxDecoration(
-        color: isDark ? AppColors.surfaceDark : Colors.white.withValues(alpha: 0.9),
-        borderRadius: BorderRadius.circular(16),
-        border: isDark
-            ? null
-            : Border.all(color: const Color(0xFFE5E7EB)),
-      ),
-      child: Row(
-        children: [
-          _NotificationTab(
-            label: 'Transaction',
-            isSelected: selectedTab == _NotificationFilterTab.transaction,
-            onTap: () => onChanged(_NotificationFilterTab.transaction),
-            primary: primary,
-            unselectedColor: colors.textSecondary,
+    return Opacity(
+      opacity: enabled ? 1 : 0.55,
+      child: IgnorePointer(
+        ignoring: !enabled,
+        child: Container(
+          padding: const EdgeInsets.all(4),
+          decoration: BoxDecoration(
+            color: isDark ? AppColors.surfaceDark : Colors.white.withValues(alpha: 0.9),
+            borderRadius: BorderRadius.circular(16),
+            border: isDark
+                ? null
+                : Border.all(color: const Color(0xFFE5E7EB)),
           ),
-          const SizedBox(width: 4),
-          _NotificationTab(
-            label: 'System',
-            isSelected: selectedTab == _NotificationFilterTab.system,
-            onTap: () => onChanged(_NotificationFilterTab.system),
-            primary: primary,
-            unselectedColor: colors.textSecondary,
+          child: Row(
+            children: [
+              _NotificationTab(
+                label: 'Transaction',
+                isSelected: selectedTab == _NotificationFilterTab.transaction,
+                onTap: () => onChanged(_NotificationFilterTab.transaction),
+                primary: primary,
+                unselectedColor: colors.textSecondary,
+              ),
+              const SizedBox(width: 4),
+              _NotificationTab(
+                label: 'System',
+                isSelected: selectedTab == _NotificationFilterTab.system,
+                onTap: () => onChanged(_NotificationFilterTab.system),
+                primary: primary,
+                unselectedColor: colors.textSecondary,
+              ),
+              const SizedBox(width: 4),
+              _NotificationTab(
+                label: 'Promotions',
+                isSelected: selectedTab == _NotificationFilterTab.promotions,
+                onTap: () => onChanged(_NotificationFilterTab.promotions),
+                primary: primary,
+                unselectedColor: colors.textSecondary,
+              ),
+            ],
           ),
-          const SizedBox(width: 4),
-          _NotificationTab(
-            label: 'Promotions',
-            isSelected: selectedTab == _NotificationFilterTab.promotions,
-            onTap: () => onChanged(_NotificationFilterTab.promotions),
-            primary: primary,
-            unselectedColor: colors.textSecondary,
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -882,11 +964,13 @@ class _EmptyNotifications extends StatelessWidget {
 
 class _NotificationTile extends StatelessWidget {
   final NotificationModel notification;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
+  final bool isLoading;
 
   const _NotificationTile({
     required this.notification,
     required this.onTap,
+    this.isLoading = false,
   });
 
   @override
@@ -898,7 +982,7 @@ class _NotificationTile extends StatelessWidget {
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        onTap: onTap,
+        onTap: isLoading ? null : onTap,
         borderRadius: BorderRadius.circular(16),
         child: Container(
           padding: const EdgeInsets.all(16),
@@ -926,11 +1010,19 @@ class _NotificationTile extends StatelessWidget {
                   color: primary.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: Icon(
-                  _notificationIconFor(notification),
-                  color: primary,
-                  size: 22,
-                ),
+                child: isLoading
+                    ? Padding(
+                        padding: const EdgeInsets.all(10),
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: primary,
+                        ),
+                      )
+                    : Icon(
+                        _notificationIconFor(notification),
+                        color: primary,
+                        size: 22,
+                      ),
               ),
               const SizedBox(width: 14),
               Expanded(
@@ -968,7 +1060,19 @@ class _NotificationTile extends StatelessWidget {
                   ],
                 ),
               ),
-              if (!notification.read)
+              if (isLoading)
+                Padding(
+                  padding: const EdgeInsets.only(left: 8, top: 4),
+                  child: Text(
+                    'Opening…',
+                    style: TextStyle(
+                      color: colors.textTertiary,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                )
+              else if (!notification.read)
                 Container(
                   width: 8,
                   height: 8,

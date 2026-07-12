@@ -27,13 +27,13 @@ class WalletSessionSnapshot {
   }
 }
 
-/// In-memory dashboard data shared across navigations so returning to home
-/// does not re-hit the network while [ttl] is valid. Cleared on sign-out.
+/// In-memory dashboard data shared across navigations so returning screens can
+/// paint the last known balance immediately (stale-while-revalidate). Cleared on sign-out.
 class DashboardSessionCache {
   DashboardSessionCache._();
   static final DashboardSessionCache instance = DashboardSessionCache._();
 
-  /// How long cached wallet + recent transactions stay valid without pull-to-refresh.
+  /// How long cached recent transactions stay valid without pull-to-refresh.
   static const Duration ttl = Duration(minutes: 5);
 
   DateTime? _walletAt;
@@ -47,16 +47,17 @@ class DashboardSessionCache {
   DateTime? _transactionsAt;
   TransactionsResponse? _recentTransactions;
 
+  bool get hasWalletSnapshot =>
+      _walletAt != null && (_fiatWallets.isNotEmpty || _cryptoWallets.isNotEmpty);
+
   bool _walletFresh() =>
       _walletAt != null && DateTime.now().difference(_walletAt!) < ttl;
 
   bool _transactionsFresh() =>
       _transactionsAt != null && DateTime.now().difference(_transactionsAt!) < ttl;
 
-  /// Restore wallet UI from last successful fetch if still within [ttl].
-  WalletSessionSnapshot? readWalletIfFresh() {
-    if (!_walletFresh()) return null;
-    if (_fiatWallets.isEmpty && _cryptoWallets.isEmpty) return null;
+  WalletSessionSnapshot? _copyWalletSnapshot() {
+    if (!hasWalletSnapshot) return null;
     return WalletSessionSnapshot(
       fiatWallets: Map<String, Wallet>.from(_fiatWallets),
       availableFiatCurrencies: List<String>.from(_availableFiatCurrencies),
@@ -67,6 +68,16 @@ class DashboardSessionCache {
       refreshedAt: _walletAt!,
     );
   }
+
+  /// Restore wallet UI from last successful fetch if still within [ttl].
+  WalletSessionSnapshot? readWalletIfFresh() {
+    if (!_walletFresh()) return null;
+    return _copyWalletSnapshot();
+  }
+
+  /// Last known wallet snapshot for immediate UI paint, even if past [ttl].
+  /// Callers should still refresh in the background after hydrating.
+  WalletSessionSnapshot? readWalletLastKnown() => _copyWalletSnapshot();
 
   void recordWalletSnapshot({
     required Map<String, Wallet> fiatWallets,

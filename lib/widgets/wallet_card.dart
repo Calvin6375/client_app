@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:pretium/features/crypto/screens/usdc_receive_screen.dart';
 import 'package:pretium/features/crypto/screens/usdc_send_screen.dart';
 import 'package:pretium/features/crypto/services/crypto_api_service.dart';
+import 'package:pretium/features/topup/models/topup_deposit_country.dart';
 import 'package:pretium/features/topup/screens/direct_fiat_deposit_flow.dart';
 import 'package:pretium/features/topup/screens/topup_page.dart';
 import 'package:pretium/models/wallet_model.dart';
@@ -97,7 +98,9 @@ class _WalletCardState extends State<WalletCard> {
     super.initState();
     if (!isFirebaseInitialized()) return;
     _subscribeUsdcBalance();
-    final snap = DashboardSessionCache.instance.readWalletIfFresh();
+    // Stale-while-revalidate: paint last known balance immediately, then
+    // refresh in the background without a loading spinner.
+    final snap = DashboardSessionCache.instance.readWalletLastKnown();
     if (snap != null) {
       _hydrateFromSnapshotSync(snap);
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -109,6 +112,7 @@ class _WalletCardState extends State<WalletCard> {
           _cryptoPageController.jumpToPage(_currentCryptoIndex.clamp(0, _availableCryptoCurrencies.length - 1));
         }
       });
+      _refreshBalance(silent: true, forceRefresh: true);
     } else {
       _refreshBalance();
     }
@@ -300,6 +304,10 @@ class _WalletCardState extends State<WalletCard> {
     } catch (e) {
       // This should rarely happen now since fetchWalletBalance returns default wallet
       if (!mounted) return;
+      // Keep showing cached balance on silent refresh failures — no error flash.
+      if (silent && (_fiatWallet != null || _fiatWallets.isNotEmpty || _cryptoWallets.isNotEmpty)) {
+        return;
+      }
       setState(() { 
         // Only show error for unexpected exceptions (network issues, etc.)
         final errorMsg = e.toString();
@@ -560,9 +568,17 @@ class _WalletCardState extends State<WalletCard> {
   }
 
   Future<void> _openTopUpFlow() async {
+    final currencyCode = widget.selectedTab == 0 &&
+            _availableFiatCurrencies.isNotEmpty
+        ? _availableFiatCurrencies[
+            _currentFiatIndex.clamp(0, _availableFiatCurrencies.length - 1)]
+        : (_fiatWallet?.currencyCode ?? 'USD');
+
     await Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
-        builder: (_) => const TopUpPage(),
+        builder: (_) => TopUpPage(
+          initialDepositCountry: TopupDepositCountry.resolve(currencyCode),
+        ),
       ),
     );
     if (mounted) await _refreshBalance(forceRefresh: true);

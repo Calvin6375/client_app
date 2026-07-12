@@ -45,13 +45,14 @@ class DefaultFirebaseOptions {
   }
 
   static const FirebaseOptions web = FirebaseOptions(
-    apiKey: 'YOUR_WEB_API_KEY',
-    appId: 'YOUR_WEB_APP_ID',
+    apiKey: 'AIzaSyDGcuSVczaO37XhvF-VhMCnblkiLFiv9oE',
+    appId: '1:241917597382:web:55960a3b157975384969c7',
     messagingSenderId: '241917597382',
     projectId: 'truepay-72060',
     authDomain: 'truepay-72060.firebaseapp.com',
     databaseURL: 'https://truepay-72060-default-rtdb.firebaseio.com',
     storageBucket: 'truepay-72060.firebasestorage.app',
+    measurementId: 'G-CCZGGX9KWR',
   );
 
   static const FirebaseOptions android = FirebaseOptions(

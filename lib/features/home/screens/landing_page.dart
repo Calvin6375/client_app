@@ -53,6 +53,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
     setState(() => _accessChecked = true);
   }
 
+  Future<void> _silentRefreshBalance() async {
+    final walletCardState = _walletCardKey.currentState;
+    if (walletCardState == null) return;
+    try {
+      await (walletCardState as dynamic).refreshBalance(
+        silent: true,
+        forceRefresh: true,
+      );
+    } catch (_) {}
+  }
+
+  Future<void> _openAndRefreshOnReturn(Future<dynamic> Function() openRoute) async {
+    await openRoute();
+    if (!mounted) return;
+    await _silentRefreshBalance();
+  }
+
   void _onItemTapped(int index) {
     setState(() {
       _selectedIndex = index;
@@ -220,7 +237,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       inactiveColor: colors.textTertiary,
                       onTap: () {
                         _onItemTapped(0);
-                        Navigator.of(context).pushNamed(RouteNames.wallet);
+                        _openAndRefreshOnReturn(
+                          () => Navigator.of(context).pushNamed(RouteNames.wallet),
+                        );
                       },
                     ),
                   ),
@@ -232,10 +251,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       inactiveColor: colors.textTertiary,
                       onTap: () {
                         _onItemTapped(1);
-                        Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (context) =>
-                                const SendMoneyPage(initialFromCurrency: 'USD'),
+                        _openAndRefreshOnReturn(
+                          () => Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (context) =>
+                                  const SendMoneyPage(initialFromCurrency: 'USD'),
+                            ),
                           ),
                         );
                       },
@@ -249,7 +270,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       inactiveColor: colors.textTertiary,
                       onTap: () {
                         _onItemTapped(2);
-                        Navigator.of(context).pushNamed(RouteNames.transactions);
+                        _openAndRefreshOnReturn(
+                          () => Navigator.of(context)
+                              .pushNamed(RouteNames.transactions),
+                        );
                       },
                     ),
                   ),
@@ -261,7 +285,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       inactiveColor: colors.textTertiary,
                       onTap: () {
                         _onItemTapped(3);
-                        Navigator.of(context).pushNamed(RouteNames.walletSettings);
+                        _openAndRefreshOnReturn(
+                          () => Navigator.of(context)
+                              .pushNamed(RouteNames.walletSettings),
+                        );
                       },
                     ),
                   ),

@@ -33,14 +33,18 @@ class _TransactionDetailPageState extends State<TransactionDetailPage> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     final title = _t.title ?? (_t.isDebit ? 'Sent' : 'Received');
-    final currency = _t.currency ?? 'KES';
+    final currency = _t.currency ?? _metaString(['currency']) ?? 'KES';
     final isDebit = _t.isDebit;
     final resolvedStatus = _resolvedTransactionStatus();
     final statusLabel = _capitalize(resolvedStatus.replaceAll('_', ' '));
     final showDownloadReceipt = _shouldShowDownloadReceipt(resolvedStatus);
-    final reference = _referenceDisplay();
-    final paymentMethod = _paymentMethodDisplay();
-    final dateStr = _formatDateTime(_t.createdAt);
+    final detailRows = _buildDetailRows(
+      reference: _referenceDisplay(),
+      typeLabel: isDebit ? 'Debit (outgoing)' : 'Credit (incoming)',
+      dateStr: _formatDateTime(_t.createdAt),
+      statusLabel: statusLabel,
+      currency: currency,
+    );
 
     return Scaffold(
       backgroundColor: colors.background,
@@ -98,27 +102,13 @@ class _TransactionDetailPageState extends State<TransactionDetailPage> {
                         style: TextStyle(fontSize: 26, fontWeight: FontWeight.w800, color: colors.textPrimary),
                       ),
                       Divider(height: 32, color: colors.divider),
-                      _receiptRow(colors, 'Reference', reference),
-                      _receiptRow(colors, 'Type', isDebit ? 'Debit (outgoing)' : 'Credit (incoming)'),
-                      _receiptRow(colors, 'Payment method', paymentMethod),
-                      if (_t.subtitle != null && _t.subtitle!.trim().isNotEmpty)
-                        _receiptRow(colors, 'Category', _t.subtitle!.trim()),
-                      if (_t.description != null && _t.description!.trim().isNotEmpty)
-                        _receiptRow(colors, 'Description', _t.description!.trim()),
-                      _receiptRow(colors, 'Date & time', dateStr),
-                      _receiptRow(colors, 'Status', statusLabel),
-                      if (_metadataPreview().isNotEmpty) ...[
-                        const SizedBox(height: 8),
-                        Text(
-                          'Additional details',
-                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: colors.textTertiary),
+                      for (final row in detailRows)
+                        _receiptRow(
+                          colors,
+                          row.label,
+                          row.value,
+                          copyable: row.copyable,
                         ),
-                        const SizedBox(height: 6),
-                        SelectableText(
-                          _metadataPreview(),
-                          style: TextStyle(fontSize: 12, color: colors.textSecondary, height: 1.35),
-                        ),
-                      ],
                     ],
                   ),
                 ),
@@ -200,32 +190,278 @@ class _TransactionDetailPageState extends State<TransactionDetailPage> {
   }
 
   String _referenceDisplay() {
-    final m = _t.metadata;
-    if (m == null) return _t.id.isNotEmpty ? _t.id : '—';
-    final r = m['referenceId'] ?? m['reference'] ?? m['reference_id'];
+    final r = _metaValue(['referenceId', 'reference', 'reference_id']);
     if (r != null && r.toString().isNotEmpty) return r.toString();
     return _t.id.isNotEmpty ? _t.id : '—';
   }
 
-  String _paymentMethodDisplay() {
-    final m = _t.metadata;
-    if (m == null) return '—';
-    final pm = m['paymentMethod'] ?? m['payment_method'] ?? m['paymentMethodId'];
-    if (pm != null && pm.toString().isNotEmpty) return pm.toString();
-    return '—';
+  static const Set<String> _hiddenFieldKeys = {
+    'source',
+    'userId',
+    'user_id',
+    'uid',
+    'paymentMethod',
+    'payment_method',
+    'paymentMethodId',
+    'payoutMethod',
+    'payout_method',
+    'provider',
+    'mobileProvider',
+    'review.paymentMethod',
+    'review.paymentMethodId',
+    'review.mobileProvider',
+  };
+
+  static const Set<String> _hiddenLabels = {
+    'Source',
+    'User Id',
+    'User ID',
+    'User id',
+    'Payment method',
+    'Payment method ID',
+    'Provider',
+    'Payout method',
+    'Mobile provider',
+  };
+
+  static bool _isCopyableLabel(String label) =>
+      label == 'Reference' || label == 'Funding order ID';
+
+  /// Builds labeled rows for every meaningful field from the API response.
+  List<({String label, String value, bool copyable})> _buildDetailRows({
+    required String reference,
+    required String typeLabel,
+    required String dateStr,
+    required String statusLabel,
+    required String currency,
+  }) {
+    final rows = <({String label, String value, bool copyable})>[];
+    final consumed = <String>{};
+
+    void addRow(String label, String value, {bool copyable = false}) {
+      final v = value.trim();
+      if (v.isEmpty || v == '—') return;
+      if (_hiddenLabels.contains(label)) return;
+      rows.add((
+        label: label,
+        value: v,
+        copyable: copyable || _isCopyableLabel(label),
+      ));
+    }
+
+    void consumeKeys(Iterable<String> keys) => consumed.addAll(keys);
+
+    // Always hide these API fields from the receipt.
+    consumeKeys(_hiddenFieldKeys);
+
+    addRow('Reference', reference, copyable: true);
+    consumeKeys(['referenceId', 'reference', 'reference_id']);
+
+    if (_t.id.isNotEmpty && _t.id != reference) {
+      addRow('Transaction ID', _t.id);
+    }
+    consumeKeys(['id', 'transactionId', 'transaction_id']);
+
+    addRow('Type', typeLabel);
+    consumeKeys(['type']);
+
+    final category = _t.subtitle?.trim();
+    if (category != null && category.isNotEmpty) {
+      addRow('Category', category);
+    }
+    consumeKeys(['subtitle', 'category']);
+
+    final description = _t.description?.trim();
+    if (description != null && description.isNotEmpty) {
+      addRow('Description', description);
+    }
+    consumeKeys(['description']);
+
+    addRow('Date & time', dateStr);
+    consumeKeys(['createdAt', 'created_at', 'timestamp', 'updatedAt', 'updated_at']);
+
+    addRow('Status', statusLabel);
+    consumeKeys(['status', 'orderStatus']);
+
+    addRow('Currency', currency);
+    consumeKeys(['currency']);
+
+    // Prefer friendly labels for known metadata / extra keys.
+    const orderedLabels = <String, String>{
+      'fundingOrderId': 'Funding order ID',
+      'funding_order_id': 'Funding order ID',
+      'orderId': 'Order ID',
+      'order_id': 'Order ID',
+      'correlationId': 'Correlation ID',
+      'correlation_id': 'Correlation ID',
+      'flow': 'Flow',
+      'orderType': 'Order type',
+      'bankName': 'Bank name',
+      'mobileProviderId': 'Mobile provider ID',
+      'newBalance': 'New balance',
+      'previousBalance': 'Previous balance',
+      'clientWalletCurrency': 'Wallet currency',
+      'clientFiatBalance': 'Fiat balance',
+      'amount': 'Amount',
+    };
+
+    final flat = _flattenedApiFields();
+    for (final entry in orderedLabels.entries) {
+      if (consumed.contains(entry.key) || !flat.containsKey(entry.key)) continue;
+      final value = _stringifyValue(flat[entry.key]);
+      if (value.isEmpty) continue;
+      addRow(
+        entry.value,
+        value,
+        copyable: entry.value == 'Funding order ID',
+      );
+      consumed.add(entry.key);
+    }
+
+    // Nested review.* fields with friendly labels (payment method intentionally omitted).
+    const reviewLabels = <String, String>{
+      'review.country': 'Country',
+      'review.countryCode': 'Country code',
+      'review.phone': 'Phone',
+      'review.processingFeeFormatted': 'Processing fee',
+      'review.depositAmountFormatted': 'Deposit amount',
+      'review.totalDueFormatted': 'Total due',
+      'review.estimatedArrival': 'Estimated arrival',
+      'review.bankName': 'Bank name',
+      'review.accountNumberMasked': 'Account number',
+    };
+    for (final entry in reviewLabels.entries) {
+      if (consumed.contains(entry.key) || !flat.containsKey(entry.key)) continue;
+      final value = _stringifyValue(flat[entry.key]);
+      if (value.isEmpty) continue;
+      addRow(entry.value, value);
+      consumed.add(entry.key);
+    }
+
+    // Remaining fields from metadata + extras so nothing useful from the API is dropped.
+    final remaining = flat.keys.where((k) => !consumed.contains(k)).toList()..sort();
+    for (final key in remaining) {
+      if (key == 'review') continue;
+      if (_hiddenFieldKeys.contains(key)) continue;
+      final value = _stringifyValue(flat[key]);
+      if (value.isEmpty) continue;
+      final label = _humanizeKey(key.replaceFirst(RegExp(r'^review\.'), ''));
+      if (_hiddenLabels.contains(label)) continue;
+      addRow(label, value);
+    }
+
+    // Ensure core rows still appear even when value was "—" (user expects the labels).
+    final labelsPresent = rows.map((r) => r.label).toSet();
+    void ensureCore(String label, String value, {bool copyable = false}) {
+      if (labelsPresent.contains(label)) return;
+      rows.insert(
+        _coreInsertIndex(rows, label),
+        (
+          label: label,
+          value: value.trim().isEmpty ? '—' : value,
+          copyable: copyable || _isCopyableLabel(label),
+        ),
+      );
+    }
+
+    ensureCore('Reference', reference, copyable: true);
+    ensureCore('Type', typeLabel);
+    ensureCore('Date & time', dateStr);
+    ensureCore('Status', statusLabel);
+
+    return rows;
   }
 
-  String _metadataPreview() {
+  int _coreInsertIndex(
+    List<({String label, String value, bool copyable})> rows,
+    String label,
+  ) {
+    const order = [
+      'Reference',
+      'Transaction ID',
+      'Type',
+      'Category',
+      'Description',
+      'Date & time',
+      'Status',
+      'Currency',
+    ];
+    final target = order.indexOf(label);
+    if (target < 0) return rows.length;
+    for (var i = 0; i < rows.length; i++) {
+      final at = order.indexOf(rows[i].label);
+      if (at < 0 || at > target) return i;
+    }
+    return rows.length;
+  }
+
+  /// Flattens metadata + unknown top-level API fields (including nested `review`).
+  Map<String, dynamic> _flattenedApiFields() {
+    final flat = <String, dynamic>{};
+    void merge(Map<String, dynamic>? source) {
+      if (source == null) return;
+      source.forEach((k, v) {
+        if (k == 'review' && v is Map) {
+          Map<String, dynamic>.from(v).forEach((rk, rv) {
+            flat['review.$rk'] = rv;
+          });
+        } else {
+          flat[k] = v;
+        }
+      });
+    }
+
+    merge(_t.metadata);
+    merge(_t.extraFields);
+    return flat;
+  }
+
+  dynamic _metaValue(List<String> keys) {
     final m = _t.metadata;
-    if (m == null || m.isEmpty) return '';
-    final skip = {'paymentMethod', 'payment_method', 'paymentMethodId', 'referenceId', 'reference', 'reference_id'};
-    final buf = StringBuffer();
-    m.forEach((k, v) {
-      if (skip.contains(k)) return;
-      if (v == null || v.toString().isEmpty) return;
-      buf.writeln('$k: $v');
-    });
-    return buf.toString().trim();
+    if (m != null) {
+      for (final k in keys) {
+        final v = m[k];
+        if (v != null && v.toString().trim().isNotEmpty) return v;
+      }
+    }
+    for (final k in keys) {
+      final v = _t.extraFields[k];
+      if (v != null && v.toString().trim().isNotEmpty) return v;
+    }
+    // Nested review map
+    final review = _t.metadata?['review'];
+    if (review is Map) {
+      for (final k in keys) {
+        final v = review[k];
+        if (v != null && v.toString().trim().isNotEmpty) return v;
+      }
+    }
+    return null;
+  }
+
+  String? _metaString(List<String> keys) {
+    final v = _metaValue(keys);
+    final s = v?.toString().trim();
+    if (s == null || s.isEmpty) return null;
+    return s;
+  }
+
+  String _stringifyValue(dynamic v) {
+    if (v == null) return '';
+    if (v is num) {
+      final d = v.toDouble();
+      if ((d - d.roundToDouble()).abs() < 1e-9) return d.round().toString();
+      return d.toStringAsFixed(2);
+    }
+    if (v is Map || v is List) return v.toString();
+    return v.toString().trim();
+  }
+
+  String _humanizeKey(String k) {
+    if (k.isEmpty) return k;
+    final spaced = k.replaceAllMapped(RegExp(r'([A-Z])'), (m) => ' ${m.group(1)}').trim();
+    final parts = spaced.split(RegExp(r'[_\s.]+')).where((s) => s.isNotEmpty);
+    return parts.map((p) => p[0].toUpperCase() + p.substring(1).toLowerCase()).join(' ');
   }
 
   String _formatDateTime(DateTime? d) {
@@ -244,7 +480,12 @@ class _TransactionDetailPageState extends State<TransactionDetailPage> {
     return s[0].toUpperCase() + s.substring(1);
   }
 
-  Widget _receiptRow(AppThemeColors colors, String label, String value) {
+  Widget _receiptRow(
+    AppThemeColors colors,
+    String label,
+    String value, {
+    bool copyable = false,
+  }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Row(
@@ -256,18 +497,49 @@ class _TransactionDetailPageState extends State<TransactionDetailPage> {
           ),
           Expanded(
             flex: 3,
-            child: SelectableText(
-              value,
-              textAlign: TextAlign.right,
-              style: TextStyle(
-                color: colors.textPrimary,
-                fontWeight: FontWeight.w500,
-                fontSize: 14,
-              ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                Flexible(
+                  child: SelectableText(
+                    value,
+                    textAlign: TextAlign.right,
+                    style: TextStyle(
+                      color: colors.textPrimary,
+                      fontWeight: FontWeight.w500,
+                      fontSize: 14,
+                    ),
+                  ),
+                ),
+                if (copyable && value.trim().isNotEmpty && value != '—') ...[
+                  const SizedBox(width: 4),
+                  InkWell(
+                    onTap: () => _copyValue(label, value),
+                    borderRadius: BorderRadius.circular(8),
+                    child: Padding(
+                      padding: const EdgeInsets.all(2),
+                      child: Icon(
+                        Icons.copy_rounded,
+                        size: 16,
+                        color: colors.textTertiary,
+                      ),
+                    ),
+                  ),
+                ],
+              ],
             ),
           ),
         ],
       ),
+    );
+  }
+
+  Future<void> _copyValue(String label, String value) async {
+    await Clipboard.setData(ClipboardData(text: value));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('$label copied')),
     );
   }
 

@@ -1,7 +1,7 @@
-import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:pretium/models/notification_model.dart';
@@ -55,9 +55,14 @@ class NotificationService {
     }
   }
 
+  bool get _isAndroid =>
+      !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
+
+  bool get _isIOS => !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS;
+
   /// Initialize local notifications for Android foreground notifications
   Future<void> _initializeLocalNotifications() async {
-    if (!Platform.isAndroid) return;
+    if (!_isAndroid) return;
 
     const AndroidInitializationSettings initializationSettingsAndroid =
         AndroidInitializationSettings('@mipmap/ic_launcher');
@@ -156,7 +161,7 @@ class NotificationService {
 
   /// Show local notification (for Android foreground messages)
   Future<void> _showLocalNotification(RemoteMessage message) async {
-    if (!Platform.isAndroid) return;
+    if (!_isAndroid) return;
 
     final notification = message.notification;
     if (notification == null) return;
@@ -266,7 +271,7 @@ class NotificationService {
   Future<String?> getFCMToken() async {
     try {
       // On iOS, ensure APNS token is available first
-      if (Platform.isIOS) {
+      if (_isIOS) {
         try {
           final apnsToken = await _messaging.getAPNSToken();
           if (apnsToken == null) {
@@ -302,7 +307,7 @@ class NotificationService {
 
   /// Setup listener for when APNS token becomes available (iOS)
   void _setupAPNSTokenListener() {
-    if (!Platform.isIOS) return;
+    if (!_isIOS) return;
 
     // Poll for APNS token (will be available on real device)
     Future.delayed(const Duration(seconds: 2), () async {

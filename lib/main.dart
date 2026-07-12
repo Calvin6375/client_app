@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
@@ -22,6 +24,19 @@ import 'package:pretium/features/wallet/screens/wallet_page.dart';
 import 'package:pretium/services/notification_service.dart';
 import 'package:pretium/services/payment_callback_service.dart';
 import 'package:provider/provider.dart';
+
+/// Desktop/web: allow drag scrolling with mouse/trackpad like a mobile surface.
+class _AppScrollBehavior extends MaterialScrollBehavior {
+  const _AppScrollBehavior();
+
+  @override
+  Set<PointerDeviceKind> get dragDevices => {
+        PointerDeviceKind.touch,
+        PointerDeviceKind.mouse,
+        PointerDeviceKind.trackpad,
+        PointerDeviceKind.stylus,
+      };
+}
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -244,11 +259,26 @@ class _MyAppState extends State<MyApp> {
         builder: (context, themeProvider, _) {
           return MaterialApp(
             navigatorKey: _navigatorKey,
-            title: 'SafariTap',
+            title: 'SafariCard',
             debugShowCheckedModeBanner: false,
+            scrollBehavior: const _AppScrollBehavior(),
             theme: _buildLightTheme(), // Light theme with glassmorphism
             darkTheme: _buildDarkTheme(), // Dark fintech theme
             themeMode: themeProvider.themeMode, // Dynamic theme mode
+            builder: (context, child) {
+              final content = child ?? const SizedBox.shrink();
+              // Phone-width shell on large web viewports — feels like an installed wallet app.
+              if (!kIsWeb) return content;
+              return ColoredBox(
+                color: AppColors.backgroundDeepNavy,
+                child: Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 480),
+                    child: content,
+                  ),
+                ),
+              );
+            },
             initialRoute: RouteNames.splash,
             routes: {
               RouteNames.splash: (context) => const SplashPage(),

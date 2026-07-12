@@ -98,33 +98,10 @@ class _WalletSettingsPageState extends State<WalletSettingsPage> {
   }
 
   Future<String?> _promptForPassword() async {
-    final controller = TextEditingController();
-    final result = await showDialog<String>(
+    return showDialog<String>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Confirm password'),
-        content: TextField(
-          controller: controller,
-          obscureText: true,
-          decoration: const InputDecoration(
-            labelText: 'Password',
-            hintText: 'Enter your account password',
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(ctx).pop(controller.text),
-            child: const Text('Confirm'),
-          ),
-        ],
-      ),
+      builder: (ctx) => const _PasswordConfirmDialog(),
     );
-    controller.dispose();
-    return result;
   }
 
   Future<void> _signOut() async {
@@ -401,6 +378,56 @@ class _WalletSettingsPageState extends State<WalletSettingsPage> {
                 ],
               ),
             ),
+    );
+  }
+}
+
+class _PasswordConfirmDialog extends StatefulWidget {
+  const _PasswordConfirmDialog();
+
+  @override
+  State<_PasswordConfirmDialog> createState() => _PasswordConfirmDialogState();
+}
+
+class _PasswordConfirmDialogState extends State<_PasswordConfirmDialog> {
+  late final TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Confirm password'),
+      content: TextField(
+        controller: _controller,
+        obscureText: true,
+        autofocus: true,
+        onSubmitted: (value) => Navigator.of(context).pop(value),
+        decoration: const InputDecoration(
+          labelText: 'Password',
+          hintText: 'Enter your account password',
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.of(context).pop(_controller.text),
+          child: const Text('Confirm'),
+        ),
+      ],
     );
   }
 }

@@ -1,6 +1,15 @@
 {
   "projects": {
     "default": "truepay-72060"
-  }
+  },
+  "targets": {
+    "truepay-72060": {
+      "hosting": {
+        "app": [
+          "app-c326c"
+        ]
+      }
+    }
+  },
+  "etags": {}
 }
-
