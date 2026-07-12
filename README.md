@@ -322,8 +322,21 @@ Production URL: https://app.truepay.live
 
 ```bash
 ./scripts/build_web.sh
-firebase deploy --only hosting:app
+./scripts/build_web.sh --deploy   # build + firebase hosting deploy
 ```
+
+### Mobile release builds
+
+```bash
+./scripts/build_android_apk.sh              # release APK → dist/android/
+./scripts/build_android_apk.sh --split-per-abi
+./scripts/build_android_appbundle.sh        # Play Store AAB
+./scripts/build_ios.sh                      # signed IPA (macOS + Xcode signing)
+./scripts/build_ios.sh --no-codesign        # unsigned iOS build
+./scripts/build_all.sh                      # android + web + ios (when available)
+```
+
+Artifacts are copied under `dist/{android,ios,web}`.
 
 This builds a release PWA with Flutter’s offline-first service worker, branded splash (`web/index.html`), and SafariCard manifest/icons. Hosting cache headers live in `firebase.json`.
 
