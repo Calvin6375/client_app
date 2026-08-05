@@ -2,11 +2,10 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:pretium/features/crypto/screens/usdc_receive_screen.dart';
-import 'package:pretium/features/crypto/screens/usdc_send_screen.dart';
 import 'package:pretium/features/crypto/services/crypto_api_service.dart';
 import 'package:pretium/features/topup/models/topup_deposit_country.dart';
-import 'package:pretium/features/topup/screens/direct_fiat_deposit_flow.dart';
 import 'package:pretium/features/topup/screens/topup_page.dart';
+import 'package:pretium/features/withdraw/screens/withdraw_page.dart';
 import 'package:pretium/models/wallet_model.dart';
 import 'package:pretium/repositories/wallet_repository.dart';
 import 'package:pretium/core/constants/app_colors.dart';
@@ -350,7 +349,7 @@ class _WalletCardState extends State<WalletCard> {
             _buildActionButtons(
               context,
               onTopUp: _openTopUpFlow,
-              onWithdraw: () => _openKenyaWithdraw(context),
+              onWithdraw: () => _openFiatWithdraw(context),
             ),
           ],
         );
@@ -415,7 +414,7 @@ class _WalletCardState extends State<WalletCard> {
           _buildActionButtons(
             context,
             onTopUp: _openTopUpFlow,
-            onWithdraw: () => _openKenyaWithdraw(context),
+            onWithdraw: () => _openFiatWithdraw(context),
           ),
           // Page indicator dots — FlowPay-style circular indicators
           if (_availableFiatCurrencies.length > 1)
@@ -552,19 +551,19 @@ class _WalletCardState extends State<WalletCard> {
   }
 
   Future<void> _openCryptoWithdraw(String currency) async {
-    if (currency == 'USDC') {
-      final usdcBalance = _cryptoWallets['USDC']?.balance;
-      final refreshed = await Navigator.of(context).push<bool>(
-        MaterialPageRoute<bool>(
-          builder: (_) => UsdcSendScreen(availableBalance: usdcBalance),
+    final balance = _cryptoWallets[currency]?.balance;
+    final refreshed = await Navigator.of(context).push<bool>(
+      MaterialPageRoute<bool>(
+        builder: (_) => WithdrawPage(
+          isCrypto: true,
+          currencyCode: currency,
+          availableBalance: balance,
         ),
-      );
-      if (mounted && refreshed == true) {
-        await _refreshBalance(forceRefresh: true);
-      }
-      return;
+      ),
+    );
+    if (mounted && refreshed == true) {
+      await _refreshBalance(forceRefresh: true);
     }
-    _showWithdrawComingSoon(context);
   }
 
   Future<void> _openTopUpFlow() async {
@@ -584,37 +583,37 @@ class _WalletCardState extends State<WalletCard> {
     if (mounted) await _refreshBalance(forceRefresh: true);
   }
 
-  void _openKenyaWithdraw(BuildContext context) {
-    final kesBalance = _fiatWallets['KES']?.balance ?? 0.0;
+  void _openFiatWithdraw(BuildContext context) {
+    final currency = _availableFiatCurrencies.isNotEmpty
+        ? _availableFiatCurrencies[
+            _currentFiatIndex.clamp(0, _availableFiatCurrencies.length - 1)]
+        : (_fiatWallet?.currencyCode ?? 'KES');
+    // Fiat withdrawals are Kenya (KES) only — prefer KES balance when present.
+    final withdrawCurrency =
+        TopupDepositCountry.withdrawSupported.any((c) => c.code == currency)
+            ? currency
+            : 'KES';
+    final balance = _fiatWallets[withdrawCurrency]?.balance ??
+        _fiatWallets['KES']?.balance ??
+        0.0;
+
     Navigator.of(context)
-        .push<void>(
-          MaterialPageRoute<void>(
-            builder: (_) => DirectFiatDepositScreen(
-              fiatBalance: kesBalance,
-              walletCurrencyCode: 'KES',
-              flowKind: DirectFiatFlowKind.withdraw,
+        .push<bool>(
+          MaterialPageRoute<bool>(
+            builder: (_) => WithdrawPage(
+              isCrypto: false,
+              currencyCode: withdrawCurrency,
+              availableBalance: balance,
             ),
           ),
         )
-        .then((_) {
-          if (mounted) _refreshBalance(forceRefresh: true);
+        .then((refreshed) {
+          if (mounted && refreshed == true) {
+            _refreshBalance(forceRefresh: true);
+          } else if (mounted) {
+            _refreshBalance(forceRefresh: true);
+          }
         });
-  }
-
-  void _showWithdrawComingSoon(BuildContext context) {
-    showDialog<void>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Coming Soon'),
-        content: const Text('Withdraw will be available soon.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('OK'),
-          ),
-        ],
-      ),
-    );
   }
 }
 

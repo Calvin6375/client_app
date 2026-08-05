@@ -11,6 +11,8 @@ import 'package:pretium/features/auth/screens/register_page.dart';
 import 'package:pretium/features/home/screens/landing_page.dart';
 import 'package:pretium/features/topup/screens/topup_page.dart';
 import 'package:pretium/features/swap/screens/swap_page.dart';
+import 'package:pretium/features/withdraw/screens/withdraw_page.dart';
+import 'package:pretium/features/pay/screens/pay_page.dart';
 import 'package:pretium/app/route_names.dart';
 import 'package:pretium/utils/logger.dart';
 import 'package:pretium/core/constants/app_colors.dart';
@@ -288,6 +290,8 @@ class _MyAppState extends State<MyApp> {
               RouteNames.home: (context) => LandingPage(),
               RouteNames.topup: (context) => const TopUpPage(),
               RouteNames.swap: (context) => const SwapPage(),
+              RouteNames.withdraw: (context) => const WithdrawPage(),
+              RouteNames.pay: (context) => const PayPage(),
               RouteNames.walletVerification: (context) =>
                   const WalletVerificationScreen(),
               RouteNames.notifications: (context) => const NotificationsPage(),

@@ -6,6 +6,8 @@ class RouteNames {
   static const home = '/home';
   static const topup = '/topup';
   static const swap = '/swap';
+  static const withdraw = '/withdraw';
+  static const pay = '/pay';
   static const walletVerification = '/wallet_verification';
   static const notifications = '/notifications';
   static const transactions = '/transactions';

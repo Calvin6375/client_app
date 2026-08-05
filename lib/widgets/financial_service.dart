@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:pretium/features/pay/screens/pay_page.dart';
 import 'package:pretium/features/send_money/screens/send_money_page.dart';
 import 'package:pretium/features/swap/screens/swap_page.dart';
 import 'package:pretium/core/constants/app_colors.dart';
@@ -68,7 +69,17 @@ class FinancialServices extends StatelessWidget {
               FontAwesomeIcons.receipt,
               "Pay",
               true,
-              () => _showComingSoonDialog(context),
+              () {
+                final payCurrency = swapInitialCurrency == 'USDT' ||
+                        swapInitialCurrency == 'USDC'
+                    ? 'USD'
+                    : swapInitialCurrency;
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (context) => PayPage(initialCurrency: payCurrency),
+                  ),
+                );
+              },
             ),
             const SizedBox(width: 12),
             _buildServiceButton(

@@ -68,7 +68,7 @@ class _TopUpPageState extends State<TopUpPage> {
   bool _isProcessingPayment = false;
   bool _isLoadingBalance = false;
   bool _hasBalanceData = false;
-  _TopUpPaymentMethod _selectedMethod = _TopUpPaymentMethod.cardMobileMoney;
+  _TopUpPaymentMethod _selectedMethod = _TopUpPaymentMethod.directFiatDeposit;
 
   static const List<String> _supportedFiatCurrencies = [
     'USD',
@@ -279,13 +279,6 @@ class _TopUpPageState extends State<TopUpPage> {
 
   String get _cardMobileMoneyProviderLabel =>
       TopupDepositCountry.cardMobileMoneyProviderLabelFor(_selectedCurrency);
-
-  String get _cardMobileMoneySubtitle {
-    if (_cardMobileMoneyProvider == 'transak') {
-      return 'Pay with card via Transak';
-    }
-    return 'Pay with card or M-Pesa via Paystack';
-  }
 
   /// Card checkout: createPayment (Cloud Function) → open hosted checkout in browser.
   Future<void> _processFiatTopUp() async {
@@ -716,18 +709,8 @@ class _TopUpPageState extends State<TopUpPage> {
                   ),
                   const SizedBox(height: 16),
                   _PaymentMethodTile(
-                    title: 'Card / mobile money',
-                    subtitle: _cardMobileMoneySubtitle,
-                    brandIcon: Icons.payment,
-                    selected: _selectedMethod == _TopUpPaymentMethod.cardMobileMoney,
-                    onTap: () => setState(
-                      () => _selectedMethod = _TopUpPaymentMethod.cardMobileMoney,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  _PaymentMethodTile(
-                    title: 'Direct fiat deposit',
-                    subtitle: 'Bank transfer or mobile money deposit',
+                    title: 'Local Topup',
+                    subtitle: 'Local bank or card or mobile money',
                     brandIcon: Icons.account_balance_outlined,
                     selected: _selectedMethod == _TopUpPaymentMethod.directFiatDeposit,
                     onTap: () => setState(
@@ -736,8 +719,19 @@ class _TopUpPageState extends State<TopUpPage> {
                   ),
                   const SizedBox(height: 12),
                   _PaymentMethodTile(
-                    title: 'Direct crypto deposit',
-                    subtitle: 'Send USDT, USDC, or BNB to a wallet address',
+                    title: 'International Topup',
+                    subtitle:
+                        'International bank or card, Apple Pay or Google Pay.',
+                    brandIcon: Icons.payment,
+                    selected: _selectedMethod == _TopUpPaymentMethod.cardMobileMoney,
+                    onTap: () => setState(
+                      () => _selectedMethod = _TopUpPaymentMethod.cardMobileMoney,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  _PaymentMethodTile(
+                    title: 'Crypto Deposit',
+                    subtitle: 'Send any crypto or stablecoin from any network to a wallet address',
                     brandIcon: Icons.currency_bitcoin,
                     selected: _selectedMethod == _TopUpPaymentMethod.cryptoDeposit,
                     onTap: () => setState(
