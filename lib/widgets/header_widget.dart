@@ -8,7 +8,7 @@ import 'package:pretium/services/notification_service.dart';
 import 'package:pretium/utils/firebase_utils.dart';
 
 class HeaderWidget extends StatelessWidget {
-  HeaderWidget({super.key});
+  const HeaderWidget({super.key});
 
   Widget _buildClickableAvatar(
     BuildContext context,
@@ -23,7 +23,7 @@ class HeaderWidget extends StatelessWidget {
         radius: 22,
         backgroundColor: Theme.of(context).brightness == Brightness.dark
             ? colors.onPrimary // White for dark mode
-            : primary.withOpacity(0.1), // Light teal background for light mode
+            : primary.withValues(alpha: 0.1), // Light teal background for light mode
         child: Text(
           initial,
           style: TextStyle(

@@ -118,7 +118,7 @@ class ReviewDetailsScreen extends StatelessWidget {
       decoration: BoxDecoration(
         color: isDark 
             ? colors.surface // Dark slate for dark mode
-            : Colors.white.withOpacity(0.9), // Translucent white for light mode
+            : Colors.white.withValues(alpha: 0.9), // Translucent white for light mode
         borderRadius: BorderRadius.circular(16),
         border: isDark 
             ? null
@@ -130,7 +130,7 @@ class ReviewDetailsScreen extends StatelessWidget {
             ? null
             : [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.04),
+                  color: Colors.black.withValues(alpha: 0.04),
                   blurRadius: 8,
                   offset: const Offset(0, 2),
                 ),
@@ -177,7 +177,7 @@ class ReviewDetailsScreen extends StatelessWidget {
       child: Row(
         children: [
           CircleAvatar(
-            backgroundColor: Theme.of(context).colorScheme.primary.withOpacity(0.1),
+            backgroundColor: Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
             child: Text(
               'R',
               style: TextStyle(

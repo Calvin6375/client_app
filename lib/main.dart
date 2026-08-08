@@ -84,7 +84,7 @@ class _MyAppState extends State<MyApp> {
   }
 
   ThemeData _buildLightTheme() {
-    final colors = AppColors.light;
+    const colors = AppColors.light;
     final base = ThemeData(
       useMaterial3: true,
       brightness: Brightness.light,
@@ -99,7 +99,6 @@ class _MyAppState extends State<MyApp> {
       secondary: colors.success,
       surface: colors.surface,
       onSurface: colors.textPrimary,
-      background: colors.background,
       error: colors.error,
     );
     return base.copyWith(
@@ -114,7 +113,7 @@ class _MyAppState extends State<MyApp> {
       cardTheme: CardThemeData(
         color: colors.surface,
         elevation: 2,
-        shadowColor: Colors.black.withOpacity(0.1),
+        shadowColor: Colors.black.withValues(alpha: 0.1),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(16),
         ),
@@ -124,7 +123,7 @@ class _MyAppState extends State<MyApp> {
           backgroundColor: colors.primary,
           foregroundColor: Colors.white,
           elevation: 2,
-          shadowColor: colors.primary.withOpacity(0.3),
+          shadowColor: colors.primary.withValues(alpha: 0.3),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
           ),
@@ -169,7 +168,7 @@ class _MyAppState extends State<MyApp> {
   }
 
   ThemeData _buildDarkTheme() {
-    final colors = AppColors.dark;
+    const colors = AppColors.dark;
     final base = ThemeData(
       useMaterial3: true,
       brightness: Brightness.dark,
@@ -184,7 +183,6 @@ class _MyAppState extends State<MyApp> {
       secondary: colors.success,
       surface: colors.surface,
       onSurface: colors.textPrimary,
-      background: colors.background,
       error: colors.error,
     );
     return base.copyWith(
@@ -199,7 +197,7 @@ class _MyAppState extends State<MyApp> {
       cardTheme: CardThemeData(
         color: colors.surface,
         elevation: 0,
-        shadowColor: Colors.black.withOpacity(0.3),
+        shadowColor: Colors.black.withValues(alpha: 0.3),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(16),
         ),
@@ -209,7 +207,7 @@ class _MyAppState extends State<MyApp> {
           backgroundColor: colors.primary,
           foregroundColor: colors.onPrimary,
           elevation: 2,
-          shadowColor: colors.primary.withOpacity(0.3),
+          shadowColor: colors.primary.withValues(alpha: 0.3),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
           ),
@@ -287,7 +285,7 @@ class _MyAppState extends State<MyApp> {
               RouteNames.splashPage1: (context) => const SplashPage1(),
               RouteNames.login: (context) => const LoginPage(),
               RouteNames.register: (context) => const RegisterPage(),
-              RouteNames.home: (context) => LandingPage(),
+              RouteNames.home: (context) => const LandingPage(),
               RouteNames.topup: (context) => const TopUpPage(),
               RouteNames.swap: (context) => const SwapPage(),
               RouteNames.withdraw: (context) => const WithdrawPage(),

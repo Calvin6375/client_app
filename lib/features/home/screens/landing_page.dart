@@ -18,7 +18,7 @@ class LandingPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // Return the dashboard directly to avoid nesting MaterialApp, so app-level routes work
-    return DashboardScreen();
+    return const DashboardScreen();
   }
 }
 
@@ -121,7 +121,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               bottom: 12,
             ),
             color: Colors.transparent, // Transparent for professional dark look
-            child: HeaderWidget(),
+            child: const HeaderWidget(),
           ),
           Expanded(
             child: RefreshIndicator(
@@ -137,7 +137,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     decoration: BoxDecoration(
                       color: Theme.of(context).brightness == Brightness.dark
                           ? AppColors.surfaceDark // Dark slate #1E293B for dark mode
-                          : Colors.white.withOpacity(0.9), // Light background for toggle container
+                          : Colors.white.withValues(alpha: 0.9), // Light background for toggle container
                       borderRadius: BorderRadius.circular(16),
                       border: Theme.of(context).brightness == Brightness.light
                           ? Border.all(
@@ -148,7 +148,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       boxShadow: Theme.of(context).brightness == Brightness.light
                           ? [
                               BoxShadow(
-                                color: Colors.black.withOpacity(0.04),
+                                color: Colors.black.withValues(alpha: 0.04),
                                 blurRadius: 8,
                                 offset: const Offset(0, 2),
                               ),

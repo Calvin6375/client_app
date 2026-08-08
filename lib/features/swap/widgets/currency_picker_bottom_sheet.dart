@@ -24,7 +24,7 @@ class CurrencyPickerBottomSheet extends StatelessWidget {
         decoration: BoxDecoration(
           color: isDark 
               ? colors.surface 
-              : Colors.white.withOpacity(0.9),
+              : Colors.white.withValues(alpha: 0.9),
           borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
           border: isDark 
               ? null
@@ -33,7 +33,7 @@ class CurrencyPickerBottomSheet extends StatelessWidget {
               ? null
               : [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.04),
+                    color: Colors.black.withValues(alpha: 0.04),
                     blurRadius: 8,
                     offset: const Offset(0, -2),
                   ),
@@ -84,7 +84,7 @@ class CurrencyPickerBottomSheet extends StatelessWidget {
                     leading: CircleAvatar(
                       backgroundColor: isDark 
                           ? colors.background 
-                          : Colors.white.withOpacity(0.95),
+                          : Colors.white.withValues(alpha: 0.95),
                       child: Text(c.flagEmoji),
                     ),
                     title: Text(

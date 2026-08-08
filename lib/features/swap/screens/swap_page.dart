@@ -251,7 +251,7 @@ class _SwapPageState extends State<SwapPage> {
             AlertDialog(
               backgroundColor: isDark 
                   ? AppColors.surfaceDark 
-                  : Colors.white.withOpacity(0.9), // Translucent white for light mode
+                  : Colors.white.withValues(alpha: 0.9), // Translucent white for light mode
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
               title: Center(
                 child: Text(
@@ -287,7 +287,7 @@ class _SwapPageState extends State<SwapPage> {
                         borderRadius: BorderRadius.circular(12),
                       ),
                     ),
-                    child: Text(
+                    child: const Text(
                       'Done',
                       style: TextStyle(
                         fontSize: 18,
@@ -369,7 +369,7 @@ class _SwapPageState extends State<SwapPage> {
       appBar: AppBar(
         backgroundColor: isDark
             ? Colors.transparent  // Transparent for dark mode
-            : primary.withOpacity(0.08), // Light mint tint (8% opacity) for light mode
+            : primary.withValues(alpha: 0.08), // Light mint tint (8% opacity) for light mode
         elevation: 0,
         title: Text('Swap', style: TextStyle(color: colors.textPrimary)),
         iconTheme: IconThemeData(color: colors.textPrimary),
@@ -518,7 +518,7 @@ class _SwapInputScreenState extends State<_SwapInputScreen> {
                   icon: Icon(Icons.swap_vert, color: primaryColor, size: 32),
                   onPressed: widget.onSwapCurrencies,
                   style: IconButton.styleFrom(
-                    backgroundColor: primaryColor.withOpacity(0.15),
+                    backgroundColor: primaryColor.withValues(alpha: 0.15),
                     shape: const CircleBorder(),
                     padding: const EdgeInsets.all(12),
                   ),
@@ -559,7 +559,7 @@ class _SwapInputScreenState extends State<_SwapInputScreen> {
             boxShadow: Theme.of(context).brightness == Brightness.light
                 ? [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.04),
+                      color: Colors.black.withValues(alpha: 0.04),
                       blurRadius: 8,
                       offset: const Offset(0, -2),
                     ),
@@ -580,7 +580,7 @@ class _SwapInputScreenState extends State<_SwapInputScreen> {
                     borderRadius: BorderRadius.circular(12),
                   ),
                 ),
-                child: Text(
+                child: const Text(
                   'Confirm and Swap',
                   style: TextStyle(
                     fontSize: 18,
@@ -625,7 +625,7 @@ class _SwapCurrencyCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: isDark 
             ? colors.surface // Dark slate for dark mode
-            : Colors.white.withOpacity(0.9), // Translucent white for light mode
+            : Colors.white.withValues(alpha: 0.9), // Translucent white for light mode
         borderRadius: BorderRadius.circular(16),
         border: isDark 
             ? null
@@ -637,7 +637,7 @@ class _SwapCurrencyCard extends StatelessWidget {
             ? null
             : [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.04),
+                  color: Colors.black.withValues(alpha: 0.04),
                   blurRadius: 8,
                   offset: const Offset(0, 2),
                 ),
@@ -676,7 +676,7 @@ class _SwapCurrencyCard extends StatelessWidget {
                   decoration: BoxDecoration(
                     color: isDark 
                         ? colors.background 
-                        : Colors.white.withOpacity(0.95),
+                        : Colors.white.withValues(alpha: 0.95),
                     borderRadius: BorderRadius.circular(20),
                     border: Border.all(
                       color: isDark ? colors.surfaceVariant : const Color(0xFFE5E7EB),
@@ -788,7 +788,7 @@ class _SwapConfirmationScreen extends StatelessWidget {
             decoration: BoxDecoration(
               color: isDark 
                   ? colors.surface 
-                  : Colors.white.withOpacity(0.9),
+                  : Colors.white.withValues(alpha: 0.9),
               borderRadius: BorderRadius.circular(16),
               border: isDark 
                   ? null
@@ -797,7 +797,7 @@ class _SwapConfirmationScreen extends StatelessWidget {
                   ? null
                   : [
                       BoxShadow(
-                        color: Colors.black.withOpacity(0.04),
+                        color: Colors.black.withValues(alpha: 0.04),
                         blurRadius: 8,
                         offset: const Offset(0, 2),
                       ),
@@ -828,7 +828,7 @@ class _SwapConfirmationScreen extends StatelessWidget {
               minimumSize: const Size(double.infinity, 50),
             ),
             child: isSubmitting
-                ? SizedBox(
+                ? const SizedBox(
                     height: 24,
                     width: 24,
                     child: CircularProgressIndicator(
@@ -836,7 +836,7 @@ class _SwapConfirmationScreen extends StatelessWidget {
                       valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                     ),
                   )
-                : Text(
+                : const Text(
                     'Confirm Swap',
                     style: TextStyle(
                       fontSize: 18,
@@ -871,7 +871,7 @@ class _FeesCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: isDark 
             ? AppColors.surfaceDark 
-            : Colors.white.withOpacity(0.9),
+            : Colors.white.withValues(alpha: 0.9),
         borderRadius: BorderRadius.circular(16),
         border: isDark 
             ? null
@@ -880,7 +880,7 @@ class _FeesCard extends StatelessWidget {
             ? null
             : [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.04),
+                  color: Colors.black.withValues(alpha: 0.04),
                   blurRadius: 8,
                   offset: const Offset(0, 2),
                 ),
@@ -959,7 +959,7 @@ class _ExchangeRateDisplay extends StatelessWidget {
       decoration: BoxDecoration(
         color: isDark 
             ? AppColors.surfaceDark 
-            : Colors.white.withOpacity(0.9),
+            : Colors.white.withValues(alpha: 0.9),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
                     color: isDark ? colors.surfaceVariant : const Color(0xFFE5E7EB),
@@ -969,7 +969,7 @@ class _ExchangeRateDisplay extends StatelessWidget {
             ? null
             : [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.04),
+                  color: Colors.black.withValues(alpha: 0.04),
                   blurRadius: 8,
                   offset: const Offset(0, 2),
                 ),

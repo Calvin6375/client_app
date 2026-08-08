@@ -272,7 +272,7 @@ class _RecipientDetailsScreenState extends State<RecipientDetailsScreen> {
     final v = _selectedMobileNetwork;
     final effectiveValue = (v != null && v.isNotEmpty && options.contains(v)) ? v : null;
     return DropdownButtonFormField<String>(
-      value: effectiveValue,
+      initialValue: effectiveValue,
       items: [
         ...options.map(
           (e) => DropdownMenuItem<String>(value: e, child: Text(e)),

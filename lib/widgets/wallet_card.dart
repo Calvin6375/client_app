@@ -432,7 +432,7 @@ class _WalletCardState extends State<WalletCard> {
                       shape: BoxShape.circle,
                       color: _currentFiatIndex == index
                           ? primary
-                          : primary.withOpacity(0.25),
+                          : primary.withValues(alpha: 0.25),
                     ),
                   ),
                 ),
@@ -528,7 +528,7 @@ class _WalletCardState extends State<WalletCard> {
                       shape: BoxShape.circle,
                       color: _currentCryptoIndex == index
                           ? primary
-                          : primary.withOpacity(0.25),
+                          : primary.withValues(alpha: 0.25),
                     ),
                   ),
                 ),
@@ -698,14 +698,14 @@ class _WalletCardWidgetState extends State<WalletCardWidget> {
           boxShadow: isDark
               ? [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.5),
+                    color: Colors.black.withValues(alpha: 0.5),
                     blurRadius: 24,
                     offset: const Offset(0, 8),
                   ),
                 ]
               : [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.08),
+                    color: Colors.black.withValues(alpha: 0.08),
                     blurRadius: 20,
                     offset: const Offset(0, 6),
                   ),
@@ -721,13 +721,13 @@ class _WalletCardWidgetState extends State<WalletCardWidget> {
                 colors: isDark
                     ? [
                         AppColors.surfaceDark,
-                        AppColors.surfaceDark.withOpacity(0.95),
+                        AppColors.surfaceDark.withValues(alpha: 0.95),
                         AppColors.backgroundDeepNavy,
                       ]
                     : [
-                        widget.backgroundColor.withOpacity(0.95),
-                        widget.backgroundColor.withOpacity(0.75),
-                        widget.backgroundColor.withOpacity(0.55),
+                        widget.backgroundColor.withValues(alpha: 0.95),
+                        widget.backgroundColor.withValues(alpha: 0.75),
+                        widget.backgroundColor.withValues(alpha: 0.55),
                       ],
               ),
             ),
@@ -742,7 +742,7 @@ class _WalletCardWidgetState extends State<WalletCardWidget> {
                     height: cardWidth * 0.5,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      color: widget.backgroundColor.withOpacity(isDark ? 0.12 : 0.18),
+                      color: widget.backgroundColor.withValues(alpha: isDark ? 0.12 : 0.18),
                     ),
                   ),
                 ),
@@ -754,7 +754,7 @@ class _WalletCardWidgetState extends State<WalletCardWidget> {
                     height: cardWidth * 0.42,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      color: widget.backgroundColor.withOpacity(isDark ? 0.08 : 0.12),
+                      color: widget.backgroundColor.withValues(alpha: isDark ? 0.08 : 0.12),
                     ),
                   ),
                 ),
@@ -766,7 +766,7 @@ class _WalletCardWidgetState extends State<WalletCardWidget> {
                         begin: Alignment.topRight,
                         end: Alignment.bottomLeft,
                         colors: [
-                          Colors.white.withOpacity(isDark ? 0.06 : 0.12),
+                          Colors.white.withValues(alpha: isDark ? 0.06 : 0.12),
                           Colors.transparent,
                           Colors.transparent,
                         ],
@@ -797,7 +797,7 @@ class _WalletCardWidgetState extends State<WalletCardWidget> {
                                   _balanceVisible
                                       ? Icons.visibility_outlined
                                       : Icons.visibility_off_outlined,
-                                  color: colors.textPrimary.withOpacity(0.85),
+                                  color: colors.textPrimary.withValues(alpha: 0.85),
                                   size: 18,
                                 ),
                               ),

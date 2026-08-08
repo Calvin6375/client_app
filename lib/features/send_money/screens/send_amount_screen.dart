@@ -242,7 +242,7 @@ class _SendAmountScreenState extends State<SendAmountScreen> {
                     icon: Icon(Icons.swap_vert, color: primaryColor, size: 32),
                     onPressed: _swapCurrencies,
                     style: IconButton.styleFrom(
-                      backgroundColor: primaryColor.withOpacity(0.15),
+                      backgroundColor: primaryColor.withValues(alpha: 0.15),
                       shape: const CircleBorder(),
                       padding: const EdgeInsets.all(12),
                     ),
@@ -317,7 +317,7 @@ class _ExchangeRateDisplay extends StatelessWidget {
       decoration: BoxDecoration(
         color: isDark 
             ? colors.surface // Dark slate for dark mode
-            : Colors.white.withOpacity(0.9), // Translucent white for light mode
+            : Colors.white.withValues(alpha: 0.9), // Translucent white for light mode
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
             color: isDark 
@@ -329,7 +329,7 @@ class _ExchangeRateDisplay extends StatelessWidget {
             ? null
             : [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.04),
+                  color: Colors.black.withValues(alpha: 0.04),
                   blurRadius: 8,
                   offset: const Offset(0, 2),
                 ),
@@ -387,7 +387,7 @@ class _SwapCurrencyCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: isDark 
             ? colors.surface // Dark slate for dark mode
-            : Colors.white.withOpacity(0.9), // Translucent white for light mode
+            : Colors.white.withValues(alpha: 0.9), // Translucent white for light mode
         borderRadius: BorderRadius.circular(16),
         border: isDark 
             ? null
@@ -399,7 +399,7 @@ class _SwapCurrencyCard extends StatelessWidget {
             ? null
             : [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.04),
+                  color: Colors.black.withValues(alpha: 0.04),
                   blurRadius: 8,
                   offset: const Offset(0, 2),
                 ),
@@ -441,7 +441,7 @@ class _SwapCurrencyCard extends StatelessWidget {
                   decoration: BoxDecoration(
                     color: isDark 
                         ? colors.background 
-                        : Colors.white.withOpacity(0.95),
+                        : Colors.white.withValues(alpha: 0.95),
                     borderRadius: BorderRadius.circular(20),
                     border: Border.all(
                       color: isDark ? AppColors.surfaceVariantDark : const Color(0xFFE5E7EB),

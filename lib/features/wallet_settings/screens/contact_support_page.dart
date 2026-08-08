@@ -149,13 +149,13 @@ class _SupportOptionTile extends StatelessWidget {
       decoration: BoxDecoration(
         color: colors.surface,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: colors.border.withOpacity(0.5)),
+        border: Border.all(color: colors.border.withValues(alpha: 0.5)),
       ),
       child: ListTile(
         onTap: onTap,
         leading: CircleAvatar(
           radius: 22,
-          backgroundColor: primary.withOpacity(0.12),
+          backgroundColor: primary.withValues(alpha: 0.12),
           child: faIcon != null
               ? FaIcon(faIcon, color: primary, size: 22)
               : Icon(icon, color: primary, size: 22),

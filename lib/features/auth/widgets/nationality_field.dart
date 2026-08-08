@@ -8,12 +8,11 @@ class NationalityField extends FormField<NationalityOption> {
     super.key,
     required Color primaryColor,
     Color? labelColor,
-    NationalityOption? initialValue,
+    super.initialValue,
     super.onSaved,
     super.validator,
     required ValueChanged<NationalityOption> onChanged,
   }) : super(
-          initialValue: initialValue,
           builder: (state) {
             final colors = AppColors.getThemeColors(
               state.context,

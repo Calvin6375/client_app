@@ -182,7 +182,7 @@ class _WalletSettingsPageState extends State<WalletSettingsPage> {
                           children: [
                             CircleAvatar(
                               radius: 44,
-                              backgroundColor: primary.withOpacity(0.2),
+                              backgroundColor: primary.withValues(alpha: 0.2),
                               child: Text(
                                 _userName.isNotEmpty ? _userName[0].toUpperCase() : '?',
                                 style: TextStyle(
@@ -231,7 +231,7 @@ class _WalletSettingsPageState extends State<WalletSettingsPage> {
                     decoration: BoxDecoration(
                       color: colors.surface,
                       borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: colors.border.withOpacity(0.5)),
+                      border: Border.all(color: colors.border.withValues(alpha: 0.5)),
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -307,25 +307,25 @@ class _WalletSettingsPageState extends State<WalletSettingsPage> {
                     ),
                   ),
                   const SizedBox(height: 28),
-                  _SectionTitle(title: 'SECURITY'),
+                  const _SectionTitle(title: 'SECURITY'),
                   _SettingsTile(
                     icon: Icons.lock_outline,
                     title: 'Biometric Authentication',
                     trailing: Switch(
                       value: _biometricEnabled,
                       onChanged: _toggleBiometric,
-                      activeColor: primary,
+                      activeThumbColor: primary,
                     ),
                   ),
                   const SizedBox(height: 24),
-                  _SectionTitle(title: 'PREFERENCES'),
+                  const _SectionTitle(title: 'PREFERENCES'),
                   _SettingsTile(
                     icon: Icons.notifications_outlined,
                     title: 'Push Notifications',
                     trailing: Switch(
                       value: _pushNotificationsEnabled,
                       onChanged: (v) => setState(() => _pushNotificationsEnabled = v),
-                      activeColor: primary,
+                      activeThumbColor: primary,
                     ),
                   ),
                   _SettingsTile(
@@ -339,7 +339,7 @@ class _WalletSettingsPageState extends State<WalletSettingsPage> {
                         return Switch(
                           value: isDark,
                           onChanged: (_) => themeProvider.toggleTheme(),
-                          activeColor: primary,
+                          activeThumbColor: primary,
                         );
                       },
                     ),
@@ -458,13 +458,11 @@ class _SectionTitle extends StatelessWidget {
 class _SettingsTile extends StatelessWidget {
   final IconData icon;
   final String title;
-  final String? subtitle;
   final Widget trailing;
 
   const _SettingsTile({
     required this.icon,
     required this.title,
-    this.subtitle,
     required this.trailing,
   });
 
@@ -478,12 +476,12 @@ class _SettingsTile extends StatelessWidget {
       decoration: BoxDecoration(
         color: colors.surface,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: colors.border.withOpacity(0.5)),
+        border: Border.all(color: colors.border.withValues(alpha: 0.5)),
       ),
       child: ListTile(
         leading: CircleAvatar(
           radius: 22,
-          backgroundColor: primary.withOpacity(0.12),
+          backgroundColor: primary.withValues(alpha: 0.12),
           child: Icon(icon, color: primary, size: 22),
         ),
         title: Text(
@@ -494,15 +492,6 @@ class _SettingsTile extends StatelessWidget {
             fontSize: 15,
           ),
         ),
-        subtitle: subtitle != null
-            ? Text(
-                subtitle!,
-                style: TextStyle(
-                  color: colors.textSecondary,
-                  fontSize: 13,
-                ),
-              )
-            : null,
         trailing: trailing,
       ),
     );

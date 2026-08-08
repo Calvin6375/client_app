@@ -245,8 +245,7 @@ class _TopUpPageState extends State<TopUpPage> {
         }
       });
     } finally {
-      if (!mounted) return;
-      if (!silent) {
+      if (mounted && !silent) {
         setState(() {
           _isLoadingBalance = false;
         });
@@ -445,7 +444,7 @@ class _TopUpPageState extends State<TopUpPage> {
   }
 
   void _showError(String message) {
-    print('❌ Showing error dialog: $message');
+    debugPrint('Showing error dialog: $message');
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
@@ -454,7 +453,7 @@ class _TopUpPageState extends State<TopUpPage> {
         actions: [
           TextButton(
             onPressed: () {
-              print('👍 User acknowledged error dialog');
+              debugPrint('User acknowledged error dialog');
               Navigator.of(context).pop();
             },
             child: const Text('OK'),
@@ -500,13 +499,13 @@ class _TopUpPageState extends State<TopUpPage> {
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: Colors.green.withOpacity(0.1),
+                    color: Colors.green.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.green.withOpacity(0.3)),
+                    border: Border.all(color: Colors.green.withValues(alpha: 0.3)),
                   ),
                   child: Row(
                     children: [
-                      Icon(Icons.check_circle, color: Colors.green, size: 16),
+                      const Icon(Icons.check_circle, color: Colors.green, size: 16),
                       const SizedBox(width: 8),
                       Expanded(child: Text(message, style: TextStyle(color: Colors.green[700]))),
                     ],
@@ -514,10 +513,10 @@ class _TopUpPageState extends State<TopUpPage> {
                 ),
                 const SizedBox(height: 16),
               ],
-              Text(
+              const Text(
                 'Complete payment in your browser. When finished, return to the app — '
                 'confirmation happens automatically via the app link.',
-                style: const TextStyle(fontSize: 14),
+                style: TextStyle(fontSize: 14),
               ),
               const SizedBox(height: 16),
               
@@ -557,19 +556,20 @@ class _TopUpPageState extends State<TopUpPage> {
                               padding: const EdgeInsets.symmetric(vertical: 8),
                             ),
                             onPressed: () async {
+                              final messenger = ScaffoldMessenger.of(context);
                               final launched = await launchUrl(
                                 Uri.parse(checkoutUrl),
                                 mode: LaunchMode.externalApplication,
                               );
                               if (!launched) {
-                                ScaffoldMessenger.of(context).showSnackBar(
+                                messenger.showSnackBar(
                                   const SnackBar(
                                     content: Text('Could not open payment page automatically. Please copy the URL above.'),
                                     backgroundColor: Colors.orange,
                                   ),
                                 );
                               } else {
-                                ScaffoldMessenger.of(context).showSnackBar(
+                                messenger.showSnackBar(
                                   const SnackBar(
                                     content: Text('Payment page opened successfully!'),
                                     backgroundColor: Colors.green,
@@ -740,7 +740,7 @@ class _TopUpPageState extends State<TopUpPage> {
                   ),
                   if (_selectedMethod == _TopUpPaymentMethod.cryptoDeposit) ...[
                     const SizedBox(height: 16),
-                    _CryptoDepositDetails(),
+                    const _CryptoDepositDetails(),
                   ],
                 ],
               ),
