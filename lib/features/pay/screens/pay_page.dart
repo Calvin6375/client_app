@@ -2,16 +2,17 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:pretium/core/constants/app_colors.dart';
+import 'package:pretium/features/pay/screens/qr_scan_page.dart';
 import 'package:pretium/repositories/wallet_repository.dart';
 import 'package:pretium/services/payment_service.dart';
 import 'package:pretium/utils/async_action_guard.dart';
 import 'package:pretium/utils/firebase_utils.dart';
 
-enum _PayOption { scanQr, merchant, truePayUser }
+enum _PayOption { payBill, buyGoods, pochiLaBiashara, truePayMerchant }
 
-/// Pay merchants or TruePay users via QR, merchant code, or phone.
+/// Pay bills, buy goods, Pochi La Biashara, or TruePay merchants (QR).
 class PayPage extends StatefulWidget {
-  const PayPage({super.key, this.initialCurrency = 'USD'});
+  const PayPage({super.key, this.initialCurrency = 'KES'});
 
   final String initialCurrency;
 
@@ -21,6 +22,10 @@ class PayPage extends StatefulWidget {
 
 class _PayPageState extends State<PayPage> {
   _PayOption? _selected;
+  final _payBillKey = GlobalKey<_PayBillViewState>();
+  final _buyGoodsKey = GlobalKey<_BuyGoodsViewState>();
+  final _pochiKey = GlobalKey<_PochiLaBiasharaViewState>();
+  final _truePayMerchantKey = GlobalKey<_TruePayMerchantQrViewState>();
 
   void _openOption(_PayOption option) {
     setState(() => _selected = option);
@@ -30,6 +35,36 @@ class _PayPageState extends State<PayPage> {
     setState(() => _selected = null);
   }
 
+  String get _currency {
+    final c = widget.initialCurrency.trim().toUpperCase();
+    if (c == 'USDT' || c == 'USDC' || c.isEmpty) return 'KES';
+    return c;
+  }
+
+  Future<void> _openQrScanner() async {
+    final code = await Navigator.of(context).push<String>(
+      MaterialPageRoute(builder: (_) => const QrScanPage()),
+    );
+    if (!mounted || code == null || code.trim().isEmpty) return;
+    final scanned = code.trim();
+
+    switch (_selected) {
+      case _PayOption.payBill:
+        _payBillKey.currentState?.applyScannedCode(scanned);
+      case _PayOption.buyGoods:
+        _buyGoodsKey.currentState?.applyScannedCode(scanned);
+      case _PayOption.pochiLaBiashara:
+        _pochiKey.currentState?.applyScannedCode(scanned);
+      case _PayOption.truePayMerchant:
+        _truePayMerchantKey.currentState?.applyScannedCode(scanned);
+      case null:
+        _openOption(_PayOption.truePayMerchant);
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _truePayMerchantKey.currentState?.applyScannedCode(scanned);
+        });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final colors = AppColors.getThemeColors(context);
@@ -37,9 +72,10 @@ class _PayPageState extends State<PayPage> {
     final primary = Theme.of(context).colorScheme.primary;
 
     final title = switch (_selected) {
-      _PayOption.scanQr => 'Scan QR',
-      _PayOption.merchant => 'Pay Merchant',
-      _PayOption.truePayUser => 'Pay TruePay User',
+      _PayOption.payBill => 'Pay Bill',
+      _PayOption.buyGoods => 'Buy Goods',
+      _PayOption.pochiLaBiashara => 'Pochi La Biashara',
+      _PayOption.truePayMerchant => 'TruePay Merchant',
       null => 'Pay',
     };
 
@@ -56,20 +92,36 @@ class _PayPageState extends State<PayPage> {
                 onPressed: _backToHub,
               )
             : null,
+        actions: [
+          if (_selected != null)
+            IconButton(
+              tooltip: 'Scan QR code',
+              icon: Icon(Icons.qr_code_scanner_rounded, color: colors.textPrimary),
+              onPressed: _openQrScanner,
+            ),
+        ],
       ),
       body: _selected == null
           ? _PayHub(onSelect: _openOption)
           : switch (_selected!) {
-              _PayOption.scanQr => _ScanQrPayView(
-                  currency: widget.initialCurrency,
+              _PayOption.payBill => _PayBillView(
+                  key: _payBillKey,
+                  currency: _currency,
                   onPaid: () => Navigator.of(context).pop(true),
                 ),
-              _PayOption.merchant => _MerchantPayView(
-                  currency: widget.initialCurrency,
+              _PayOption.buyGoods => _BuyGoodsView(
+                  key: _buyGoodsKey,
+                  currency: _currency,
                   onPaid: () => Navigator.of(context).pop(true),
                 ),
-              _PayOption.truePayUser => _TruePayUserPayView(
-                  currency: widget.initialCurrency,
+              _PayOption.pochiLaBiashara => _PochiLaBiasharaView(
+                  key: _pochiKey,
+                  currency: _currency,
+                  onPaid: () => Navigator.of(context).pop(true),
+                ),
+              _PayOption.truePayMerchant => _TruePayMerchantQrView(
+                  key: _truePayMerchantKey,
+                  currency: _currency,
                   onPaid: () => Navigator.of(context).pop(true),
                 ),
             },
@@ -99,29 +151,36 @@ class _PayHub extends StatelessWidget {
         ),
         const SizedBox(height: 8),
         Text(
-          'Pay merchants or other TruePay users instantly from your wallet.',
+          'Pay bills, buy goods, or pay TruePay merchants from your wallet.',
           style: TextStyle(color: colors.textSecondary, fontSize: 14),
         ),
         const SizedBox(height: 24),
         _PayOptionCard(
-          icon: Icons.qr_code_scanner_rounded,
-          title: 'Scan QR Code',
-          subtitle: 'Scan a merchant QR or enter a payment code',
-          onTap: () => onSelect(_PayOption.scanQr),
+          icon: Icons.receipt_long_rounded,
+          title: 'Pay to Pay Bill',
+          subtitle: 'Enter business number, account, and amount',
+          onTap: () => onSelect(_PayOption.payBill),
         ),
         const SizedBox(height: 12),
         _PayOptionCard(
           icon: Icons.storefront_rounded,
-          title: 'Pay Merchant',
-          subtitle: 'Enter a merchant ID and amount',
-          onTap: () => onSelect(_PayOption.merchant),
+          title: 'Pay to Buy Goods',
+          subtitle: 'Enter till number and amount',
+          onTap: () => onSelect(_PayOption.buyGoods),
         ),
         const SizedBox(height: 12),
         _PayOptionCard(
-          icon: Icons.person_outline_rounded,
-          title: 'Pay TruePay User',
-          subtitle: 'Send payment to a phone number',
-          onTap: () => onSelect(_PayOption.truePayUser),
+          icon: Icons.account_balance_wallet_outlined,
+          title: 'Pay to Pochi La Biashara',
+          subtitle: 'Enter Pochi number and amount',
+          onTap: () => onSelect(_PayOption.pochiLaBiashara),
+        ),
+        const SizedBox(height: 12),
+        _PayOptionCard(
+          icon: Icons.qr_code_scanner_rounded,
+          title: 'Pay to TruePay Merchant',
+          subtitle: 'Scan merchant QR code only',
+          onTap: () => onSelect(_PayOption.truePayMerchant),
         ),
       ],
     );
@@ -205,162 +264,29 @@ class _PayOptionCard extends StatelessWidget {
   }
 }
 
-// ─── Scan QR ────────────────────────────────────────────────────────────────
+// ─── Pay Bill ───────────────────────────────────────────────────────────────
 
-class _ScanQrPayView extends StatefulWidget {
-  const _ScanQrPayView({required this.currency, required this.onPaid});
-
-  final String currency;
-  final VoidCallback onPaid;
-
-  @override
-  State<_ScanQrPayView> createState() => _ScanQrPayViewState();
-}
-
-class _ScanQrPayViewState extends State<_ScanQrPayView> {
-  final _codeCtrl = TextEditingController();
-  final _amountCtrl = TextEditingController();
-  bool _submitting = false;
-
-  @override
-  void dispose() {
-    _codeCtrl.dispose();
-    _amountCtrl.dispose();
-    super.dispose();
-  }
-
-  Future<void> _pay() async {
-    final code = _codeCtrl.text.trim();
-    final amount = double.tryParse(_amountCtrl.text.trim()) ?? 0;
-    if (code.isEmpty) {
-      _snack('Enter a payment code');
-      return;
-    }
-    if (amount <= 0) {
-      _snack('Enter a valid amount');
-      return;
-    }
-
-    await runGuardedAsync(
-      this,
-      isSubmitting: () => _submitting,
-      setSubmitting: (v) => setState(() => _submitting = v),
-      action: () async {
-        final ok = await _submitPay(
-          context: context,
-          amount: amount,
-          currency: widget.currency,
-          note: 'Pay via QR/code $code',
-          metadata: {
-            'flow': 'pay',
-            'payMethod': 'qr_code',
-            'paymentCode': code,
-          },
-        );
-        if (ok && mounted) widget.onPaid();
-      },
-    );
-  }
-
-  void _snack(String m) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m)));
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = AppColors.getThemeColors(context);
-    final primary = Theme.of(context).colorScheme.primary;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    return Column(
-      children: [
-        Expanded(
-          child: ListView(
-            padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
-            children: [
-              AspectRatio(
-                aspectRatio: 1,
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: isDark ? colors.surface : Colors.white,
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(
-                      color: primary.withValues(alpha: 0.45),
-                      width: 2,
-                    ),
-                  ),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        Icons.qr_code_scanner_rounded,
-                        size: 72,
-                        color: primary.withValues(alpha: 0.85),
-                      ),
-                      const SizedBox(height: 16),
-                      Text(
-                        'Position QR code in frame',
-                        style: TextStyle(
-                          color: colors.textSecondary,
-                          fontSize: 14,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Camera scanning coming soon —\nenter a payment code below',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          color: colors.textTertiary,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(height: 24),
-              _PayField(
-                controller: _codeCtrl,
-                label: 'Payment code',
-                hint: 'Enter merchant or payment code',
-              ),
-              const SizedBox(height: 12),
-              _PayAmountField(
-                controller: _amountCtrl,
-                currency: widget.currency,
-              ),
-            ],
-          ),
-        ),
-        _PayBottomButton(
-          label: 'Pay Now',
-          loading: _submitting,
-          onPressed: _pay,
-        ),
-      ],
-    );
-  }
-}
-
-// ─── Merchant ───────────────────────────────────────────────────────────────
-
-class _MerchantPayView extends StatefulWidget {
-  const _MerchantPayView({required this.currency, required this.onPaid});
+class _PayBillView extends StatefulWidget {
+  const _PayBillView({super.key, required this.currency, required this.onPaid});
 
   final String currency;
   final VoidCallback onPaid;
 
   @override
-  State<_MerchantPayView> createState() => _MerchantPayViewState();
+  State<_PayBillView> createState() => _PayBillViewState();
 }
 
-class _MerchantPayViewState extends State<_MerchantPayView> {
-  final _merchantCtrl = TextEditingController();
+class _PayBillViewState extends State<_PayBillView> {
+  final _businessCtrl = TextEditingController();
+  final _accountCtrl = TextEditingController();
   final _amountCtrl = TextEditingController();
-  final _noteCtrl = TextEditingController();
   bool _submitting = false;
   double _balance = 0;
   bool _loadingBalance = true;
+
+  void applyScannedCode(String code) {
+    setState(() => _businessCtrl.text = code);
+  }
 
   @override
   void initState() {
@@ -370,43 +296,32 @@ class _MerchantPayViewState extends State<_MerchantPayView> {
 
   @override
   void dispose() {
-    _merchantCtrl.dispose();
+    _businessCtrl.dispose();
+    _accountCtrl.dispose();
     _amountCtrl.dispose();
-    _noteCtrl.dispose();
     super.dispose();
   }
 
-  Future<void> _loadBalance() async {
-    if (!isFirebaseInitialized()) {
-      setState(() => _loadingBalance = false);
-      return;
-    }
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) {
-      setState(() => _loadingBalance = false);
-      return;
-    }
-    try {
-      final wallet = await WalletRepository().getWalletBalance(
-        user.uid,
+  Future<void> _loadBalance() => _loadWalletBalance(
         currency: widget.currency,
+        onLoaded: (b) => setState(() {
+          _balance = b;
+          _loadingBalance = false;
+        }),
+        onDoneWithoutBalance: () => setState(() => _loadingBalance = false),
+        mounted: () => mounted,
       );
-      if (!mounted) return;
-      setState(() {
-        _balance = wallet?.balance ?? 0;
-        _loadingBalance = false;
-      });
-    } catch (_) {
-      if (!mounted) return;
-      setState(() => _loadingBalance = false);
-    }
-  }
 
   Future<void> _pay() async {
-    final merchant = _merchantCtrl.text.trim();
+    final business = _businessCtrl.text.trim();
+    final account = _accountCtrl.text.trim();
     final amount = double.tryParse(_amountCtrl.text.trim()) ?? 0;
-    if (merchant.isEmpty) {
-      _snack('Enter a merchant ID');
+    if (business.isEmpty) {
+      _snack('Enter a business number');
+      return;
+    }
+    if (account.isEmpty) {
+      _snack('Enter an account number');
       return;
     }
     if (amount <= 0) {
@@ -423,19 +338,16 @@ class _MerchantPayViewState extends State<_MerchantPayView> {
       isSubmitting: () => _submitting,
       setSubmitting: (v) => setState(() => _submitting = v),
       action: () async {
-        final note = _noteCtrl.text.trim();
         final ok = await _submitPay(
           context: context,
           amount: amount,
           currency: widget.currency,
-          note: note.isEmpty
-              ? 'Pay merchant $merchant'
-              : 'Pay merchant $merchant — $note',
+          note: 'Pay bill $business / $account',
           metadata: {
             'flow': 'pay',
-            'payMethod': 'merchant',
-            'merchantId': merchant,
-            if (note.isNotEmpty) 'customerNote': note,
+            'payMethod': 'pay_bill',
+            'businessNumber': business,
+            'accountNumber': account,
           },
         );
         if (ok && mounted) widget.onPaid();
@@ -464,21 +376,23 @@ class _MerchantPayViewState extends State<_MerchantPayView> {
               ),
               const SizedBox(height: 20),
               _PayField(
-                controller: _merchantCtrl,
-                label: 'Merchant ID',
-                hint: 'e.g. TP-MERCHANT-001',
+                controller: _businessCtrl,
+                label: 'Business number',
+                hint: 'e.g. 888880',
+                keyboardType: TextInputType.number,
+              ),
+              const SizedBox(height: 12),
+              _PayField(
+                controller: _accountCtrl,
+                label: 'Account number',
+                hint: 'Account / invoice reference',
               ),
               const SizedBox(height: 12),
               _PayAmountField(
                 controller: _amountCtrl,
                 currency: widget.currency,
               ),
-              const SizedBox(height: 12),
-              _PayField(
-                controller: _noteCtrl,
-                label: 'Note (optional)',
-                hint: 'What is this payment for?',
-              ),
+              const _MerchantValidationSpace(),
               const SizedBox(height: 16),
               Text(
                 'Payment is deducted from your ${widget.currency} wallet.',
@@ -497,25 +411,28 @@ class _MerchantPayViewState extends State<_MerchantPayView> {
   }
 }
 
-// ─── TruePay user ───────────────────────────────────────────────────────────
+// ─── Buy Goods ──────────────────────────────────────────────────────────────
 
-class _TruePayUserPayView extends StatefulWidget {
-  const _TruePayUserPayView({required this.currency, required this.onPaid});
+class _BuyGoodsView extends StatefulWidget {
+  const _BuyGoodsView({super.key, required this.currency, required this.onPaid});
 
   final String currency;
   final VoidCallback onPaid;
 
   @override
-  State<_TruePayUserPayView> createState() => _TruePayUserPayViewState();
+  State<_BuyGoodsView> createState() => _BuyGoodsViewState();
 }
 
-class _TruePayUserPayViewState extends State<_TruePayUserPayView> {
-  final _phoneCtrl = TextEditingController();
+class _BuyGoodsViewState extends State<_BuyGoodsView> {
+  final _tillCtrl = TextEditingController();
   final _amountCtrl = TextEditingController();
-  final _nameCtrl = TextEditingController();
   bool _submitting = false;
   double _balance = 0;
   bool _loadingBalance = true;
+
+  void applyScannedCode(String code) {
+    setState(() => _tillCtrl.text = code);
+  }
 
   @override
   void initState() {
@@ -525,43 +442,26 @@ class _TruePayUserPayViewState extends State<_TruePayUserPayView> {
 
   @override
   void dispose() {
-    _phoneCtrl.dispose();
+    _tillCtrl.dispose();
     _amountCtrl.dispose();
-    _nameCtrl.dispose();
     super.dispose();
   }
 
-  Future<void> _loadBalance() async {
-    if (!isFirebaseInitialized()) {
-      setState(() => _loadingBalance = false);
-      return;
-    }
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) {
-      setState(() => _loadingBalance = false);
-      return;
-    }
-    try {
-      final wallet = await WalletRepository().getWalletBalance(
-        user.uid,
+  Future<void> _loadBalance() => _loadWalletBalance(
         currency: widget.currency,
+        onLoaded: (b) => setState(() {
+          _balance = b;
+          _loadingBalance = false;
+        }),
+        onDoneWithoutBalance: () => setState(() => _loadingBalance = false),
+        mounted: () => mounted,
       );
-      if (!mounted) return;
-      setState(() {
-        _balance = wallet?.balance ?? 0;
-        _loadingBalance = false;
-      });
-    } catch (_) {
-      if (!mounted) return;
-      setState(() => _loadingBalance = false);
-    }
-  }
 
   Future<void> _pay() async {
-    final phoneDigits = _phoneCtrl.text.replaceAll(RegExp(r'\D'), '');
+    final till = _tillCtrl.text.trim();
     final amount = double.tryParse(_amountCtrl.text.trim()) ?? 0;
-    if (phoneDigits.length < 9) {
-      _snack('Enter a valid phone number');
+    if (till.isEmpty) {
+      _snack('Enter a till number');
       return;
     }
     if (amount <= 0) {
@@ -573,28 +473,20 @@ class _TruePayUserPayViewState extends State<_TruePayUserPayView> {
       return;
     }
 
-    final phoneE164 =
-        phoneDigits.startsWith('254') ? '+$phoneDigits' : '+$phoneDigits';
-
     await runGuardedAsync(
       this,
       isSubmitting: () => _submitting,
       setSubmitting: (v) => setState(() => _submitting = v),
       action: () async {
-        final name = _nameCtrl.text.trim();
         final ok = await _submitPay(
           context: context,
           amount: amount,
           currency: widget.currency,
-          phoneNumber: phoneE164,
-          note: name.isEmpty
-              ? 'Pay TruePay user $phoneE164'
-              : 'Pay TruePay user $name ($phoneE164)',
+          note: 'Buy goods till $till',
           metadata: {
             'flow': 'pay',
-            'payMethod': 'truepay_user',
-            'recipientPhone': phoneE164,
-            if (name.isNotEmpty) 'recipientName': name,
+            'payMethod': 'buy_goods',
+            'tillNumber': till,
           },
         );
         if (ok && mounted) widget.onPaid();
@@ -608,6 +500,8 @@ class _TruePayUserPayViewState extends State<_TruePayUserPayView> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AppColors.getThemeColors(context);
+
     return Column(
       children: [
         Expanded(
@@ -621,28 +515,328 @@ class _TruePayUserPayViewState extends State<_TruePayUserPayView> {
               ),
               const SizedBox(height: 20),
               _PayField(
-                controller: _nameCtrl,
-                label: 'Recipient name (optional)',
-                hint: 'Full name',
-              ),
-              const SizedBox(height: 12),
-              _PayField(
-                controller: _phoneCtrl,
-                label: 'Phone number',
-                hint: 'Include country code',
-                keyboardType: TextInputType.phone,
-                prefixText: '+',
+                controller: _tillCtrl,
+                label: 'Till number',
+                hint: 'Lipa Na M-Pesa till',
+                keyboardType: TextInputType.number,
               ),
               const SizedBox(height: 12),
               _PayAmountField(
                 controller: _amountCtrl,
                 currency: widget.currency,
               ),
+              const _MerchantValidationSpace(),
+              const SizedBox(height: 16),
+              Text(
+                'Payment is deducted from your ${widget.currency} wallet.',
+                style: TextStyle(color: colors.textTertiary, fontSize: 12),
+              ),
             ],
           ),
         ),
         _PayBottomButton(
-          label: 'Send Payment',
+          label: 'Confirm Payment',
+          loading: _submitting,
+          onPressed: _pay,
+        ),
+      ],
+    );
+  }
+}
+
+// ─── Pochi La Biashara ──────────────────────────────────────────────────────
+
+class _PochiLaBiasharaView extends StatefulWidget {
+  const _PochiLaBiasharaView({
+    super.key,
+    required this.currency,
+    required this.onPaid,
+  });
+
+  final String currency;
+  final VoidCallback onPaid;
+
+  @override
+  State<_PochiLaBiasharaView> createState() => _PochiLaBiasharaViewState();
+}
+
+class _PochiLaBiasharaViewState extends State<_PochiLaBiasharaView> {
+  final _pochiCtrl = TextEditingController();
+  final _amountCtrl = TextEditingController();
+  bool _submitting = false;
+  double _balance = 0;
+  bool _loadingBalance = true;
+
+  void applyScannedCode(String code) {
+    setState(() => _pochiCtrl.text = code);
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _loadBalance();
+  }
+
+  @override
+  void dispose() {
+    _pochiCtrl.dispose();
+    _amountCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadBalance() => _loadWalletBalance(
+        currency: widget.currency,
+        onLoaded: (b) => setState(() {
+          _balance = b;
+          _loadingBalance = false;
+        }),
+        onDoneWithoutBalance: () => setState(() => _loadingBalance = false),
+        mounted: () => mounted,
+      );
+
+  Future<void> _pay() async {
+    final pochi = _pochiCtrl.text.replaceAll(RegExp(r'\s+'), '');
+    final amount = double.tryParse(_amountCtrl.text.trim()) ?? 0;
+    if (pochi.length < 9) {
+      _snack('Enter a valid Pochi number');
+      return;
+    }
+    if (amount <= 0) {
+      _snack('Enter a valid amount');
+      return;
+    }
+    if (amount > _balance) {
+      _snack('Insufficient balance');
+      return;
+    }
+
+    await runGuardedAsync(
+      this,
+      isSubmitting: () => _submitting,
+      setSubmitting: (v) => setState(() => _submitting = v),
+      action: () async {
+        final ok = await _submitPay(
+          context: context,
+          amount: amount,
+          currency: widget.currency,
+          phoneNumber: pochi.startsWith('+') ? pochi : '+$pochi',
+          note: 'Pochi La Biashara $pochi',
+          metadata: {
+            'flow': 'pay',
+            'payMethod': 'pochi_la_biashara',
+            'pochiNumber': pochi,
+          },
+        );
+        if (ok && mounted) widget.onPaid();
+      },
+    );
+  }
+
+  void _snack(String m) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m)));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = AppColors.getThemeColors(context);
+
+    return Column(
+      children: [
+        Expanded(
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+            children: [
+              _AvailableRow(
+                currency: widget.currency,
+                balance: _balance,
+                loading: _loadingBalance,
+              ),
+              const SizedBox(height: 20),
+              _PayField(
+                controller: _pochiCtrl,
+                label: 'Pochi number',
+                hint: 'Business phone / Pochi number',
+                keyboardType: TextInputType.phone,
+              ),
+              const SizedBox(height: 12),
+              _PayAmountField(
+                controller: _amountCtrl,
+                currency: widget.currency,
+              ),
+              const _MerchantValidationSpace(),
+              const SizedBox(height: 16),
+              Text(
+                'Payment is deducted from your ${widget.currency} wallet.',
+                style: TextStyle(color: colors.textTertiary, fontSize: 12),
+              ),
+            ],
+          ),
+        ),
+        _PayBottomButton(
+          label: 'Confirm Payment',
+          loading: _submitting,
+          onPressed: _pay,
+        ),
+      ],
+    );
+  }
+}
+
+// ─── TruePay Merchant (QR only) ─────────────────────────────────────────────
+
+class _TruePayMerchantQrView extends StatefulWidget {
+  const _TruePayMerchantQrView({
+    super.key,
+    required this.currency,
+    required this.onPaid,
+  });
+
+  final String currency;
+  final VoidCallback onPaid;
+
+  @override
+  State<_TruePayMerchantQrView> createState() => _TruePayMerchantQrViewState();
+}
+
+class _TruePayMerchantQrViewState extends State<_TruePayMerchantQrView> {
+  final _codeCtrl = TextEditingController();
+  final _amountCtrl = TextEditingController();
+  bool _submitting = false;
+
+  void applyScannedCode(String code) {
+    setState(() => _codeCtrl.text = code);
+  }
+
+  @override
+  void dispose() {
+    _codeCtrl.dispose();
+    _amountCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _pay() async {
+    final code = _codeCtrl.text.trim();
+    final amount = double.tryParse(_amountCtrl.text.trim()) ?? 0;
+    if (code.isEmpty) {
+      _snack('Scan or enter the merchant QR code');
+      return;
+    }
+    if (amount <= 0) {
+      _snack('Enter a valid amount');
+      return;
+    }
+
+    await runGuardedAsync(
+      this,
+      isSubmitting: () => _submitting,
+      setSubmitting: (v) => setState(() => _submitting = v),
+      action: () async {
+        final ok = await _submitPay(
+          context: context,
+          amount: amount,
+          currency: widget.currency,
+          note: 'Pay TruePay merchant via QR $code',
+          metadata: {
+            'flow': 'pay',
+            'payMethod': 'truepay_merchant_qr',
+            'paymentCode': code,
+          },
+        );
+        if (ok && mounted) widget.onPaid();
+      },
+    );
+  }
+
+  void _snack(String m) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m)));
+  }
+
+  Future<void> _openCameraScan() async {
+    final code = await Navigator.of(context).push<String>(
+      MaterialPageRoute(
+        builder: (_) => const QrScanPage(title: 'Scan merchant QR'),
+      ),
+    );
+    if (!mounted || code == null || code.trim().isEmpty) return;
+    applyScannedCode(code.trim());
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = AppColors.getThemeColors(context);
+    final primary = Theme.of(context).colorScheme.primary;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Column(
+      children: [
+        Expanded(
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+            children: [
+              AspectRatio(
+                aspectRatio: 1,
+                child: Material(
+                  color: isDark ? colors.surface : Colors.white,
+                  borderRadius: BorderRadius.circular(20),
+                  child: InkWell(
+                    onTap: _openCameraScan,
+                    borderRadius: BorderRadius.circular(20),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                          color: primary.withValues(alpha: 0.45),
+                          width: 2,
+                        ),
+                      ),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.qr_code_scanner_rounded,
+                            size: 72,
+                            color: primary.withValues(alpha: 0.85),
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            'Tap to scan TruePay merchant QR',
+                            style: TextStyle(
+                              color: colors.textSecondary,
+                              fontSize: 14,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Use camera or upload from gallery',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              color: colors.textTertiary,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 24),
+              _PayField(
+                controller: _codeCtrl,
+                label: 'QR payment code',
+                hint: 'Code from TruePay merchant QR',
+              ),
+              const SizedBox(height: 12),
+              _PayAmountField(
+                controller: _amountCtrl,
+                currency: widget.currency,
+              ),
+              const _MerchantValidationSpace(),
+            ],
+          ),
+        ),
+        _PayBottomButton(
+          label: 'Pay Now',
           loading: _submitting,
           onPressed: _pay,
         ),
@@ -652,6 +846,87 @@ class _TruePayUserPayViewState extends State<_TruePayUserPayView> {
 }
 
 // ─── Shared pay helpers / widgets ───────────────────────────────────────────
+
+/// Reserved area under pay fields for post-validation merchant names.
+class _MerchantValidationSpace extends StatelessWidget {
+  const _MerchantValidationSpace();
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = AppColors.getThemeColors(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Container(
+      width: double.infinity,
+      constraints: const BoxConstraints(minHeight: 128),
+      margin: const EdgeInsets.only(top: 20),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+      decoration: BoxDecoration(
+        color: isDark
+            ? colors.surface.withValues(alpha: 0.55)
+            : Colors.white.withValues(alpha: 0.7),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: isDark
+              ? colors.surfaceVariant.withValues(alpha: 0.55)
+              : const Color(0xFFE5E7EB),
+        ),
+      ),
+      alignment: Alignment.centerLeft,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Text(
+            'Merchant',
+            style: TextStyle(
+              color: colors.textTertiary,
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            'Merchant name will appear here after validation',
+            style: TextStyle(
+              color: colors.textTertiary,
+              fontSize: 14,
+              height: 1.35,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+Future<void> _loadWalletBalance({
+  required String currency,
+  required void Function(double balance) onLoaded,
+  required VoidCallback onDoneWithoutBalance,
+  required bool Function() mounted,
+}) async {
+  if (!isFirebaseInitialized()) {
+    onDoneWithoutBalance();
+    return;
+  }
+  final user = FirebaseAuth.instance.currentUser;
+  if (user == null) {
+    onDoneWithoutBalance();
+    return;
+  }
+  try {
+    final wallet = await WalletRepository().getWalletBalance(
+      user.uid,
+      currency: currency,
+    );
+    if (!mounted()) return;
+    onLoaded(wallet?.balance ?? 0);
+  } catch (_) {
+    if (!mounted()) return;
+    onDoneWithoutBalance();
+  }
+}
 
 Future<bool> _submitPay({
   required BuildContext context,
@@ -766,14 +1041,12 @@ class _PayField extends StatelessWidget {
     required this.label,
     required this.hint,
     this.keyboardType,
-    this.prefixText,
   });
 
   final TextEditingController controller;
   final String label;
   final String hint;
   final TextInputType? keyboardType;
-  final String? prefixText;
 
   @override
   Widget build(BuildContext context) {
@@ -787,15 +1060,10 @@ class _PayField extends StatelessWidget {
       decoration: InputDecoration(
         labelText: label,
         hintText: hint,
-        prefixText: prefixText,
         filled: true,
         fillColor: colors.inputBackground,
         labelStyle: TextStyle(color: colors.textSecondary),
         hintStyle: TextStyle(color: colors.inputPlaceholder),
-        prefixStyle: TextStyle(
-          color: colors.textPrimary,
-          fontWeight: FontWeight.w600,
-        ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
           borderSide: BorderSide(color: colors.inputBorder),

@@ -2,16 +2,17 @@ import 'dart:async';
 
 import 'package:app_links/app_links.dart';
 import 'package:flutter/material.dart';
+import 'package:pretium/app/route_names.dart';
 import 'package:pretium/services/dashboard_session_cache.dart';
 import 'package:pretium/services/payment_service.dart';
 import 'package:pretium/utils/logger.dart';
 
-/// Paystack / Transak C2B return handling via deep link only:
-/// - Native: `truepay://payment/callback?reference=fund_…`
+/// Paystack / Transak C2B return handling:
+/// - Native deep link: `truepay://payment/callback?reference=fund_…`
 /// - Web/PWA: `https://app.truepay.live/payment/callback?reference=fund_…`
+/// - In-app WebView: same callback URLs intercepted by [PaymentCheckoutWebViewPage]
 ///
-/// Confirmation is triggered exclusively from [app_links] (cold start + stream).
-/// Do not also call [onPaymentReturn] from app resume, launchUrl callbacks, or manual UI buttons.
+/// On success, navigates to the home dashboard (not the top-up screen).
 class PaymentCallbackService {
   PaymentCallbackService._();
   static final PaymentCallbackService instance = PaymentCallbackService._();
@@ -72,12 +73,13 @@ class PaymentCallbackService {
   }
 
   /// Idempotent confirm/poll for a funding reference (fund_…) from Paystack or Transak.
-  Future<void> onPaymentReturn(String reference) async {
+  /// Returns `true` when confirmation succeeds.
+  Future<bool> onPaymentReturn(String reference) async {
     if (reference.isEmpty || _confirmedRefs.contains(reference)) {
       if (reference.isNotEmpty && _confirmedRefs.contains(reference)) {
         Logger.debug('Skipping duplicate payment confirm: $reference');
       }
-      return;
+      return false;
     }
     _confirmedRefs.add(reference);
 
@@ -88,10 +90,17 @@ class PaymentCallbackService {
 
     DashboardSessionCache.instance.clear();
 
-    final context = _navigatorKey?.currentContext;
-    if (context == null || !context.mounted) return;
+    final success = result['success'] == true;
+    final nav = _navigatorKey?.currentState;
 
-    if (result['success'] == true) {
+    if (success && nav != null) {
+      nav.pushNamedAndRemoveUntil(RouteNames.home, (route) => false);
+    }
+
+    final context = _navigatorKey?.currentContext;
+    if (context == null || !context.mounted) return success;
+
+    if (success) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Payment confirmed. Your wallet balance will update shortly.'),
@@ -106,5 +115,6 @@ class PaymentCallbackService {
         ),
       );
     }
+    return success;
   }
 }

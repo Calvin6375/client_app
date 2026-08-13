@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:pretium/features/crypto/screens/usdc_receive_screen.dart';
 import 'package:pretium/features/crypto/services/crypto_api_service.dart';
+import 'package:pretium/features/pay/screens/pay_page.dart';
 import 'package:pretium/features/topup/models/topup_deposit_country.dart';
 import 'package:pretium/features/topup/screens/topup_page.dart';
 import 'package:pretium/features/withdraw/screens/withdraw_page.dart';
@@ -49,10 +50,19 @@ class _WalletCardState extends State<WalletCard> {
   DateTime? _cacheTimestamp;
   static const Duration _cacheValidityDuration = Duration(seconds: 30); // Cache valid for 30 seconds
   
-  // Supported fiat currencies to check
-  static const List<String> _supportedFiatCurrencies = ['USD', 'KES', 'NGN', 'GHS', 'UGX'];
+  // Supported fiat currencies to check (KES first in carousel).
+  static const List<String> _supportedFiatCurrencies = ['KES', 'USD', 'NGN', 'GHS', 'UGX'];
   static const List<String> _supportedCryptoCurrencies = ['USDT', 'USDC'];
   static const double _cardAspectRatio = 1.586; // ISO/IEC 7810 ID-1 card ratio
+
+  /// Keeps KES as the first fiat wallet card whenever it is available.
+  static List<String> _withKesFirst(List<String> currencies) {
+    if (!currencies.contains('KES')) return List<String>.from(currencies);
+    return [
+      'KES',
+      ...currencies.where((c) => c != 'KES'),
+    ];
+  }
 
   double _cardHeight(BuildContext context) {
     final cardWidth = MediaQuery.of(context).size.width - 40;
@@ -62,7 +72,7 @@ class _WalletCardState extends State<WalletCard> {
   Widget _buildActionButtons(
     BuildContext context, {
     required VoidCallback onTopUp,
-    required VoidCallback onWithdraw,
+    required VoidCallback onPay,
   }) {
     final cardWidth = MediaQuery.of(context).size.width - 40;
 
@@ -73,7 +83,7 @@ class _WalletCardState extends State<WalletCard> {
           children: [
             Expanded(
               child: _FlowPayActionButton(
-                label: 'Add Money',
+                label: 'Top Up',
                 isPrimary: true,
                 onPressed: onTopUp,
               ),
@@ -81,9 +91,9 @@ class _WalletCardState extends State<WalletCard> {
             const SizedBox(width: 12),
             Expanded(
               child: _FlowPayActionButton(
-                label: 'Withdraw',
+                label: 'Pay',
                 isPrimary: false,
-                onPressed: onWithdraw,
+                onPressed: onPay,
               ),
             ),
           ],
@@ -138,7 +148,7 @@ class _WalletCardState extends State<WalletCard> {
       ..addAll(snap.fiatWallets);
     _availableFiatCurrencies
       ..clear()
-      ..addAll(snap.availableFiatCurrencies);
+      ..addAll(_withKesFirst(snap.availableFiatCurrencies));
     if (_availableFiatCurrencies.isNotEmpty) {
       _fiatWallet = _fiatWallets[_availableFiatCurrencies[0]];
       _currentFiatIndex = 0;
@@ -231,14 +241,16 @@ class _WalletCardState extends State<WalletCard> {
         }
       }
       
-      // Ensure at least USD is available
+      // Ensure at least USD is available (do not force it ahead of KES)
       if (!fiatWallets.containsKey('USD')) {
         final usdWallet = await _walletRepository.getWalletBalance(user.uid, currency: 'USD');
         fiatWallets['USD'] = usdWallet ?? Wallet(currencyCode: 'USD', balance: 0.0);
         if (!availableCurrencies.contains('USD')) {
-          availableCurrencies.insert(0, 'USD');
+          availableCurrencies.add('USD');
         }
       }
+
+      final orderedFiatCurrencies = _withKesFirst(availableCurrencies);
       
       // Load crypto wallets (USDT from RTDB, USDC from RTDB + API for authoritative display)
       final Map<String, Wallet> cryptoWallets = {};
@@ -266,13 +278,13 @@ class _WalletCardState extends State<WalletCard> {
       if (!mounted) return;
       
       // Update cache
-      _cachedFiatWallet = fiatWallets[availableCurrencies.isNotEmpty ? availableCurrencies[0] : 'USD'] ?? Wallet(currencyCode: 'USD', balance: 0.0);
+      _cachedFiatWallet = fiatWallets[orderedFiatCurrencies.isNotEmpty ? orderedFiatCurrencies[0] : 'USD'] ?? Wallet(currencyCode: 'USD', balance: 0.0);
       _cachedCryptoWallet = cryptoWallets['USDT'] ?? Wallet(currencyCode: 'USDT', balance: 0.0);
       _cacheTimestamp = now;
 
       DashboardSessionCache.instance.recordWalletSnapshot(
         fiatWallets: fiatWallets,
-        availableFiatCurrencies: availableCurrencies,
+        availableFiatCurrencies: orderedFiatCurrencies,
         cryptoWallets: cryptoWallets,
         availableCryptoCurrencies: List<String>.from(_supportedCryptoCurrencies),
         cachedFiatWallet: _cachedFiatWallet,
@@ -283,9 +295,9 @@ class _WalletCardState extends State<WalletCard> {
         _fiatWallets.clear();
         _fiatWallets.addAll(fiatWallets);
         _availableFiatCurrencies.clear();
-        _availableFiatCurrencies.addAll(availableCurrencies);
+        _availableFiatCurrencies.addAll(orderedFiatCurrencies);
         
-        // Set current fiat wallet to first available or USD
+        // Set current fiat wallet to first available (KES when present)
         if (_availableFiatCurrencies.isNotEmpty) {
           _fiatWallet = _fiatWallets[_availableFiatCurrencies[0]];
           _currentFiatIndex = 0;
@@ -349,7 +361,7 @@ class _WalletCardState extends State<WalletCard> {
             _buildActionButtons(
               context,
               onTopUp: _openTopUpFlow,
-              onWithdraw: () => _openFiatWithdraw(context),
+              onPay: () => _openPayFlow(isCrypto: false),
             ),
           ],
         );
@@ -414,7 +426,7 @@ class _WalletCardState extends State<WalletCard> {
           _buildActionButtons(
             context,
             onTopUp: _openTopUpFlow,
-            onWithdraw: () => _openFiatWithdraw(context),
+            onPay: () => _openPayFlow(isCrypto: false),
           ),
           // Page indicator dots — FlowPay-style circular indicators
           if (_availableFiatCurrencies.length > 1)
@@ -459,7 +471,7 @@ class _WalletCardState extends State<WalletCard> {
             _buildActionButtons(
               context,
               onTopUp: () => _openCryptoTopUp('USDT'),
-              onWithdraw: () => _openCryptoWithdraw('USDT'),
+              onPay: () => _openPayFlow(isCrypto: true),
             ),
           ],
         );
@@ -511,7 +523,7 @@ class _WalletCardState extends State<WalletCard> {
           _buildActionButtons(
             context,
             onTopUp: () => _openCryptoTopUp(currentCryptoCurrency),
-            onWithdraw: () => _openCryptoWithdraw(currentCryptoCurrency),
+            onPay: () => _openPayFlow(isCrypto: true),
           ),
           if (_availableCryptoCurrencies.length > 1)
             Padding(
@@ -581,6 +593,38 @@ class _WalletCardState extends State<WalletCard> {
       ),
     );
     if (mounted) await _refreshBalance(forceRefresh: true);
+  }
+
+  Future<void> _openPayFlow({required bool isCrypto}) async {
+    final String payCurrency;
+    if (isCrypto) {
+      payCurrency = 'USD';
+    } else if (_availableFiatCurrencies.isNotEmpty) {
+      payCurrency = _availableFiatCurrencies[
+          _currentFiatIndex.clamp(0, _availableFiatCurrencies.length - 1)];
+    } else {
+      payCurrency = _fiatWallet?.currencyCode ?? 'KES';
+    }
+
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => PayPage(initialCurrency: payCurrency),
+      ),
+    );
+    if (mounted) await _refreshBalance(forceRefresh: true);
+  }
+
+  /// Opens withdraw for the currently selected fiat/crypto wallet (used from Financial Services).
+  void openWithdraw() {
+    if (widget.selectedTab == 1) {
+      final currency = _availableCryptoCurrencies.isNotEmpty
+          ? _availableCryptoCurrencies[
+              _currentCryptoIndex.clamp(0, _availableCryptoCurrencies.length - 1)]
+          : 'USDT';
+      _openCryptoWithdraw(currency);
+      return;
+    }
+    _openFiatWithdraw(context);
   }
 
   void _openFiatWithdraw(BuildContext context) {

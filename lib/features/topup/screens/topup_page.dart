@@ -1,10 +1,9 @@
 // Top-up screen: fiat (Paystack / Transak card checkout, direct fiat, crypto).
-// Card/mobile money: PaymentService.createPayment → hosted checkout in browser.
+// Card/mobile money: PaymentService.createPayment → hosted checkout in-app WebView.
 // African currencies → Paystack; USD, GBP, EUR, and other non-African → Transak.
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:url_launcher/url_launcher.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:pretium/repositories/wallet_repository.dart';
@@ -16,6 +15,7 @@ import 'package:pretium/utils/firebase_utils.dart';
 import 'package:pretium/core/constants/app_colors.dart';
 import 'package:pretium/features/topup/models/topup_deposit_country.dart';
 import 'package:pretium/features/topup/screens/direct_fiat_deposit_flow.dart';
+import 'package:pretium/features/topup/screens/payment_checkout_webview_page.dart';
 
 /// Fiat codes in the Set amount dropdown; includes every [TopupDepositCountry] code plus extras.
 List<String> _topupFiatCurrencyCodes({String? includeCode}) {
@@ -279,7 +279,7 @@ class _TopUpPageState extends State<TopUpPage> {
   String get _cardMobileMoneyProviderLabel =>
       TopupDepositCountry.cardMobileMoneyProviderLabelFor(_selectedCurrency);
 
-  /// Card checkout: createPayment (Cloud Function) → open hosted checkout in browser.
+  /// Card checkout: createPayment (Cloud Function) → open hosted checkout in-app.
   Future<void> _processFiatTopUp() async {
     if (_amountCtrl.text.isEmpty) {
       _showError('Please enter an amount');
@@ -352,38 +352,17 @@ class _TopUpPageState extends State<TopUpPage> {
         return;
       }
 
-      final paystackAmount = result['paystackAmount'];
-      final paystackCurrency = result['paystackCurrency']?.toString();
-      final providerLabel = _cardMobileMoneyProviderLabel;
-      var message = 'Complete payment in your browser.';
-      if (_cardMobileMoneyProvider == 'paystack' &&
-          paystackAmount != null &&
-          paystackCurrency != null &&
-          _selectedCurrency.toUpperCase() != paystackCurrency.toUpperCase()) {
-        message =
-            'You will be charged $paystackCurrency $paystackAmount on Paystack.';
-      } else if (_cardMobileMoneyProvider == 'transak') {
-        final chargeAmount = result['amount'];
-        final chargeCurrency = result['currency']?.toString() ?? _selectedCurrency;
-        if (chargeAmount != null) {
-          message =
-              'You will pay $chargeCurrency $chargeAmount on Transak.';
-        }
-      }
+      if (!mounted) return;
 
-      final launched = await launchUrl(
-        Uri.parse(checkoutUrl),
-        mode: LaunchMode.externalApplication,
+      await Navigator.of(context).push<bool>(
+        MaterialPageRoute(
+          builder: (_) => PaymentCheckoutWebViewPage(
+            checkoutUrl: checkoutUrl,
+            paymentId: invoiceId,
+            title: '$_cardMobileMoneyProviderLabel checkout',
+          ),
+        ),
       );
-
-      if (!launched) {
-        _showPaymentLaunchedDialog(
-          checkoutUrl,
-          invoiceId,
-          '$message (automatic launch failed — use options below)',
-          providerLabel: providerLabel,
-        );
-      }
     } catch (e) {
       _showError('Error processing payment: $e');
     } finally {
@@ -457,158 +436,6 @@ class _TopUpPageState extends State<TopUpPage> {
               Navigator.of(context).pop();
             },
             child: const Text('OK'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showPaymentLaunchedDialog(
-    String checkoutUrl,
-    String paymentId,
-    String? message, {
-    required String providerLabel,
-  }) {
-    showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('Payment Ready'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Icon(
-                    Icons.payment,
-                    size: 32,
-                    color: Theme.of(context).colorScheme.primary,
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      '$providerLabel checkout is ready!',
-                      style: const TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              if (message != null) ...[
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.green.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.green.withValues(alpha: 0.3)),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.check_circle, color: Colors.green, size: 16),
-                      const SizedBox(width: 8),
-                      Expanded(child: Text(message, style: TextStyle(color: Colors.green[700]))),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 16),
-              ],
-              const Text(
-                'Complete payment in your browser. When finished, return to the app — '
-                'confirmation happens automatically via the app link.',
-                style: TextStyle(fontSize: 14),
-              ),
-              const SizedBox(height: 16),
-              
-              // Payment URL section
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.grey[50],
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.grey[300]!),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Icon(Icons.link, size: 16, color: Colors.grey[600]),
-                        const SizedBox(width: 8),
-                        Text('Payment URL:', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12, color: Colors.grey[600])),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    SelectableText(
-                      checkoutUrl,
-                      style: const TextStyle(fontSize: 11, fontFamily: 'monospace'),
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                      children: [
-                        Expanded(
-                          child: ElevatedButton.icon(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Theme.of(context).colorScheme.primary,
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(vertical: 8),
-                            ),
-                            onPressed: () async {
-                              final messenger = ScaffoldMessenger.of(context);
-                              final launched = await launchUrl(
-                                Uri.parse(checkoutUrl),
-                                mode: LaunchMode.externalApplication,
-                              );
-                              if (!launched) {
-                                messenger.showSnackBar(
-                                  const SnackBar(
-                                    content: Text('Could not open payment page automatically. Please copy the URL above.'),
-                                    backgroundColor: Colors.orange,
-                                  ),
-                                );
-                              } else {
-                                messenger.showSnackBar(
-                                  const SnackBar(
-                                    content: Text('Payment page opened successfully!'),
-                                    backgroundColor: Colors.green,
-                                  ),
-                                );
-                              }
-                            },
-                            icon: const Icon(Icons.open_in_browser, size: 16),
-                            label: const Text('Open Page', style: TextStyle(fontSize: 12)),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: OutlinedButton.icon(
-                            onPressed: () {
-                              Clipboard.setData(ClipboardData(text: checkoutUrl));
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('Payment URL copied to clipboard!'),
-                                  backgroundColor: Colors.green,
-                                ),
-                              );
-                            },
-                            icon: const Icon(Icons.copy, size: 16),
-                            label: const Text('Copy URL', style: TextStyle(fontSize: 12)),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Close'),
           ),
         ],
       ),
