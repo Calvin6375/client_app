@@ -320,8 +320,8 @@ class _QrFramePainter extends CustomPainter {
     final bottom = size.height - inset;
 
     // Top-left
-    canvas.drawLine(Offset(left, top + corner), Offset(left, top), paint);
-    canvas.drawLine(Offset(left, top), Offset(left + corner, top), paint);
+    canvas.drawLine(const Offset(left, top + corner), const Offset(left, top), paint);
+    canvas.drawLine(const Offset(left, top), const Offset(left + corner, top), paint);
     // Top-right
     canvas.drawLine(Offset(right - corner, top), Offset(right, top), paint);
     canvas.drawLine(Offset(right, top), Offset(right, top + corner), paint);
