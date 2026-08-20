@@ -84,7 +84,7 @@ class _WalletCardState extends State<WalletCard> {
             Expanded(
               child: _FlowPayActionButton(
                 label: 'Top Up',
-                isPrimary: true,
+                isPrimary: false,
                 onPressed: onTopUp,
               ),
             ),
@@ -92,7 +92,7 @@ class _WalletCardState extends State<WalletCard> {
             Expanded(
               child: _FlowPayActionButton(
                 label: 'Pay',
-                isPrimary: false,
+                isPrimary: true,
                 onPressed: onPay,
               ),
             ),

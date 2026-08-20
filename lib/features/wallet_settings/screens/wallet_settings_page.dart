@@ -73,7 +73,7 @@ class _WalletSettingsPageState extends State<WalletSettingsPage> {
         return;
       }
 
-      if (!await _biometricSession.isDeviceSupported()) {
+      if (!await _biometricSession.hasUsableBiometrics()) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Biometrics are not available on this device.')),
@@ -358,7 +358,7 @@ class _WalletSettingsPageState extends State<WalletSettingsPage> {
                   const SizedBox(height: 16),
                   Center(
                     child: Text(
-                      'SafariTap v1.0.0',
+                      'version: 1.0.0+14',
                       style: TextStyle(
                         color: colors.textTertiary,
                         fontSize: 12,

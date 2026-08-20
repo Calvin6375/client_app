@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:pretium/core/constants/app_colors.dart';
+import 'package:pretium/widgets/currency_logo.dart';
 
 class Currency {
   final String code; // e.g., NGN, USD
@@ -85,7 +86,11 @@ class CurrencyPickerBottomSheet extends StatelessWidget {
                       backgroundColor: isDark 
                           ? colors.background 
                           : Colors.white.withValues(alpha: 0.95),
-                      child: Text(c.flagEmoji),
+                      child: CurrencyLogo(
+                        code: c.code,
+                        size: 22,
+                        fallbackEmoji: c.flagEmoji,
+                      ),
                     ),
                     title: Text(
                       c.code,

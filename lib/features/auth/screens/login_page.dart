@@ -56,7 +56,7 @@ class _LoginScreenState extends State<LoginPage> with WidgetsBindingObserver {
   }
 
   Future<void> _loadBiometricAvailability() async {
-    final deviceSupported = await _biometricSession.isDeviceSupported();
+    final deviceSupported = await _biometricSession.hasUsableBiometrics();
     final available = await _biometricSession.canUseBiometricLogin();
     final icon = await _biometricSession.preferredBiometricIcon();
     if (mounted) {

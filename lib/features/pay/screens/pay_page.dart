@@ -3,12 +3,30 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:pretium/core/constants/app_colors.dart';
 import 'package:pretium/features/pay/screens/qr_scan_page.dart';
+import 'package:pretium/models/wallet_model.dart';
 import 'package:pretium/repositories/wallet_repository.dart';
+import 'package:pretium/services/dashboard_session_cache.dart';
 import 'package:pretium/services/payment_service.dart';
 import 'package:pretium/utils/async_action_guard.dart';
 import 'package:pretium/utils/firebase_utils.dart';
+import 'package:pretium/widgets/currency_logo.dart';
 
 enum _PayOption { payBill, buyGoods, pochiLaBiashara, truePayMerchant }
+
+/// Pay Bill / Buy Goods / Pochi amounts are always denominated in KES.
+const String _kPayAmountCurrency = 'KES';
+
+class _PayWalletOption {
+  const _PayWalletOption({
+    required this.code,
+    required this.balance,
+    required this.isCrypto,
+  });
+
+  final String code;
+  final double balance;
+  final bool isCrypto;
+}
 
 /// Pay bills, buy goods, Pochi La Biashara, or TruePay merchants (QR).
 class PayPage extends StatefulWidget {
@@ -27,6 +45,171 @@ class _PayPageState extends State<PayPage> {
   final _pochiKey = GlobalKey<_PochiLaBiasharaViewState>();
   final _truePayMerchantKey = GlobalKey<_TruePayMerchantQrViewState>();
 
+  final WalletRepository _walletRepository = WalletRepository();
+  static const _supportedFiat = ['KES', 'USD', 'NGN', 'GHS', 'UGX'];
+  static const _supportedCrypto = ['USDT', 'USDC'];
+
+  late String _selectedCurrency;
+  final Map<String, double> _balances = {};
+  List<_PayWalletOption> _wallets = const [];
+  bool _loadingWallets = true;
+
+  @override
+  void initState() {
+    super.initState();
+    final initial = widget.initialCurrency.trim().toUpperCase();
+    _selectedCurrency = initial.isEmpty ? _kPayAmountCurrency : initial;
+    _hydrateFromCache();
+    if (_balances.containsKey(_kPayAmountCurrency)) {
+      _selectedCurrency = _kPayAmountCurrency;
+    }
+    _loadWallets();
+  }
+
+  void _hydrateFromCache() {
+    final snap = DashboardSessionCache.instance.readWalletLastKnown();
+    if (snap == null) return;
+
+    final options = <_PayWalletOption>[];
+    for (final code in snap.availableFiatCurrencies) {
+      final bal = snap.fiatWallets[code]?.balance ?? 0;
+      _balances[code] = bal;
+      options.add(_PayWalletOption(code: code, balance: bal, isCrypto: false));
+    }
+    final cryptoCodes = snap.availableCryptoCurrencies.isNotEmpty
+        ? snap.availableCryptoCurrencies
+        : _supportedCrypto;
+    for (final code in cryptoCodes) {
+      final bal = snap.cryptoWallets[code]?.balance ?? 0;
+      _balances[code] = bal;
+      options.add(_PayWalletOption(code: code, balance: bal, isCrypto: true));
+    }
+    if (options.isEmpty) return;
+
+    _wallets = options;
+    _loadingWallets = false;
+    if (!_balances.containsKey(_selectedCurrency)) {
+      _selectedCurrency = options.first.code;
+    }
+  }
+
+  Future<void> _loadWallets() async {
+    if (!isFirebaseInitialized()) {
+      if (mounted) setState(() => _loadingWallets = false);
+      return;
+    }
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      if (mounted) setState(() => _loadingWallets = false);
+      return;
+    }
+
+    try {
+      final options = <_PayWalletOption>[];
+      final balances = <String, double>{};
+
+      for (final code in _supportedFiat) {
+        try {
+          final wallet =
+              await _walletRepository.getWalletBalance(user.uid, currency: code);
+          final bal = wallet?.balance ?? 0;
+          balances[code] = bal;
+          options.add(
+            _PayWalletOption(code: code, balance: bal, isCrypto: false),
+          );
+        } catch (_) {
+          balances[code] = _balances[code] ?? 0;
+          options.add(
+            _PayWalletOption(
+              code: code,
+              balance: balances[code]!,
+              isCrypto: false,
+            ),
+          );
+        }
+      }
+
+      for (final code in _supportedCrypto) {
+        try {
+          final wallet =
+              await _walletRepository.getCryptoWalletBalance(user.uid, code);
+          final bal = wallet?.balance ?? 0;
+          balances[code] = bal;
+          options.add(
+            _PayWalletOption(code: code, balance: bal, isCrypto: true),
+          );
+        } catch (_) {
+          balances[code] = _balances[code] ?? 0;
+          options.add(
+            _PayWalletOption(
+              code: code,
+              balance: balances[code]!,
+              isCrypto: true,
+            ),
+          );
+        }
+      }
+
+      // Prefer KES first among fiat, then remaining fiat, then crypto.
+      options.sort((a, b) {
+        int rank(_PayWalletOption w) {
+          if (w.code == 'KES') return 0;
+          if (!w.isCrypto) return 1;
+          return 2;
+        }
+
+        final r = rank(a).compareTo(rank(b));
+        if (r != 0) return r;
+        return a.code.compareTo(b.code);
+      });
+
+      if (!mounted) return;
+      setState(() {
+        _balances
+          ..clear()
+          ..addAll(balances);
+        _wallets = options;
+        if (!_balances.containsKey(_selectedCurrency) && options.isNotEmpty) {
+          _selectedCurrency = _balances.containsKey(_kPayAmountCurrency)
+              ? _kPayAmountCurrency
+              : options.first.code;
+        } else if (_balances.containsKey(_kPayAmountCurrency)) {
+          // Prefer KES when available so amount and funding wallet stay aligned.
+          _selectedCurrency = _kPayAmountCurrency;
+        }
+        _loadingWallets = false;
+      });
+
+      final existing = DashboardSessionCache.instance.readWalletLastKnown();
+      DashboardSessionCache.instance.recordWalletSnapshot(
+        fiatWallets: {
+          for (final o in options.where((w) => !w.isCrypto))
+            o.code: Wallet(currencyCode: o.code, balance: o.balance),
+        },
+        availableFiatCurrencies: [
+          for (final o in options.where((w) => !w.isCrypto)) o.code,
+        ],
+        cryptoWallets: {
+          for (final o in options.where((w) => w.isCrypto))
+            o.code: Wallet(currencyCode: o.code, balance: o.balance),
+          ...?existing?.cryptoWallets,
+        },
+        availableCryptoCurrencies: [
+          for (final o in options.where((w) => w.isCrypto)) o.code,
+        ],
+        cachedFiatWallet: existing?.cachedFiatWallet,
+        cachedCryptoWallet: existing?.cachedCryptoWallet,
+      );
+    } catch (_) {
+      if (mounted) setState(() => _loadingWallets = false);
+    }
+  }
+
+  void _selectCurrency(String code) {
+    if (code == _selectedCurrency) return;
+    setState(() => _selectedCurrency = code);
+  }
+
   void _openOption(_PayOption option) {
     setState(() => _selected = option);
   }
@@ -35,11 +218,9 @@ class _PayPageState extends State<PayPage> {
     setState(() => _selected = null);
   }
 
-  String get _currency {
-    final c = widget.initialCurrency.trim().toUpperCase();
-    if (c == 'USDT' || c == 'USDC' || c.isEmpty) return 'KES';
-    return c;
-  }
+  double get _selectedBalance => _balances[_selectedCurrency] ?? 0;
+
+  double get _kesBalance => _balances[_kPayAmountCurrency] ?? 0;
 
   Future<void> _openQrScanner() async {
     final code = await Navigator.of(context).push<String>(
@@ -106,22 +287,42 @@ class _PayPageState extends State<PayPage> {
           : switch (_selected!) {
               _PayOption.payBill => _PayBillView(
                   key: _payBillKey,
-                  currency: _currency,
+                  currency: _selectedCurrency,
+                  balance: _selectedBalance,
+                  kesBalance: _kesBalance,
+                  loadingBalance: _loadingWallets,
+                  wallets: _wallets,
+                  onCurrencyChanged: _selectCurrency,
                   onPaid: () => Navigator.of(context).pop(true),
                 ),
               _PayOption.buyGoods => _BuyGoodsView(
                   key: _buyGoodsKey,
-                  currency: _currency,
+                  currency: _selectedCurrency,
+                  balance: _selectedBalance,
+                  kesBalance: _kesBalance,
+                  loadingBalance: _loadingWallets,
+                  wallets: _wallets,
+                  onCurrencyChanged: _selectCurrency,
                   onPaid: () => Navigator.of(context).pop(true),
                 ),
               _PayOption.pochiLaBiashara => _PochiLaBiasharaView(
                   key: _pochiKey,
-                  currency: _currency,
+                  currency: _selectedCurrency,
+                  balance: _selectedBalance,
+                  kesBalance: _kesBalance,
+                  loadingBalance: _loadingWallets,
+                  wallets: _wallets,
+                  onCurrencyChanged: _selectCurrency,
                   onPaid: () => Navigator.of(context).pop(true),
                 ),
               _PayOption.truePayMerchant => _TruePayMerchantQrView(
                   key: _truePayMerchantKey,
-                  currency: _currency,
+                  currency: _selectedCurrency,
+                  balance: _selectedBalance,
+                  kesBalance: _kesBalance,
+                  loadingBalance: _loadingWallets,
+                  wallets: _wallets,
+                  onCurrencyChanged: _selectCurrency,
                   onPaid: () => Navigator.of(context).pop(true),
                 ),
             },
@@ -267,9 +468,23 @@ class _PayOptionCard extends StatelessWidget {
 // ─── Pay Bill ───────────────────────────────────────────────────────────────
 
 class _PayBillView extends StatefulWidget {
-  const _PayBillView({super.key, required this.currency, required this.onPaid});
+  const _PayBillView({
+    super.key,
+    required this.currency,
+    required this.balance,
+    required this.kesBalance,
+    required this.loadingBalance,
+    required this.wallets,
+    required this.onCurrencyChanged,
+    required this.onPaid,
+  });
 
   final String currency;
+  final double balance;
+  final double kesBalance;
+  final bool loadingBalance;
+  final List<_PayWalletOption> wallets;
+  final ValueChanged<String> onCurrencyChanged;
   final VoidCallback onPaid;
 
   @override
@@ -281,17 +496,9 @@ class _PayBillViewState extends State<_PayBillView> {
   final _accountCtrl = TextEditingController();
   final _amountCtrl = TextEditingController();
   bool _submitting = false;
-  double _balance = 0;
-  bool _loadingBalance = true;
 
   void applyScannedCode(String code) {
     setState(() => _businessCtrl.text = code);
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    _loadBalance();
   }
 
   @override
@@ -301,16 +508,6 @@ class _PayBillViewState extends State<_PayBillView> {
     _amountCtrl.dispose();
     super.dispose();
   }
-
-  Future<void> _loadBalance() => _loadWalletBalance(
-        currency: widget.currency,
-        onLoaded: (b) => setState(() {
-          _balance = b;
-          _loadingBalance = false;
-        }),
-        onDoneWithoutBalance: () => setState(() => _loadingBalance = false),
-        mounted: () => mounted,
-      );
 
   Future<void> _pay() async {
     final business = _businessCtrl.text.trim();
@@ -328,8 +525,8 @@ class _PayBillViewState extends State<_PayBillView> {
       _snack('Enter a valid amount');
       return;
     }
-    if (amount > _balance) {
-      _snack('Insufficient balance');
+    if (amount > widget.kesBalance) {
+      _snack('Insufficient KES balance');
       return;
     }
 
@@ -341,13 +538,15 @@ class _PayBillViewState extends State<_PayBillView> {
         final ok = await _submitPay(
           context: context,
           amount: amount,
-          currency: widget.currency,
+          currency: _kPayAmountCurrency,
           note: 'Pay bill $business / $account',
           metadata: {
             'flow': 'pay',
             'payMethod': 'pay_bill',
             'businessNumber': business,
             'accountNumber': account,
+            'sourceWallet': widget.currency,
+            'amountCurrency': _kPayAmountCurrency,
           },
         );
         if (ok && mounted) widget.onPaid();
@@ -371,8 +570,10 @@ class _PayBillViewState extends State<_PayBillView> {
             children: [
               _AvailableRow(
                 currency: widget.currency,
-                balance: _balance,
-                loading: _loadingBalance,
+                balance: widget.balance,
+                loading: widget.loadingBalance,
+                wallets: widget.wallets,
+                onCurrencyChanged: widget.onCurrencyChanged,
               ),
               const SizedBox(height: 20),
               _PayField(
@@ -390,12 +591,12 @@ class _PayBillViewState extends State<_PayBillView> {
               const SizedBox(height: 12),
               _PayAmountField(
                 controller: _amountCtrl,
-                currency: widget.currency,
+                currency: _kPayAmountCurrency,
               ),
               const _MerchantValidationSpace(),
               const SizedBox(height: 16),
               Text(
-                'Payment is deducted from your ${widget.currency} wallet.',
+                'Amount is in KES. Payment is deducted from your ${widget.currency} wallet.',
                 style: TextStyle(color: colors.textTertiary, fontSize: 12),
               ),
             ],
@@ -414,9 +615,23 @@ class _PayBillViewState extends State<_PayBillView> {
 // ─── Buy Goods ──────────────────────────────────────────────────────────────
 
 class _BuyGoodsView extends StatefulWidget {
-  const _BuyGoodsView({super.key, required this.currency, required this.onPaid});
+  const _BuyGoodsView({
+    super.key,
+    required this.currency,
+    required this.balance,
+    required this.kesBalance,
+    required this.loadingBalance,
+    required this.wallets,
+    required this.onCurrencyChanged,
+    required this.onPaid,
+  });
 
   final String currency;
+  final double balance;
+  final double kesBalance;
+  final bool loadingBalance;
+  final List<_PayWalletOption> wallets;
+  final ValueChanged<String> onCurrencyChanged;
   final VoidCallback onPaid;
 
   @override
@@ -427,17 +642,9 @@ class _BuyGoodsViewState extends State<_BuyGoodsView> {
   final _tillCtrl = TextEditingController();
   final _amountCtrl = TextEditingController();
   bool _submitting = false;
-  double _balance = 0;
-  bool _loadingBalance = true;
 
   void applyScannedCode(String code) {
     setState(() => _tillCtrl.text = code);
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    _loadBalance();
   }
 
   @override
@@ -446,16 +653,6 @@ class _BuyGoodsViewState extends State<_BuyGoodsView> {
     _amountCtrl.dispose();
     super.dispose();
   }
-
-  Future<void> _loadBalance() => _loadWalletBalance(
-        currency: widget.currency,
-        onLoaded: (b) => setState(() {
-          _balance = b;
-          _loadingBalance = false;
-        }),
-        onDoneWithoutBalance: () => setState(() => _loadingBalance = false),
-        mounted: () => mounted,
-      );
 
   Future<void> _pay() async {
     final till = _tillCtrl.text.trim();
@@ -468,8 +665,8 @@ class _BuyGoodsViewState extends State<_BuyGoodsView> {
       _snack('Enter a valid amount');
       return;
     }
-    if (amount > _balance) {
-      _snack('Insufficient balance');
+    if (amount > widget.kesBalance) {
+      _snack('Insufficient KES balance');
       return;
     }
 
@@ -481,12 +678,14 @@ class _BuyGoodsViewState extends State<_BuyGoodsView> {
         final ok = await _submitPay(
           context: context,
           amount: amount,
-          currency: widget.currency,
+          currency: _kPayAmountCurrency,
           note: 'Buy goods till $till',
           metadata: {
             'flow': 'pay',
             'payMethod': 'buy_goods',
             'tillNumber': till,
+            'sourceWallet': widget.currency,
+            'amountCurrency': _kPayAmountCurrency,
           },
         );
         if (ok && mounted) widget.onPaid();
@@ -510,8 +709,10 @@ class _BuyGoodsViewState extends State<_BuyGoodsView> {
             children: [
               _AvailableRow(
                 currency: widget.currency,
-                balance: _balance,
-                loading: _loadingBalance,
+                balance: widget.balance,
+                loading: widget.loadingBalance,
+                wallets: widget.wallets,
+                onCurrencyChanged: widget.onCurrencyChanged,
               ),
               const SizedBox(height: 20),
               _PayField(
@@ -523,12 +724,12 @@ class _BuyGoodsViewState extends State<_BuyGoodsView> {
               const SizedBox(height: 12),
               _PayAmountField(
                 controller: _amountCtrl,
-                currency: widget.currency,
+                currency: _kPayAmountCurrency,
               ),
               const _MerchantValidationSpace(),
               const SizedBox(height: 16),
               Text(
-                'Payment is deducted from your ${widget.currency} wallet.',
+                'Amount is in KES. Payment is deducted from your ${widget.currency} wallet.',
                 style: TextStyle(color: colors.textTertiary, fontSize: 12),
               ),
             ],
@@ -550,10 +751,20 @@ class _PochiLaBiasharaView extends StatefulWidget {
   const _PochiLaBiasharaView({
     super.key,
     required this.currency,
+    required this.balance,
+    required this.kesBalance,
+    required this.loadingBalance,
+    required this.wallets,
+    required this.onCurrencyChanged,
     required this.onPaid,
   });
 
   final String currency;
+  final double balance;
+  final double kesBalance;
+  final bool loadingBalance;
+  final List<_PayWalletOption> wallets;
+  final ValueChanged<String> onCurrencyChanged;
   final VoidCallback onPaid;
 
   @override
@@ -564,17 +775,9 @@ class _PochiLaBiasharaViewState extends State<_PochiLaBiasharaView> {
   final _pochiCtrl = TextEditingController();
   final _amountCtrl = TextEditingController();
   bool _submitting = false;
-  double _balance = 0;
-  bool _loadingBalance = true;
 
   void applyScannedCode(String code) {
     setState(() => _pochiCtrl.text = code);
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    _loadBalance();
   }
 
   @override
@@ -583,16 +786,6 @@ class _PochiLaBiasharaViewState extends State<_PochiLaBiasharaView> {
     _amountCtrl.dispose();
     super.dispose();
   }
-
-  Future<void> _loadBalance() => _loadWalletBalance(
-        currency: widget.currency,
-        onLoaded: (b) => setState(() {
-          _balance = b;
-          _loadingBalance = false;
-        }),
-        onDoneWithoutBalance: () => setState(() => _loadingBalance = false),
-        mounted: () => mounted,
-      );
 
   Future<void> _pay() async {
     final pochi = _pochiCtrl.text.replaceAll(RegExp(r'\s+'), '');
@@ -605,8 +798,8 @@ class _PochiLaBiasharaViewState extends State<_PochiLaBiasharaView> {
       _snack('Enter a valid amount');
       return;
     }
-    if (amount > _balance) {
-      _snack('Insufficient balance');
+    if (amount > widget.kesBalance) {
+      _snack('Insufficient KES balance');
       return;
     }
 
@@ -618,13 +811,15 @@ class _PochiLaBiasharaViewState extends State<_PochiLaBiasharaView> {
         final ok = await _submitPay(
           context: context,
           amount: amount,
-          currency: widget.currency,
+          currency: _kPayAmountCurrency,
           phoneNumber: pochi.startsWith('+') ? pochi : '+$pochi',
           note: 'Pochi La Biashara $pochi',
           metadata: {
             'flow': 'pay',
             'payMethod': 'pochi_la_biashara',
             'pochiNumber': pochi,
+            'sourceWallet': widget.currency,
+            'amountCurrency': _kPayAmountCurrency,
           },
         );
         if (ok && mounted) widget.onPaid();
@@ -648,8 +843,10 @@ class _PochiLaBiasharaViewState extends State<_PochiLaBiasharaView> {
             children: [
               _AvailableRow(
                 currency: widget.currency,
-                balance: _balance,
-                loading: _loadingBalance,
+                balance: widget.balance,
+                loading: widget.loadingBalance,
+                wallets: widget.wallets,
+                onCurrencyChanged: widget.onCurrencyChanged,
               ),
               const SizedBox(height: 20),
               _PayField(
@@ -661,12 +858,12 @@ class _PochiLaBiasharaViewState extends State<_PochiLaBiasharaView> {
               const SizedBox(height: 12),
               _PayAmountField(
                 controller: _amountCtrl,
-                currency: widget.currency,
+                currency: _kPayAmountCurrency,
               ),
               const _MerchantValidationSpace(),
               const SizedBox(height: 16),
               Text(
-                'Payment is deducted from your ${widget.currency} wallet.',
+                'Amount is in KES. Payment is deducted from your ${widget.currency} wallet.',
                 style: TextStyle(color: colors.textTertiary, fontSize: 12),
               ),
             ],
@@ -688,10 +885,20 @@ class _TruePayMerchantQrView extends StatefulWidget {
   const _TruePayMerchantQrView({
     super.key,
     required this.currency,
+    required this.balance,
+    required this.kesBalance,
+    required this.loadingBalance,
+    required this.wallets,
+    required this.onCurrencyChanged,
     required this.onPaid,
   });
 
   final String currency;
+  final double balance;
+  final double kesBalance;
+  final bool loadingBalance;
+  final List<_PayWalletOption> wallets;
+  final ValueChanged<String> onCurrencyChanged;
   final VoidCallback onPaid;
 
   @override
@@ -725,6 +932,10 @@ class _TruePayMerchantQrViewState extends State<_TruePayMerchantQrView> {
       _snack('Enter a valid amount');
       return;
     }
+    if (amount > widget.kesBalance) {
+      _snack('Insufficient KES balance');
+      return;
+    }
 
     await runGuardedAsync(
       this,
@@ -734,12 +945,14 @@ class _TruePayMerchantQrViewState extends State<_TruePayMerchantQrView> {
         final ok = await _submitPay(
           context: context,
           amount: amount,
-          currency: widget.currency,
+          currency: _kPayAmountCurrency,
           note: 'Pay TruePay merchant via QR $code',
           metadata: {
             'flow': 'pay',
             'payMethod': 'truepay_merchant_qr',
             'paymentCode': code,
+            'sourceWallet': widget.currency,
+            'amountCurrency': _kPayAmountCurrency,
           },
         );
         if (ok && mounted) widget.onPaid();
@@ -773,6 +986,14 @@ class _TruePayMerchantQrViewState extends State<_TruePayMerchantQrView> {
           child: ListView(
             padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
             children: [
+              _AvailableRow(
+                currency: widget.currency,
+                balance: widget.balance,
+                loading: widget.loadingBalance,
+                wallets: widget.wallets,
+                onCurrencyChanged: widget.onCurrencyChanged,
+              ),
+              const SizedBox(height: 16),
               AspectRatio(
                 aspectRatio: 1,
                 child: Material(
@@ -829,9 +1050,14 @@ class _TruePayMerchantQrViewState extends State<_TruePayMerchantQrView> {
               const SizedBox(height: 12),
               _PayAmountField(
                 controller: _amountCtrl,
-                currency: widget.currency,
+                currency: _kPayAmountCurrency,
               ),
               const _MerchantValidationSpace(),
+              const SizedBox(height: 16),
+              Text(
+                'Amount is in KES. Payment is deducted from your ${widget.currency} wallet.',
+                style: TextStyle(color: colors.textTertiary, fontSize: 12),
+              ),
             ],
           ),
         ),
@@ -900,34 +1126,6 @@ class _MerchantValidationSpace extends StatelessWidget {
   }
 }
 
-Future<void> _loadWalletBalance({
-  required String currency,
-  required void Function(double balance) onLoaded,
-  required VoidCallback onDoneWithoutBalance,
-  required bool Function() mounted,
-}) async {
-  if (!isFirebaseInitialized()) {
-    onDoneWithoutBalance();
-    return;
-  }
-  final user = FirebaseAuth.instance.currentUser;
-  if (user == null) {
-    onDoneWithoutBalance();
-    return;
-  }
-  try {
-    final wallet = await WalletRepository().getWalletBalance(
-      user.uid,
-      currency: currency,
-    );
-    if (!mounted()) return;
-    onLoaded(wallet?.balance ?? 0);
-  } catch (_) {
-    if (!mounted()) return;
-    onDoneWithoutBalance();
-  }
-}
-
 Future<bool> _submitPay({
   required BuildContext context,
   required double amount,
@@ -988,11 +1186,109 @@ class _AvailableRow extends StatelessWidget {
     required this.currency,
     required this.balance,
     required this.loading,
+    required this.wallets,
+    required this.onCurrencyChanged,
   });
 
   final String currency;
   final double balance;
   final bool loading;
+  final List<_PayWalletOption> wallets;
+  final ValueChanged<String> onCurrencyChanged;
+
+  Future<void> _openPicker(BuildContext context) async {
+    if (wallets.isEmpty) return;
+    final selected = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => _WalletPickerSheet(
+        wallets: wallets,
+        selectedCode: currency,
+      ),
+    );
+    if (selected != null && selected.isNotEmpty) {
+      onCurrencyChanged(selected);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = AppColors.getThemeColors(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primary = Theme.of(context).colorScheme.primary;
+    final canSwitch = wallets.length > 1;
+
+    return Material(
+      color: isDark ? colors.surface : Colors.white.withValues(alpha: 0.95),
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        onTap: canSwitch ? () => _openPicker(context) : null,
+        borderRadius: BorderRadius.circular(14),
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            border: isDark ? null : Border.all(color: const Color(0xFFE5E7EB)),
+          ),
+          child: Row(
+            children: [
+              CurrencyLogo(code: currency, size: 22),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      canSwitch ? 'Pay from' : 'Available',
+                      style: TextStyle(color: colors.textSecondary, fontSize: 12),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      currency,
+                      style: TextStyle(
+                        color: colors.textPrimary,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 15,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (loading)
+                SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2, color: primary),
+                )
+              else
+                Text(
+                  balance.toStringAsFixed(2),
+                  style: TextStyle(
+                    color: colors.textPrimary,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 15,
+                  ),
+                ),
+              if (canSwitch) ...[
+                const SizedBox(width: 4),
+                Icon(Icons.keyboard_arrow_down, color: colors.textSecondary, size: 22),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _WalletPickerSheet extends StatelessWidget {
+  const _WalletPickerSheet({
+    required this.wallets,
+    required this.selectedCode,
+  });
+
+  final List<_PayWalletOption> wallets;
+  final String selectedCode;
 
   @override
   Widget build(BuildContext context) {
@@ -1000,37 +1296,116 @@ class _AvailableRow extends StatelessWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final primary = Theme.of(context).colorScheme.primary;
 
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: isDark ? colors.surface : Colors.white.withValues(alpha: 0.95),
-        borderRadius: BorderRadius.circular(14),
-        border: isDark ? null : Border.all(color: const Color(0xFFE5E7EB)),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(
-            'Available',
-            style: TextStyle(color: colors.textSecondary, fontSize: 13),
-          ),
-          if (loading)
-            SizedBox(
-              width: 16,
-              height: 16,
-              child: CircularProgressIndicator(strokeWidth: 2, color: primary),
-            )
-          else
-            Text(
-              '$currency ${balance.toStringAsFixed(2)}',
-              style: TextStyle(
-                color: colors.textPrimary,
-                fontWeight: FontWeight.w700,
-                fontSize: 15,
+    final fiat = wallets.where((w) => !w.isCrypto).toList();
+    final crypto = wallets.where((w) => w.isCrypto).toList();
+
+    return SafeArea(
+      child: Container(
+        decoration: BoxDecoration(
+          color: isDark ? colors.surface : Colors.white,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 8),
+            Container(
+              width: 48,
+              height: 5,
+              decoration: BoxDecoration(
+                color: colors.textTertiary,
+                borderRadius: BorderRadius.circular(3),
               ),
             ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'Select wallet',
+                  style: TextStyle(
+                    color: colors.textPrimary,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 16,
+                  ),
+                ),
+              ),
+            ),
+            Flexible(
+              child: ListView(
+                shrinkWrap: true,
+                children: [
+                  if (fiat.isNotEmpty) ...[
+                    _walletSectionLabel(context, 'Fiat'),
+                    ...fiat.map((w) => _walletTile(context, w, primary)),
+                  ],
+                  if (crypto.isNotEmpty) ...[
+                    _walletSectionLabel(context, 'Crypto'),
+                    ...crypto.map((w) => _walletTile(context, w, primary)),
+                  ],
+                  const SizedBox(height: 12),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _walletSectionLabel(BuildContext context, String label) {
+    final colors = AppColors.getThemeColors(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+      child: Text(
+        label.toUpperCase(),
+        style: TextStyle(
+          color: colors.textTertiary,
+          fontSize: 11,
+          fontWeight: FontWeight.w600,
+          letterSpacing: 0.6,
+        ),
+      ),
+    );
+  }
+
+  Widget _walletTile(
+    BuildContext context,
+    _PayWalletOption wallet,
+    Color primary,
+  ) {
+    final colors = AppColors.getThemeColors(context);
+    final selected = wallet.code == selectedCode;
+    return ListTile(
+      leading: CurrencyLogo(code: wallet.code, size: 28),
+      title: Text(
+        wallet.code,
+        style: TextStyle(
+          color: colors.textPrimary,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+      subtitle: Text(
+        wallet.isCrypto ? 'Crypto wallet' : 'Fiat wallet',
+        style: TextStyle(color: colors.textSecondary, fontSize: 12),
+      ),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            wallet.balance.toStringAsFixed(2),
+            style: TextStyle(
+              color: colors.textPrimary,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          if (selected) ...[
+            const SizedBox(width: 8),
+            Icon(Icons.check_circle, color: primary, size: 20),
+          ],
         ],
       ),
+      onTap: () => Navigator.of(context).pop(wallet.code),
     );
   }
 }
@@ -1101,6 +1476,8 @@ class _PayAmountField extends StatelessWidget {
       ),
       child: Row(
         children: [
+          CurrencyLogo(code: currency, size: 18),
+          const SizedBox(width: 8),
           Text(
             currency,
             style: TextStyle(

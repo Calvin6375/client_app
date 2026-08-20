@@ -8,6 +8,7 @@ import 'package:pretium/repositories/wallet_repository.dart';
 import 'package:pretium/utils/logger.dart';
 import 'package:pretium/utils/async_action_guard.dart';
 import 'package:pretium/core/constants/app_colors.dart';
+import 'package:pretium/widgets/currency_logo.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:pretium/utils/firebase_utils.dart';
 
@@ -685,11 +686,7 @@ class _SwapCurrencyCard extends StatelessWidget {
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(
-                        currency == 'USD' ? Icons.attach_money : Icons.currency_bitcoin,
-                        size: 20,
-                        color: colors.textPrimary,
-                      ),
+                      CurrencyLogo(code: currency, size: 20),
                       const SizedBox(width: 6),
                       Text(
                         currency,
@@ -1035,8 +1032,7 @@ class _DetailItem extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 8),
-        // TODO: Add currency icon
-        Icon(Icons.currency_bitcoin, size: 20, color: colors.textPrimary),
+        CurrencyLogo(code: currency, size: 20),
         const SizedBox(width: 4),
         Text(
           currency,

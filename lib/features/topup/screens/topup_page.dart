@@ -1,5 +1,5 @@
-// Top-up screen: fiat (Paystack / Transak card checkout, direct fiat, crypto).
-// Card/mobile money: PaymentService.createPayment → hosted checkout in-app WebView.
+// Top-up screen: fiat (Paystack / Transak card checkout) and crypto.
+// Local and International topup: PaymentService.createPayment → hosted checkout in-app WebView.
 // African currencies → Paystack; USD, GBP, EUR, and other non-African → Transak.
 
 import 'package:flutter/material.dart';
@@ -14,8 +14,8 @@ import 'package:pretium/models/wallet_model.dart';
 import 'package:pretium/utils/firebase_utils.dart';
 import 'package:pretium/core/constants/app_colors.dart';
 import 'package:pretium/features/topup/models/topup_deposit_country.dart';
-import 'package:pretium/features/topup/screens/direct_fiat_deposit_flow.dart';
 import 'package:pretium/features/topup/screens/payment_checkout_webview_page.dart';
+import 'package:pretium/widgets/currency_logo.dart';
 
 /// Fiat codes in the Set amount dropdown; includes every [TopupDepositCountry] code plus extras.
 List<String> _topupFiatCurrencyCodes({String? includeCode}) {
@@ -374,45 +374,12 @@ class _TopUpPageState extends State<TopUpPage> {
     }
   }
 
-  bool _validateAmountForPayment() {
-    if (_amountCtrl.text.trim().isEmpty) {
-      _showError('Please enter an amount');
-      return false;
-    }
-    final amount = _parsedSetAmount();
-    if (amount <= 0) {
-      _showError('Please enter a valid amount');
-      return false;
-    }
-    if (!_meetsKesFiatOptionMinimum()) {
-      _showError(
-        'For KES, the minimum amount for fiat top-up options is KSh ${_kesFiatOptionMinimumAmount.toStringAsFixed(0)}.',
-      );
-      return false;
-    }
-    return true;
-  }
-
-  void _openDirectFiatDepositFlow() {
-    if (_selectedCurrency == 'KES' && !_validateAmountForPayment()) return;
-    Navigator.of(context).push<void>(
-      MaterialPageRoute<void>(
-        builder: (_) => DirectFiatDepositScreen(
-          fiatBalance: _availableBalanceForSelected,
-          walletCurrencyCode: _selectedCurrency,
-          initialDepositCountry: widget.initialDepositCountry,
-        ),
-      ),
-    );
-  }
-
   void _onNextPressed() {
     if (_isProcessingPayment) return;
     switch (_selectedMethod) {
       case _TopUpPaymentMethod.cardMobileMoney:
-        _processFiatTopUp();
       case _TopUpPaymentMethod.directFiatDeposit:
-        _openDirectFiatDepositFlow();
+        _processFiatTopUp();
       case _TopUpPaymentMethod.cryptoDeposit:
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -961,12 +928,10 @@ class _CryptoDepositDetails extends StatelessWidget {
     'USDT': {
       'address': 'TGkPQsmAhRVh51bEj961EUavP3BjZqEnBb',
       'network': 'Tron Network',
-      'icon': '₮',
     },
     'USDC': {
       'address': 'FPJoay8fh2FpBBUM2pSmSdTrqpKepZPagGZfU6pwF2qo',
       'network': 'Solana Network',
-      'icon': '🔵',
     },
     'BNB': {
       'address': '0xe421b816e5664a4ecd514956db132762b4e82e8d',
@@ -1020,7 +985,11 @@ class _CryptoDepositDetails extends StatelessWidget {
                 children: [
                   Row(
                     children: [
-                      Text(data['icon']!, style: const TextStyle(fontSize: 18)),
+                      CurrencyLogo(
+                        code: currency,
+                        size: 20,
+                        fallbackEmoji: data['icon'],
+                      ),
                       const SizedBox(width: 8),
                       Text(
                         currency,
