@@ -45,10 +45,12 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>Scan merchant QR codes to complete payments.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>Save transaction receipts to your photo library.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>Save transaction receipts to your photo library.</string>
+	<string>Upload a QR code image from your photo library to pay merchants.</string>
 	<key>NSFaceIDUsageDescription</key>
 	<string>Authenticate with Face ID to sign in quickly and securely.</string>
 	<key>LSApplicationQueriesSchemes</key>

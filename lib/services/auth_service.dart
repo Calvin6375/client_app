@@ -57,7 +57,7 @@ class AuthService {
       // Log request body (mask password for security)
       final requestBody = {
         'email': email.trim(),
-        'password': '***${password.length > 0 ? '*' * (password.length > 3 ? password.length - 3 : 0) : ''}***', // Mask password
+        'password': '***${password.isNotEmpty ? '*' * (password.length > 3 ? password.length - 3 : 0) : ''}***', // Mask password
         'passwordLength': password.length,
       };
       Logger.info('📤 Firebase Auth - Create User Request:');
@@ -118,7 +118,7 @@ class AuthService {
   /// Sign out
   Future<void> signOut() async {
     try {
-      Logger.info('Signing out user: ${currentUserId}');
+      Logger.info('Signing out user: $currentUserId');
       await _auth.signOut();
       DashboardSessionCache.instance.clear();
       Logger.success('User signed out successfully');

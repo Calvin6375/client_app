@@ -121,8 +121,8 @@ class RatesService {
       if (baseUpper != quoteUpper &&
           _isFiat(baseUpper) &&
           _isFiat(quoteUpper)) {
-        final r1 = _pairToRate[baseUpper + 'USDT'];
-        final r2 = _pairToRate['USDT' + quoteUpper];
+        final r1 = _pairToRate['${baseUpper}USDT'];
+        final r2 = _pairToRate['USDT$quoteUpper'];
         if (r1 != null && r2 != null && r1 > 0 && r2 > 0) {
           final composed = r1 * r2;
           _updateRate(base, quote, composed);
@@ -270,8 +270,8 @@ class RatesService {
             '🔄 Fetching fiat-to-fiat rate $baseUpper/$quoteUpper via USDT');
         await _fetchRate(base, 'USDT');
         await _fetchRate('USDT', quote);
-        final key1 = (baseUpper + 'USDT');
-        final key2 = ('USDT' + quoteUpper);
+        final key1 = ('${baseUpper}USDT');
+        final key2 = ('USDT$quoteUpper');
         final r1 = _pairToRate[key1];
         final r2 = _pairToRate[key2];
         if (r1 != null && r2 != null && r1 > 0 && r2 > 0) {
@@ -288,7 +288,7 @@ class RatesService {
       if ((baseUpper == 'USD' && quoteUpper == 'USDT') ||
           (baseUpper == 'USDT' && quoteUpper == 'USD')) {
         // Try customer rates first for USD/USDT
-        final currencyPair = 'USDT/USD';
+        const currencyPair = 'USDT/USD';
         await _fetchCustomerRates(currencyPair);
 
         final customerRates = _getCustomerRatesFromCache(currencyPair);

@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:pretium/core/constants/app_colors.dart';
 
 class SplashPage extends StatefulWidget {
-  const SplashPage({Key? key}) : super(key: key);
+  const SplashPage({super.key});
 
   @override
   State<SplashPage> createState() => _SplashPageState();
@@ -95,7 +95,7 @@ class _SplashPageState extends State<SplashPage>
                   end: Alignment.bottomRight,
                   colors: [
                     const Color(0xFFF5F7FA), // Light blue-gray
-                    const Color(0xFFE8F5E9).withOpacity(0.3), // Very light teal tint
+                    const Color(0xFFE8F5E9).withValues(alpha: 0.3), // Very light teal tint
                   ],
                 )
               : null, // No gradient for dark mode
@@ -220,13 +220,13 @@ class _SplashPageState extends State<SplashPage>
       height: 48,
       decoration: BoxDecoration(
         color: isDark
-            ? AppColors.surfaceDark.withOpacity(0.5) // Dark slate with transparency for dark mode
-            : Colors.white.withOpacity(0.7), // Translucent white for glassmorphism in light mode
+            ? AppColors.surfaceDark.withValues(alpha: 0.5) // Dark slate with transparency for dark mode
+            : Colors.white.withValues(alpha: 0.7), // Translucent white for glassmorphism in light mode
         shape: BoxShape.circle,
         border: isDark
             ? null
             : Border.all(
-                color: Colors.white.withOpacity(0.5),
+                color: Colors.white.withValues(alpha: 0.5),
                 width: 1,
               ),
         boxShadow: isDark
@@ -234,13 +234,13 @@ class _SplashPageState extends State<SplashPage>
             : [
                 // Glassmorphism shadows for light mode
                 BoxShadow(
-                  color: Colors.white.withOpacity(0.8),
+                  color: Colors.white.withValues(alpha: 0.8),
                   blurRadius: 10,
                   offset: const Offset(-2, -2),
                   spreadRadius: -1,
                 ),
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.05),
+                  color: Colors.black.withValues(alpha: 0.05),
                   blurRadius: 8,
                   offset: const Offset(2, 2),
                 ),

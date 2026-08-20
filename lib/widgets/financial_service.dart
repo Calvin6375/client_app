@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'package:pretium/features/pay/screens/pay_page.dart';
 import 'package:pretium/features/send_money/screens/send_money_page.dart';
 import 'package:pretium/features/swap/screens/swap_page.dart';
 import 'package:pretium/core/constants/app_colors.dart';
@@ -9,9 +8,13 @@ class FinancialServices extends StatelessWidget {
   /// Initial "from" currency for [SwapPage] when opened from this row (e.g. USD for fiat, USDT for crypto tab).
   final String swapInitialCurrency;
 
+  /// Opens withdraw for the currently selected wallet (moved from the card action row).
+  final VoidCallback? onWithdraw;
+
   const FinancialServices({
     super.key,
     this.swapInitialCurrency = 'USD',
+    this.onWithdraw,
   });
 
   @override
@@ -66,20 +69,10 @@ class FinancialServices extends StatelessWidget {
             const SizedBox(width: 12),
             _buildServiceButton(
               context,
-              FontAwesomeIcons.receipt,
-              "Pay",
+              FontAwesomeIcons.arrowDown,
+              "Withdraw",
               true,
-              () {
-                final payCurrency = swapInitialCurrency == 'USDT' ||
-                        swapInitialCurrency == 'USDC'
-                    ? 'USD'
-                    : swapInitialCurrency;
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (context) => PayPage(initialCurrency: payCurrency),
-                  ),
-                );
-              },
+              onWithdraw ?? () => _showComingSoonDialog(context),
             ),
             const SizedBox(width: 12),
             _buildServiceButton(
@@ -123,14 +116,14 @@ class FinancialServices extends StatelessWidget {
                 boxShadow: isDark
                     ? [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.3),
+                          color: Colors.black.withValues(alpha: 0.3),
                           blurRadius: 8,
                           offset: const Offset(0, 3),
                         ),
                       ]
                     : [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.04),
+                          color: Colors.black.withValues(alpha: 0.04),
                           blurRadius: 6,
                           offset: const Offset(0, 2),
                         ),

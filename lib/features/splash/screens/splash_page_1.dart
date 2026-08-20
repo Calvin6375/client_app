@@ -97,7 +97,7 @@ class _SplashPage1State extends State<SplashPage1> {
                       color:
                           index == _currentPage
                               ? primary
-                              : colors.textTertiary.withOpacity(0.3),
+                              : colors.textTertiary.withValues(alpha: 0.3),
                       borderRadius: BorderRadius.circular(4),
                     ),
                   );
@@ -150,12 +150,12 @@ class _SplashPage1State extends State<SplashPage1> {
           decoration: BoxDecoration(
             shape: BoxShape.circle,
             color: isDark
-                ? primary.withOpacity(0.1) // Subtle background for dark mode
-                : Colors.white.withOpacity(0.7), // Translucent white for glassmorphism
+                ? primary.withValues(alpha: 0.1) // Subtle background for dark mode
+                : Colors.white.withValues(alpha: 0.7), // Translucent white for glassmorphism
             border: isDark
                 ? null
                 : Border.all(
-                    color: Colors.white.withOpacity(0.5),
+                    color: Colors.white.withValues(alpha: 0.5),
                     width: 1,
                   ),
             boxShadow: isDark
@@ -163,13 +163,13 @@ class _SplashPage1State extends State<SplashPage1> {
                 : [
                     // Glassmorphism shadows for light mode
                     BoxShadow(
-                      color: Colors.white.withOpacity(0.8),
+                      color: Colors.white.withValues(alpha: 0.8),
                       blurRadius: 15,
                       offset: const Offset(-3, -3),
                       spreadRadius: -1,
                     ),
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.06),
+                      color: Colors.black.withValues(alpha: 0.06),
                       blurRadius: 10,
                       offset: const Offset(3, 3),
                     ),

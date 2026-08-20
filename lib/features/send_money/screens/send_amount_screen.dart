@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:pretium/models/transaction_details_model.dart';
 import 'package:pretium/repositories/wallet_repository.dart';
 import 'package:pretium/features/swap/services/rates_service.dart';
 import 'package:pretium/features/swap/widgets/currency_picker_bottom_sheet.dart';
 import 'package:pretium/core/constants/app_colors.dart';
+import 'package:pretium/widgets/currency_logo.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:pretium/utils/firebase_utils.dart';
 
@@ -40,6 +42,13 @@ class _SendAmountScreenState extends State<SendAmountScreen> {
     Currency(code: 'NGN', name: 'Nigerian Naira', flagEmoji: '🇳🇬'),
     Currency(code: 'USDT', name: 'Tether', flagEmoji: '₮'),
   ];
+
+  String _flagFor(String code) {
+    for (final c in _availableCurrencies) {
+      if (c.code == code) return c.flagEmoji;
+    }
+    return '🌍';
+  }
 
   @override
   void initState() {
@@ -231,6 +240,7 @@ class _SendAmountScreenState extends State<SendAmountScreen> {
                 _SwapCurrencyCard(
                   label: 'You Send',
                   currency: _fromCurrency,
+                  flagEmoji: _flagFor(_fromCurrency),
                   balance: _fromBalance,
                   loading: _loadingBalances,
                   controller: _fromCtrl,
@@ -242,7 +252,7 @@ class _SendAmountScreenState extends State<SendAmountScreen> {
                     icon: Icon(Icons.swap_vert, color: primaryColor, size: 32),
                     onPressed: _swapCurrencies,
                     style: IconButton.styleFrom(
-                      backgroundColor: primaryColor.withOpacity(0.15),
+                      backgroundColor: primaryColor.withValues(alpha: 0.15),
                       shape: const CircleBorder(),
                       padding: const EdgeInsets.all(12),
                     ),
@@ -252,6 +262,7 @@ class _SendAmountScreenState extends State<SendAmountScreen> {
                 _SwapCurrencyCard(
                   label: 'You Receive',
                   currency: _toCurrency,
+                  flagEmoji: _flagFor(_toCurrency),
                   balance: _toBalance,
                   loading: _loadingBalances,
                   amount: (double.tryParse(_fromCtrl.text) ?? 0) * _rate,
@@ -317,7 +328,7 @@ class _ExchangeRateDisplay extends StatelessWidget {
       decoration: BoxDecoration(
         color: isDark 
             ? colors.surface // Dark slate for dark mode
-            : Colors.white.withOpacity(0.9), // Translucent white for light mode
+            : Colors.white.withValues(alpha: 0.9), // Translucent white for light mode
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
             color: isDark 
@@ -329,7 +340,7 @@ class _ExchangeRateDisplay extends StatelessWidget {
             ? null
             : [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.04),
+                  color: Colors.black.withValues(alpha: 0.04),
                   blurRadius: 8,
                   offset: const Offset(0, 2),
                 ),
@@ -361,6 +372,7 @@ class _ExchangeRateDisplay extends StatelessWidget {
 class _SwapCurrencyCard extends StatelessWidget {
   final String label;
   final String currency;
+  final String flagEmoji;
   final double balance;
   final bool loading;
   final TextEditingController? controller;
@@ -370,6 +382,7 @@ class _SwapCurrencyCard extends StatelessWidget {
   const _SwapCurrencyCard({
     required this.label,
     required this.currency,
+    required this.flagEmoji,
     required this.balance,
     this.loading = false,
     this.controller,
@@ -387,7 +400,7 @@ class _SwapCurrencyCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: isDark 
             ? colors.surface // Dark slate for dark mode
-            : Colors.white.withOpacity(0.9), // Translucent white for light mode
+            : Colors.white.withValues(alpha: 0.9), // Translucent white for light mode
         borderRadius: BorderRadius.circular(16),
         border: isDark 
             ? null
@@ -399,7 +412,7 @@ class _SwapCurrencyCard extends StatelessWidget {
             ? null
             : [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.04),
+                  color: Colors.black.withValues(alpha: 0.04),
                   blurRadius: 8,
                   offset: const Offset(0, 2),
                 ),
@@ -441,7 +454,7 @@ class _SwapCurrencyCard extends StatelessWidget {
                   decoration: BoxDecoration(
                     color: isDark 
                         ? colors.background 
-                        : Colors.white.withOpacity(0.95),
+                        : Colors.white.withValues(alpha: 0.95),
                     borderRadius: BorderRadius.circular(20),
                     border: Border.all(
                       color: isDark ? AppColors.surfaceVariantDark : const Color(0xFFE5E7EB),
@@ -449,7 +462,11 @@ class _SwapCurrencyCard extends StatelessWidget {
                   ),
                   child: Row(
                     children: [
-                      Icon(Icons.public, size: 20, color: colors.textPrimary),
+                      CurrencyLogo(
+                        code: currency,
+                        size: 20,
+                        fallbackEmoji: flagEmoji,
+                      ),
                       const SizedBox(width: 8),
                       Text(
                         currency,
@@ -471,6 +488,8 @@ class _SwapCurrencyCard extends StatelessWidget {
                     controller: controller,
                     textAlign: TextAlign.end,
                     keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    maxLength: 100000,
+                    maxLengthEnforcement: MaxLengthEnforcement.enforced,
                     style: TextStyle(
                       fontSize: 28,
                       fontWeight: FontWeight.bold,
@@ -480,6 +499,7 @@ class _SwapCurrencyCard extends StatelessWidget {
                       border: InputBorder.none,
                       hintText: '0.00',
                       hintStyle: TextStyle(color: colors.textSecondary),
+                      counterText: '',
                     ),
                   ),
                 )

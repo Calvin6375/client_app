@@ -812,7 +812,7 @@ class _DirectFiatDepositScreenState extends State<DirectFiatDepositScreen> {
                   Container(
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
-                      color: primary.withOpacity(0.12),
+                      color: primary.withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Icon(m.icon, color: primary, size: 22),
@@ -894,7 +894,7 @@ class _DirectFiatDepositScreenState extends State<DirectFiatDepositScreen> {
             decoration: BoxDecoration(
               color: isDark ? colors.surface : colors.surfaceVariant,
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: colors.border.withOpacity(0.6)),
+              border: Border.all(color: colors.border.withValues(alpha: 0.6)),
             ),
             child: Row(
               children: [
@@ -938,7 +938,7 @@ class _DirectFiatDepositScreenState extends State<DirectFiatDepositScreen> {
                   _selectedMobileProviderId = null;
                 }
               }),
-              selectedColor: primary.withOpacity(0.2),
+              selectedColor: primary.withValues(alpha: 0.2),
               labelStyle: TextStyle(
                 color: sel ? primary : colors.textSecondary,
                 fontWeight: sel ? FontWeight.w600 : FontWeight.w500,
@@ -1137,7 +1137,7 @@ class _DirectFiatDepositScreenState extends State<DirectFiatDepositScreen> {
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: primary.withOpacity(0.12),
+              color: primary.withValues(alpha: 0.12),
             ),
             child: Icon(Icons.account_balance_wallet_rounded, size: 40, color: primary),
           ),
@@ -1474,9 +1474,9 @@ class _DirectFiatDepositScreenState extends State<DirectFiatDepositScreen> {
       width: double.infinity,
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: colors.infoLight.withOpacity(isDark ? 0.35 : 1),
+        color: colors.infoLight.withValues(alpha: isDark ? 0.35 : 1),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: colors.primary.withOpacity(0.25)),
+        border: Border.all(color: colors.primary.withValues(alpha: 0.25)),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,

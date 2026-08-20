@@ -20,6 +20,8 @@ import 'package:pretium/core/constants/auth_config.dart';
 // Use app-level theme; no local constant color
 
 class RegisterApp extends StatelessWidget {
+  const RegisterApp({super.key});
+
   @override
   Widget build(BuildContext context) {
     final primary = Theme.of(context).colorScheme.primary;

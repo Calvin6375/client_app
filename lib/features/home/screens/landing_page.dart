@@ -1,8 +1,7 @@
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'package:pretium/features/send_money/screens/send_money_page.dart';
+import 'package:pretium/features/pay/screens/pay_page.dart';
 import 'package:pretium/core/constants/app_colors.dart';
 import 'package:pretium/app/route_names.dart';
 import 'package:pretium/services/app_access_guard.dart';
@@ -18,7 +17,7 @@ class LandingPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // Return the dashboard directly to avoid nesting MaterialApp, so app-level routes work
-    return DashboardScreen();
+    return const DashboardScreen();
   }
 }
 
@@ -121,7 +120,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               bottom: 12,
             ),
             color: Colors.transparent, // Transparent for professional dark look
-            child: HeaderWidget(),
+            child: const HeaderWidget(),
           ),
           Expanded(
             child: RefreshIndicator(
@@ -137,7 +136,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     decoration: BoxDecoration(
                       color: Theme.of(context).brightness == Brightness.dark
                           ? AppColors.surfaceDark // Dark slate #1E293B for dark mode
-                          : Colors.white.withOpacity(0.9), // Light background for toggle container
+                          : Colors.white.withValues(alpha: 0.9), // Light background for toggle container
                       borderRadius: BorderRadius.circular(16),
                       border: Theme.of(context).brightness == Brightness.light
                           ? Border.all(
@@ -148,7 +147,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       boxShadow: Theme.of(context).brightness == Brightness.light
                           ? [
                               BoxShadow(
-                                color: Colors.black.withOpacity(0.04),
+                                color: Colors.black.withValues(alpha: 0.04),
                                 blurRadius: 8,
                                 offset: const Offset(0, 2),
                               ),
@@ -174,6 +173,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 // Financial Services grid
                 FinancialServices(
                   swapInitialCurrency: _selectedTab == 0 ? 'USD' : 'USDT',
+                  onWithdraw: () {
+                    final walletCardState = _walletCardKey.currentState;
+                    if (walletCardState == null) return;
+                    try {
+                      (walletCardState as dynamic).openWithdraw();
+                    } catch (_) {}
+                  },
                 ),
                 const SizedBox(height: 40),
                 // Recent Transactions
@@ -201,100 +207,104 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ? AppColors.surfaceDark.withValues(alpha: 0.92)
         : Colors.white.withValues(alpha: 0.92);
 
+    void openPay() {
+      _onItemTapped(1);
+      _openAndRefreshOnReturn(
+        () => Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (context) => PayPage(
+              initialCurrency: _selectedTab == 0 ? 'KES' : 'USD',
+            ),
+          ),
+        ),
+      );
+    }
+
     return SafeArea(
       top: false,
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(36),
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
-            child: Container(
-              height: 62,
-              decoration: BoxDecoration(
-                color: barColor,
-                borderRadius: BorderRadius.circular(36),
-                border: Border.all(
-                  color: isDark
-                      ? Colors.white.withValues(alpha: 0.08)
-                      : Colors.white.withValues(alpha: 0.6),
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: isDark ? 0.35 : 0.1),
-                    blurRadius: 24,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
-              ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: _FloatingNavItem(
-                      icon: Icons.account_balance_wallet_outlined,
-                      isSelected: _selectedIndex == 0,
-                      primary: primary,
-                      inactiveColor: colors.textTertiary,
-                      onTap: () {
-                        _onItemTapped(0);
-                        _openAndRefreshOnReturn(
-                          () => Navigator.of(context).pushNamed(RouteNames.wallet),
-                        );
-                      },
-                    ),
-                  ),
-                  Expanded(
-                    child: _FloatingNavItem(
-                      faIcon: FontAwesomeIcons.paperPlane,
-                      isSelected: _selectedIndex == 1,
-                      primary: primary,
-                      inactiveColor: colors.textTertiary,
-                      onTap: () {
-                        _onItemTapped(1);
-                        _openAndRefreshOnReturn(
-                          () => Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (context) =>
-                                  const SendMoneyPage(initialFromCurrency: 'USD'),
+        padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+        child: SizedBox(
+          height: 88,
+          child: Stack(
+            clipBehavior: Clip.none,
+            alignment: Alignment.bottomCenter,
+            children: [
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(36),
+                  child: BackdropFilter(
+                    filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+                    child: Container(
+                      height: 62,
+                      decoration: BoxDecoration(
+                        color: barColor,
+                        borderRadius: BorderRadius.circular(36),
+                        border: Border.all(
+                          color: isDark
+                              ? Colors.white.withValues(alpha: 0.08)
+                              : Colors.white.withValues(alpha: 0.6),
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black
+                                .withValues(alpha: isDark ? 0.35 : 0.1),
+                            blurRadius: 24,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: _FloatingNavItem(
+                              icon: Icons.account_balance_wallet_outlined,
+                              isSelected: _selectedIndex == 0,
+                              primary: primary,
+                              inactiveColor: colors.textTertiary,
+                              onTap: () {
+                                _onItemTapped(0);
+                                _openAndRefreshOnReturn(
+                                  () => Navigator.of(context)
+                                      .pushNamed(RouteNames.wallet),
+                                );
+                              },
                             ),
                           ),
-                        );
-                      },
+                          const SizedBox(width: 72),
+                          Expanded(
+                            child: _FloatingNavItem(
+                              icon: Icons.history_outlined,
+                              isSelected: _selectedIndex == 2,
+                              primary: primary,
+                              inactiveColor: colors.textTertiary,
+                              onTap: () {
+                                _onItemTapped(2);
+                                _openAndRefreshOnReturn(
+                                  () => Navigator.of(context)
+                                      .pushNamed(RouteNames.transactions),
+                                );
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
-                  Expanded(
-                    child: _FloatingNavItem(
-                      icon: Icons.history_outlined,
-                      isSelected: _selectedIndex == 2,
-                      primary: primary,
-                      inactiveColor: colors.textTertiary,
-                      onTap: () {
-                        _onItemTapped(2);
-                        _openAndRefreshOnReturn(
-                          () => Navigator.of(context)
-                              .pushNamed(RouteNames.transactions),
-                        );
-                      },
-                    ),
-                  ),
-                  Expanded(
-                    child: _FloatingNavItem(
-                      icon: Icons.person_outline,
-                      isSelected: _selectedIndex == 3,
-                      primary: primary,
-                      inactiveColor: colors.textTertiary,
-                      onTap: () {
-                        _onItemTapped(3);
-                        _openAndRefreshOnReturn(
-                          () => Navigator.of(context)
-                              .pushNamed(RouteNames.walletSettings),
-                        );
-                      },
-                    ),
-                  ),
-                ],
+                ),
               ),
-            ),
+              Positioned(
+                top: 0,
+                child: _ElevatedPayNavButton(
+                  primary: primary,
+                  background: colors.background,
+                  onTap: openPay,
+                ),
+              ),
+            ],
           ),
         ),
       ),
@@ -340,18 +350,65 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 }
 
+class _ElevatedPayNavButton extends StatelessWidget {
+  const _ElevatedPayNavButton({
+    required this.primary,
+    required this.background,
+    required this.onTap,
+  });
+
+  final Color primary;
+  final Color background;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      elevation: 0,
+      child: InkWell(
+        onTap: onTap,
+        customBorder: const CircleBorder(),
+        child: Container(
+          width: 68,
+          height: 68,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: primary,
+            border: Border.all(color: background, width: 4),
+            boxShadow: [
+              BoxShadow(
+                color: primary.withValues(alpha: 0.45),
+                blurRadius: 18,
+                offset: const Offset(0, 6),
+              ),
+            ],
+          ),
+          padding: const EdgeInsets.all(10),
+          child: ColorFiltered(
+            // White in the asset becomes the button teal; black outlines stay dark.
+            colorFilter: ColorFilter.mode(primary, BlendMode.modulate),
+            child: Image.asset(
+              'assets/images/pay_nav_icon.png',
+              fit: BoxFit.contain,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _FloatingNavItem extends StatelessWidget {
   const _FloatingNavItem({
-    this.icon,
-    this.faIcon,
+    required this.icon,
     required this.isSelected,
     required this.primary,
     required this.inactiveColor,
     required this.onTap,
-  }) : assert(icon != null || faIcon != null);
+  });
 
-  final IconData? icon;
-  final IconData? faIcon;
+  final IconData icon;
   final bool isSelected;
   final Color primary;
   final Color inactiveColor;
@@ -371,10 +428,7 @@ class _FloatingNavItem extends StatelessWidget {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              if (faIcon != null)
-                FaIcon(faIcon, size: 22, color: color)
-              else
-                Icon(icon, size: 24, color: color),
+              Icon(icon, size: 24, color: color),
               const SizedBox(height: 6),
               AnimatedContainer(
                 duration: const Duration(milliseconds: 200),

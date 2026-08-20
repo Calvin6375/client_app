@@ -74,7 +74,7 @@ class _PaymentMethodScreenState extends State<PaymentMethodScreen> {
                 ),
                 minimumSize: const Size(double.infinity, 50),
               ),
-              child: Text(
+              child: const Text(
                 'Continue',
                 style: TextStyle(
                   fontSize: 18,
@@ -132,7 +132,7 @@ class _PaymentOptionCard extends StatelessWidget {
         decoration: BoxDecoration(
           color: isDark 
               ? colors.surface // Dark slate for dark mode
-              : Colors.white.withOpacity(0.9), // Translucent white for light mode
+              : Colors.white.withValues(alpha: 0.9), // Translucent white for light mode
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
             color: isSelected 
@@ -144,7 +144,7 @@ class _PaymentOptionCard extends StatelessWidget {
               ? null
               : [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.04),
+                    color: Colors.black.withValues(alpha: 0.04),
                     blurRadius: 8,
                     offset: const Offset(0, 2),
                   ),

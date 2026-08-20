@@ -30,13 +30,25 @@ class BiometricSessionService {
     }
   }
 
+  /// True when biometric hardware exists and at least one biometric is enrolled.
+  Future<bool> hasUsableBiometrics() async {
+    if (kIsWeb) return false;
+    try {
+      if (!await _localAuth.canCheckBiometrics) return false;
+      final available = await _localAuth.getAvailableBiometrics();
+      return available.isNotEmpty;
+    } catch (_) {
+      return false;
+    }
+  }
+
   Future<bool> isBiometricLoginEnabled() async {
     final value = await _storage.read(key: _keyEnabled);
     return value == 'true';
   }
 
   Future<bool> canUseBiometricLogin() async {
-    if (!await isDeviceSupported()) return false;
+    if (!await hasUsableBiometrics()) return false;
     if (!await isBiometricLoginEnabled()) return false;
     final email = await _storage.read(key: _keyEmail);
     final password = await _storage.read(key: _keyPassword);
@@ -105,7 +117,7 @@ class BiometricSessionService {
     required String email,
     required String password,
   }) async {
-    if (!await isDeviceSupported()) return;
+    if (!await hasUsableBiometrics()) return;
     if (await isBiometricLoginEnabled()) return;
     if (!context.mounted) return;
 

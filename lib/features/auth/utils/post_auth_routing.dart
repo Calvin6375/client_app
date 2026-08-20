@@ -15,7 +15,7 @@ Future<void> completeAuthAndRoute(BuildContext context) async {
     DashboardSessionCache.instance.clear();
     Navigator.pushAndRemoveUntil(
       context,
-      MaterialPageRoute(builder: (context) => LandingPage()),
+      MaterialPageRoute(builder: (context) => const LandingPage()),
       (route) => false,
     );
     return;

@@ -1,10 +1,9 @@
-// Top-up screen: fiat (Paystack / Transak card checkout, direct fiat, crypto).
-// Card/mobile money: PaymentService.createPayment → hosted checkout in browser.
+// Top-up screen: fiat (Paystack / Transak card checkout) and crypto.
+// Local and International topup: PaymentService.createPayment → hosted checkout in-app WebView.
 // African currencies → Paystack; USD, GBP, EUR, and other non-African → Transak.
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:url_launcher/url_launcher.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:pretium/repositories/wallet_repository.dart';
@@ -15,7 +14,8 @@ import 'package:pretium/models/wallet_model.dart';
 import 'package:pretium/utils/firebase_utils.dart';
 import 'package:pretium/core/constants/app_colors.dart';
 import 'package:pretium/features/topup/models/topup_deposit_country.dart';
-import 'package:pretium/features/topup/screens/direct_fiat_deposit_flow.dart';
+import 'package:pretium/features/topup/screens/payment_checkout_webview_page.dart';
+import 'package:pretium/widgets/currency_logo.dart';
 
 /// Fiat codes in the Set amount dropdown; includes every [TopupDepositCountry] code plus extras.
 List<String> _topupFiatCurrencyCodes({String? includeCode}) {
@@ -245,8 +245,7 @@ class _TopUpPageState extends State<TopUpPage> {
         }
       });
     } finally {
-      if (!mounted) return;
-      if (!silent) {
+      if (mounted && !silent) {
         setState(() {
           _isLoadingBalance = false;
         });
@@ -280,7 +279,7 @@ class _TopUpPageState extends State<TopUpPage> {
   String get _cardMobileMoneyProviderLabel =>
       TopupDepositCountry.cardMobileMoneyProviderLabelFor(_selectedCurrency);
 
-  /// Card checkout: createPayment (Cloud Function) → open hosted checkout in browser.
+  /// Card checkout: createPayment (Cloud Function) → open hosted checkout in-app.
   Future<void> _processFiatTopUp() async {
     if (_amountCtrl.text.isEmpty) {
       _showError('Please enter an amount');
@@ -353,38 +352,17 @@ class _TopUpPageState extends State<TopUpPage> {
         return;
       }
 
-      final paystackAmount = result['paystackAmount'];
-      final paystackCurrency = result['paystackCurrency']?.toString();
-      final providerLabel = _cardMobileMoneyProviderLabel;
-      var message = 'Complete payment in your browser.';
-      if (_cardMobileMoneyProvider == 'paystack' &&
-          paystackAmount != null &&
-          paystackCurrency != null &&
-          _selectedCurrency.toUpperCase() != paystackCurrency.toUpperCase()) {
-        message =
-            'You will be charged $paystackCurrency $paystackAmount on Paystack.';
-      } else if (_cardMobileMoneyProvider == 'transak') {
-        final chargeAmount = result['amount'];
-        final chargeCurrency = result['currency']?.toString() ?? _selectedCurrency;
-        if (chargeAmount != null) {
-          message =
-              'You will pay $chargeCurrency $chargeAmount on Transak.';
-        }
-      }
+      if (!mounted) return;
 
-      final launched = await launchUrl(
-        Uri.parse(checkoutUrl),
-        mode: LaunchMode.externalApplication,
+      await Navigator.of(context).push<bool>(
+        MaterialPageRoute(
+          builder: (_) => PaymentCheckoutWebViewPage(
+            checkoutUrl: checkoutUrl,
+            paymentId: invoiceId,
+            title: '$_cardMobileMoneyProviderLabel checkout',
+          ),
+        ),
       );
-
-      if (!launched) {
-        _showPaymentLaunchedDialog(
-          checkoutUrl,
-          invoiceId,
-          '$message (automatic launch failed — use options below)',
-          providerLabel: providerLabel,
-        );
-      }
     } catch (e) {
       _showError('Error processing payment: $e');
     } finally {
@@ -396,45 +374,12 @@ class _TopUpPageState extends State<TopUpPage> {
     }
   }
 
-  bool _validateAmountForPayment() {
-    if (_amountCtrl.text.trim().isEmpty) {
-      _showError('Please enter an amount');
-      return false;
-    }
-    final amount = _parsedSetAmount();
-    if (amount <= 0) {
-      _showError('Please enter a valid amount');
-      return false;
-    }
-    if (!_meetsKesFiatOptionMinimum()) {
-      _showError(
-        'For KES, the minimum amount for fiat top-up options is KSh ${_kesFiatOptionMinimumAmount.toStringAsFixed(0)}.',
-      );
-      return false;
-    }
-    return true;
-  }
-
-  void _openDirectFiatDepositFlow() {
-    if (_selectedCurrency == 'KES' && !_validateAmountForPayment()) return;
-    Navigator.of(context).push<void>(
-      MaterialPageRoute<void>(
-        builder: (_) => DirectFiatDepositScreen(
-          fiatBalance: _availableBalanceForSelected,
-          walletCurrencyCode: _selectedCurrency,
-          initialDepositCountry: widget.initialDepositCountry,
-        ),
-      ),
-    );
-  }
-
   void _onNextPressed() {
     if (_isProcessingPayment) return;
     switch (_selectedMethod) {
       case _TopUpPaymentMethod.cardMobileMoney:
-        _processFiatTopUp();
       case _TopUpPaymentMethod.directFiatDeposit:
-        _openDirectFiatDepositFlow();
+        _processFiatTopUp();
       case _TopUpPaymentMethod.cryptoDeposit:
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -445,7 +390,7 @@ class _TopUpPageState extends State<TopUpPage> {
   }
 
   void _showError(String message) {
-    print('❌ Showing error dialog: $message');
+    debugPrint('Showing error dialog: $message');
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
@@ -454,161 +399,10 @@ class _TopUpPageState extends State<TopUpPage> {
         actions: [
           TextButton(
             onPressed: () {
-              print('👍 User acknowledged error dialog');
+              debugPrint('User acknowledged error dialog');
               Navigator.of(context).pop();
             },
             child: const Text('OK'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showPaymentLaunchedDialog(
-    String checkoutUrl,
-    String paymentId,
-    String? message, {
-    required String providerLabel,
-  }) {
-    showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('Payment Ready'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Icon(
-                    Icons.payment,
-                    size: 32,
-                    color: Theme.of(context).colorScheme.primary,
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      '$providerLabel checkout is ready!',
-                      style: const TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              if (message != null) ...[
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.green.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.green.withOpacity(0.3)),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(Icons.check_circle, color: Colors.green, size: 16),
-                      const SizedBox(width: 8),
-                      Expanded(child: Text(message, style: TextStyle(color: Colors.green[700]))),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 16),
-              ],
-              Text(
-                'Complete payment in your browser. When finished, return to the app — '
-                'confirmation happens automatically via the app link.',
-                style: const TextStyle(fontSize: 14),
-              ),
-              const SizedBox(height: 16),
-              
-              // Payment URL section
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.grey[50],
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.grey[300]!),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Icon(Icons.link, size: 16, color: Colors.grey[600]),
-                        const SizedBox(width: 8),
-                        Text('Payment URL:', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12, color: Colors.grey[600])),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    SelectableText(
-                      checkoutUrl,
-                      style: const TextStyle(fontSize: 11, fontFamily: 'monospace'),
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                      children: [
-                        Expanded(
-                          child: ElevatedButton.icon(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Theme.of(context).colorScheme.primary,
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(vertical: 8),
-                            ),
-                            onPressed: () async {
-                              final launched = await launchUrl(
-                                Uri.parse(checkoutUrl),
-                                mode: LaunchMode.externalApplication,
-                              );
-                              if (!launched) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text('Could not open payment page automatically. Please copy the URL above.'),
-                                    backgroundColor: Colors.orange,
-                                  ),
-                                );
-                              } else {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text('Payment page opened successfully!'),
-                                    backgroundColor: Colors.green,
-                                  ),
-                                );
-                              }
-                            },
-                            icon: const Icon(Icons.open_in_browser, size: 16),
-                            label: const Text('Open Page', style: TextStyle(fontSize: 12)),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: OutlinedButton.icon(
-                            onPressed: () {
-                              Clipboard.setData(ClipboardData(text: checkoutUrl));
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('Payment URL copied to clipboard!'),
-                                  backgroundColor: Colors.green,
-                                ),
-                              );
-                            },
-                            icon: const Icon(Icons.copy, size: 16),
-                            label: const Text('Copy URL', style: TextStyle(fontSize: 12)),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Close'),
           ),
         ],
       ),
@@ -740,7 +534,7 @@ class _TopUpPageState extends State<TopUpPage> {
                   ),
                   if (_selectedMethod == _TopUpPaymentMethod.cryptoDeposit) ...[
                     const SizedBox(height: 16),
-                    _CryptoDepositDetails(),
+                    const _CryptoDepositDetails(),
                   ],
                 ],
               ),
@@ -1134,12 +928,10 @@ class _CryptoDepositDetails extends StatelessWidget {
     'USDT': {
       'address': 'TGkPQsmAhRVh51bEj961EUavP3BjZqEnBb',
       'network': 'Tron Network',
-      'icon': '₮',
     },
     'USDC': {
       'address': 'FPJoay8fh2FpBBUM2pSmSdTrqpKepZPagGZfU6pwF2qo',
       'network': 'Solana Network',
-      'icon': '🔵',
     },
     'BNB': {
       'address': '0xe421b816e5664a4ecd514956db132762b4e82e8d',
@@ -1193,7 +985,11 @@ class _CryptoDepositDetails extends StatelessWidget {
                 children: [
                   Row(
                     children: [
-                      Text(data['icon']!, style: const TextStyle(fontSize: 18)),
+                      CurrencyLogo(
+                        code: currency,
+                        size: 20,
+                        fallbackEmoji: data['icon'],
+                      ),
                       const SizedBox(width: 8),
                       Text(
                         currency,
