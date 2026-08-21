@@ -5,7 +5,13 @@ enum PaymentMethod { truePay, mobileMoney, bank }
 
 class PaymentMethodScreen extends StatefulWidget {
   final Function(PaymentMethod) onNext;
-  const PaymentMethodScreen({super.key, required this.onNext});
+  final bool kenyaOnly;
+
+  const PaymentMethodScreen({
+    super.key,
+    required this.onNext,
+    this.kenyaOnly = false,
+  });
 
   @override
   State<PaymentMethodScreen> createState() => _PaymentMethodScreenState();
@@ -34,15 +40,21 @@ class _PaymentMethodScreenState extends State<PaymentMethodScreen> {
           child: ListView(
             padding: const EdgeInsets.symmetric(horizontal: 16.0),
             children: [
-              _buildSectionHeader(context, 'SafariTap to SafariTap transfer'),
-              _PaymentOptionCard(
-                icon: Icons.send_to_mobile,
-                title: 'SafariTap to SafariTap transfer',
-                subtitle: 'Use money in your account to pay for your transfer instantly. Should arrive in seconds.',
-                isSelected: _selectedMethod == PaymentMethod.truePay,
-                onTap: () => setState(() => _selectedMethod = PaymentMethod.truePay),
+              if (!widget.kenyaOnly) ...[
+                _buildSectionHeader(context, 'SafariTap to SafariTap transfer'),
+                _PaymentOptionCard(
+                  icon: Icons.send_to_mobile,
+                  title: 'SafariTap to SafariTap transfer',
+                  subtitle:
+                      'Use money in your account to pay for your transfer instantly. Should arrive in seconds.',
+                  isSelected: _selectedMethod == PaymentMethod.truePay,
+                  onTap: () => setState(() => _selectedMethod = PaymentMethod.truePay),
+                ),
+              ],
+              _buildSectionHeader(
+                context,
+                widget.kenyaOnly ? 'Kenya transfer' : 'Fast and easy transfer',
               ),
-              _buildSectionHeader(context, 'Fast and easy transfer'),
               _PaymentOptionCard(
                 icon: Icons.phone_android,
                 title: 'Mobile Money',

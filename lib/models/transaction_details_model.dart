@@ -12,6 +12,10 @@ class TransactionDetails {
   String recipientMobileNetwork;
   String? recipientBankName;
   String? recipientAccountNumber;
+  /// Kenyan bank code from `GET /safari-card/banks` when paying by bank.
+  String? recipientBankCode;
+  /// Name returned by validate-beneficiary before confirm.
+  String verifiedBeneficiaryName;
 
   TransactionDetails({
     this.amountToSend = 0.0,
@@ -24,5 +28,7 @@ class TransactionDetails {
     this.recipientMobileNetwork = '',
     this.recipientBankName,
     this.recipientAccountNumber,
+    this.recipientBankCode,
+    this.verifiedBeneficiaryName = '',
   });
 }

@@ -1,4 +1,4 @@
-package com.example.pretium_mock
+package com.truepay.safaricard
 
 import io.flutter.embedding.android.FlutterFragmentActivity
 

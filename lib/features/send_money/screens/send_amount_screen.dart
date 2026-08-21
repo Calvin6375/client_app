@@ -13,11 +13,14 @@ class SendAmountScreen extends StatefulWidget {
   final VoidCallback onNext;
   final Function(TransactionDetails) onUpdate;
   final TransactionDetails initialDetails;
+  final bool kenyaOnly;
+
   const SendAmountScreen({
     super.key,
     required this.onNext,
     required this.onUpdate,
     required this.initialDetails,
+    this.kenyaOnly = false,
   });
 
   @override
@@ -54,16 +57,24 @@ class _SendAmountScreenState extends State<SendAmountScreen> {
   void initState() {
     super.initState();
     _fromCtrl = TextEditingController();
-    _fromCurrency = widget.initialDetails.fromCurrency.isNotEmpty 
-        ? widget.initialDetails.fromCurrency 
-        : 'USD';
-    _toCurrency = widget.initialDetails.toCurrency.isNotEmpty 
-        ? widget.initialDetails.toCurrency 
-        : (_fromCurrency == 'USD' ? 'USDT' : 'USD');
+    _fromCurrency = widget.kenyaOnly
+        ? 'KES'
+        : (widget.initialDetails.fromCurrency.isNotEmpty
+            ? widget.initialDetails.fromCurrency
+            : 'USD');
+    _toCurrency = widget.kenyaOnly
+        ? 'KES'
+        : (widget.initialDetails.toCurrency.isNotEmpty
+            ? widget.initialDetails.toCurrency
+            : (_fromCurrency == 'USD' ? 'USDT' : 'USD'));
 
     _fromCtrl.addListener(_onAmountChanged);
     _loadBalances();
-    _loadRate();
+    if (widget.kenyaOnly) {
+      _rate = 1.0;
+    } else {
+      _loadRate();
+    }
   }
 
   Future<void> _loadBalances() async {
@@ -82,30 +93,42 @@ class _SendAmountScreenState extends State<SendAmountScreen> {
       setState(() => _loadingBalances = true);
 
       // Load wallets based on currencies
-      final fiatWallet = await _walletRepository.getWalletBalance(user.uid);
-      final cryptoWallet = await _walletRepository.getCryptoWalletBalance(user.uid, 'USDT');
-
-      if (!mounted) return;
-
-      // Set balances based on current currencies
-      // For now, we only have USD fiat wallet and USDT crypto wallet
-      // KES and NGN balances would need to be fetched separately if available
-      if (_fromCurrency == 'USD') {
-        _fromBalance = fiatWallet?.balance ?? 0.0;
-      } else if (_fromCurrency == 'USDT') {
-        _fromBalance = cryptoWallet?.balance ?? 0.0;
+      if (widget.kenyaOnly) {
+        final kesWallet =
+            await _walletRepository.getWalletBalance(user.uid, currency: 'KES');
+        if (!mounted) return;
+        _fromBalance = kesWallet?.balance ?? 0.0;
+        _toBalance = _fromBalance;
       } else {
-        // KES, NGN - for now show 0.00 (would need separate wallet balance calls)
-        _fromBalance = 0.0;
-      }
+        final fiatWallet = await _walletRepository.getWalletBalance(user.uid);
+        final cryptoWallet =
+            await _walletRepository.getCryptoWalletBalance(user.uid, 'USDT');
 
-      if (_toCurrency == 'USD') {
-        _toBalance = fiatWallet?.balance ?? 0.0;
-      } else if (_toCurrency == 'USDT') {
-        _toBalance = cryptoWallet?.balance ?? 0.0;
-      } else {
-        // KES, NGN - for now show 0.00 (would need separate wallet balance calls)
-        _toBalance = 0.0;
+        if (!mounted) return;
+
+        if (_fromCurrency == 'USD') {
+          _fromBalance = fiatWallet?.balance ?? 0.0;
+        } else if (_fromCurrency == 'USDT') {
+          _fromBalance = cryptoWallet?.balance ?? 0.0;
+        } else if (_fromCurrency == 'KES') {
+          final kesWallet =
+              await _walletRepository.getWalletBalance(user.uid, currency: 'KES');
+          _fromBalance = kesWallet?.balance ?? 0.0;
+        } else {
+          _fromBalance = 0.0;
+        }
+
+        if (_toCurrency == 'USD') {
+          _toBalance = fiatWallet?.balance ?? 0.0;
+        } else if (_toCurrency == 'USDT') {
+          _toBalance = cryptoWallet?.balance ?? 0.0;
+        } else if (_toCurrency == 'KES') {
+          final kesWallet =
+              await _walletRepository.getWalletBalance(user.uid, currency: 'KES');
+          _toBalance = kesWallet?.balance ?? 0.0;
+        } else {
+          _toBalance = 0.0;
+        }
       }
 
       setState(() => _loadingBalances = false);
@@ -150,11 +173,12 @@ class _SendAmountScreenState extends State<SendAmountScreen> {
 
   void _onAmountChanged() {
     final amount = double.tryParse(_fromCtrl.text) ?? 0;
+    final receiveAmount = widget.kenyaOnly ? amount : amount * _rate;
     widget.onUpdate(
       TransactionDetails(
         amountToSend: amount,
         fromCurrency: _fromCurrency,
-        amountToReceive: amount * _rate,
+        amountToReceive: receiveAmount,
         toCurrency: _toCurrency,
       ),
     );
@@ -237,44 +261,55 @@ class _SendAmountScreenState extends State<SendAmountScreen> {
           Expanded(
             child: ListView(
               children: [
+                if (widget.kenyaOnly) ...[
+                  Text(
+                    'Send from your KES wallet in Kenya',
+                    style: TextStyle(
+                      color: AppColors.getThemeColors(context).textSecondary,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                ],
                 _SwapCurrencyCard(
-                  label: 'You Send',
+                  label: widget.kenyaOnly ? 'Amount (KES)' : 'You Send',
                   currency: _fromCurrency,
                   flagEmoji: _flagFor(_fromCurrency),
                   balance: _fromBalance,
                   loading: _loadingBalances,
                   controller: _fromCtrl,
-                  onCurrencyTap: () => _showCurrencyPicker(true),
+                  onCurrencyTap:
+                      widget.kenyaOnly ? () {} : () => _showCurrencyPicker(true),
                 ),
-                const SizedBox(height: 8),
-                Center(
-                  child: IconButton(
-                    icon: Icon(Icons.swap_vert, color: primaryColor, size: 32),
-                    onPressed: _swapCurrencies,
-                    style: IconButton.styleFrom(
-                      backgroundColor: primaryColor.withValues(alpha: 0.15),
-                      shape: const CircleBorder(),
-                      padding: const EdgeInsets.all(12),
+                if (!widget.kenyaOnly) ...[
+                  const SizedBox(height: 8),
+                  Center(
+                    child: IconButton(
+                      icon: Icon(Icons.swap_vert, color: primaryColor, size: 32),
+                      onPressed: _swapCurrencies,
+                      style: IconButton.styleFrom(
+                        backgroundColor: primaryColor.withValues(alpha: 0.15),
+                        shape: const CircleBorder(),
+                        padding: const EdgeInsets.all(12),
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(height: 8),
-                _SwapCurrencyCard(
-                  label: 'You Receive',
-                  currency: _toCurrency,
-                  flagEmoji: _flagFor(_toCurrency),
-                  balance: _toBalance,
-                  loading: _loadingBalances,
-                  amount: (double.tryParse(_fromCtrl.text) ?? 0) * _rate,
-                  onCurrencyTap: () => _showCurrencyPicker(false),
-                ),
-                const SizedBox(height: 16),
-                // Exchange rate display
-                _ExchangeRateDisplay(
-                  fromCurrency: _fromCurrency,
-                  toCurrency: _toCurrency,
-                  rate: _rate,
-                ),
+                  const SizedBox(height: 8),
+                  _SwapCurrencyCard(
+                    label: 'You Receive',
+                    currency: _toCurrency,
+                    flagEmoji: _flagFor(_toCurrency),
+                    balance: _toBalance,
+                    loading: _loadingBalances,
+                    amount: (double.tryParse(_fromCtrl.text) ?? 0) * _rate,
+                    onCurrencyTap: () => _showCurrencyPicker(false),
+                  ),
+                  const SizedBox(height: 16),
+                  _ExchangeRateDisplay(
+                    fromCurrency: _fromCurrency,
+                    toCurrency: _toCurrency,
+                    rate: _rate,
+                  ),
+                ],
                 const SizedBox(height: 24),
               ],
             ),

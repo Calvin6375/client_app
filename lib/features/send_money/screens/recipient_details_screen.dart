@@ -3,6 +3,8 @@ import 'package:pretium/features/send_money/screens/payment_method_screen.dart';
 import 'package:pretium/models/transaction_details_model.dart';
 import 'package:pretium/core/constants/app_colors.dart';
 import 'package:pretium/features/auth/widgets/phone_number_field.dart';
+import 'package:pretium/features/safari_card/models/safari_card_bank.dart';
+import 'package:pretium/features/safari_card/services/safari_card_pay_api_service.dart';
 
 /// Mobile network options for the recipient currency (mobile money).
 List<String> _mobileNetworksForCurrency(String currency) {
@@ -67,6 +69,7 @@ class RecipientDetailsScreen extends StatefulWidget {
   final VoidCallback onNext;
   final Function(TransactionDetails) onUpdate;
   final TransactionDetails initialDetails;
+  final bool kenyaOnly;
 
   const RecipientDetailsScreen({
     super.key,
@@ -74,6 +77,7 @@ class RecipientDetailsScreen extends StatefulWidget {
     required this.onNext,
     required this.onUpdate,
     required this.initialDetails,
+    this.kenyaOnly = false,
   });
 
   @override
@@ -88,10 +92,16 @@ class _RecipientDetailsScreenState extends State<RecipientDetailsScreen> {
   late final TextEditingController _accountNumberCtrl;
   late String _selectedCountryCode;
   String? _selectedMobileNetwork;
+  String? _selectedBankCode;
+  List<SafariCardBank> _banks = const [];
+  bool _loadingBanks = false;
 
   @override
   void initState() {
     super.initState();
+    if (widget.kenyaOnly && widget.paymentMethod == PaymentMethod.bank) {
+      _loadBanks();
+    }
     _fullNameCtrl = TextEditingController(text: widget.initialDetails.recipientFullName);
     _bankNameCtrl = TextEditingController(text: widget.initialDetails.recipientBankName);
     _accountNumberCtrl = TextEditingController(text: widget.initialDetails.recipientAccountNumber);
@@ -102,7 +112,9 @@ class _RecipientDetailsScreenState extends State<RecipientDetailsScreen> {
       _selectedMobileNetwork = saved;
     }
 
-    _selectedCountryCode = _defaultDialCodeForCurrency(widget.initialDetails.toCurrency);
+    _selectedCountryCode = widget.kenyaOnly
+        ? '254'
+        : _defaultDialCodeForCurrency(widget.initialDetails.toCurrency);
     final digitsOnly = widget.initialDetails.recipientPhoneNumber.replaceAll(RegExp(r'[^\d]'), '');
     final phoneText = digitsOnly.startsWith(_selectedCountryCode)
         ? digitsOnly.substring(_selectedCountryCode.length)
@@ -113,6 +125,32 @@ class _RecipientDetailsScreenState extends State<RecipientDetailsScreen> {
     _phoneCtrl.addListener(_onChanged);
     _bankNameCtrl.addListener(_onChanged);
     _accountNumberCtrl.addListener(_onChanged);
+  }
+
+  Future<void> _loadBanks() async {
+    setState(() => _loadingBanks = true);
+    try {
+      final banks = await SafariCardPayApiService().listBanks();
+      if (!mounted) return;
+      setState(() {
+        _banks = banks;
+        final savedCode = widget.initialDetails.recipientBankCode;
+        if (savedCode != null && banks.any((b) => b.code == savedCode)) {
+          _selectedBankCode = savedCode;
+        }
+        _loadingBanks = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _loadingBanks = false);
+    }
+  }
+
+  SafariCardBank? get _selectedBank {
+    if (_selectedBankCode == null) return null;
+    for (final bank in _banks) {
+      if (bank.code == _selectedBankCode) return bank;
+    }
+    return null;
   }
 
   bool _isFormComplete() {
@@ -126,9 +164,11 @@ class _RecipientDetailsScreenState extends State<RecipientDetailsScreen> {
             _selectedMobileNetwork!.trim().isNotEmpty;
         return nameOk && phoneOk && networkOk;
       case PaymentMethod.bank:
-        final bankOk = _bankNameCtrl.text.trim().isNotEmpty &&
-            _accountNumberCtrl.text.trim().isNotEmpty;
-        return nameOk && phoneOk && bankOk;
+        final bankOk = widget.kenyaOnly
+            ? _selectedBankCode != null && _selectedBankCode!.trim().isNotEmpty
+            : _bankNameCtrl.text.trim().isNotEmpty;
+        final acctOk = _accountNumberCtrl.text.trim().isNotEmpty;
+        return nameOk && (widget.kenyaOnly ? bankOk && acctOk : phoneOk && bankOk && acctOk);
       case PaymentMethod.truePay:
         return nameOk && phoneOk;
     }
@@ -148,8 +188,12 @@ class _RecipientDetailsScreenState extends State<RecipientDetailsScreen> {
         recipientFullName: _fullNameCtrl.text,
         recipientPhoneNumber: fullPhone,
         recipientMobileNetwork: _selectedMobileNetwork ?? '',
-        recipientBankName: _bankNameCtrl.text,
+        recipientBankName: widget.kenyaOnly
+            ? _selectedBank?.name
+            : _bankNameCtrl.text,
         recipientAccountNumber: _accountNumberCtrl.text,
+        recipientBankCode: _selectedBankCode,
+        verifiedBeneficiaryName: widget.initialDetails.verifiedBeneficiaryName,
       ),
     );
   }
@@ -193,8 +237,9 @@ class _RecipientDetailsScreenState extends State<RecipientDetailsScreen> {
               child: ListView(
                 children: [
                   _buildTextField(label: 'Full Name', controller: _fullNameCtrl),
-                  const SizedBox(height: 24),
-                  PhoneNumberField(
+                  if (!(widget.kenyaOnly && widget.paymentMethod == PaymentMethod.bank)) ...[
+                    const SizedBox(height: 24),
+                    PhoneNumberField(
                     key: ValueKey(widget.initialDetails.toCurrency),
                     phoneController: _phoneCtrl,
                     initialCountryCode: _selectedCountryCode,
@@ -211,15 +256,23 @@ class _RecipientDetailsScreenState extends State<RecipientDetailsScreen> {
                       return null;
                     },
                   ),
+                  ],
                   if (widget.paymentMethod == PaymentMethod.mobileMoney) ...[
                     const SizedBox(height: 24),
-                    _buildMobileNetworkDropdown(context),
+                    if (!widget.kenyaOnly) _buildMobileNetworkDropdown(context),
                   ],
                   if (widget.paymentMethod == PaymentMethod.bank) ...[
                     const SizedBox(height: 24),
-                    _buildTextField(label: 'Bank Name', controller: _bankNameCtrl),
+                    if (widget.kenyaOnly)
+                      _buildBankDropdown(context)
+                    else ...[
+                      _buildTextField(label: 'Bank Name', controller: _bankNameCtrl),
+                    ],
                     const SizedBox(height: 24),
-                    _buildTextField(label: 'Account Number', controller: _accountNumberCtrl),
+                    _buildTextField(
+                      label: 'Account Number',
+                      controller: _accountNumberCtrl,
+                    ),
                   ],
                 ],
               ),
@@ -255,6 +308,7 @@ class _RecipientDetailsScreenState extends State<RecipientDetailsScreen> {
   void _onContinue() {
     if (!_formKey.currentState!.validate()) return;
     if (widget.paymentMethod == PaymentMethod.mobileMoney &&
+        !widget.kenyaOnly &&
         (_selectedMobileNetwork == null || _selectedMobileNetwork!.trim().isEmpty)) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please select a mobile network provider')),
@@ -262,6 +316,57 @@ class _RecipientDetailsScreenState extends State<RecipientDetailsScreen> {
       return;
     }
     widget.onNext();
+  }
+
+  Widget _buildBankDropdown(BuildContext context) {
+    final colors = AppColors.getThemeColors(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primary = Theme.of(context).colorScheme.primary;
+
+    return DropdownButtonFormField<String>(
+      initialValue: _selectedBankCode,
+      items: _banks
+          .map(
+            (bank) => DropdownMenuItem<String>(
+              value: bank.code,
+              child: Text(bank.name),
+            ),
+          )
+          .toList(),
+      onChanged: _loadingBanks
+          ? null
+          : (value) {
+              setState(() => _selectedBankCode = value);
+              _onChanged();
+            },
+      validator: (value) {
+        if (value == null || value.trim().isEmpty) return 'Select a bank';
+        return null;
+      },
+      isExpanded: true,
+      hint: Text(_loadingBanks ? 'Loading banks…' : 'Select bank'),
+      icon: Icon(Icons.keyboard_arrow_down_rounded, color: colors.textSecondary),
+      dropdownColor: isDark ? colors.surface : Colors.white,
+      style: TextStyle(color: colors.textPrimary, fontSize: 16),
+      decoration: InputDecoration(
+        labelText: 'Bank',
+        labelStyle: TextStyle(color: colors.textSecondary),
+        filled: true,
+        fillColor: isDark ? colors.surface : Colors.white.withValues(alpha: 0.9),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(
+            color: isDark ? colors.surfaceVariant : const Color(0xFFE5E7EB),
+          ),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: primary, width: 2),
+        ),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      ),
+    );
   }
 
   Widget _buildMobileNetworkDropdown(BuildContext context) {

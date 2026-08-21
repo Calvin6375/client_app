@@ -8,12 +8,17 @@
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:241917597382:android:11278578d75ad12f4969c7",
+        "mobilesdk_app_id": "1:241917597382:android:a5e45a6f0e6c57804969c7",
         "android_client_info": {
-          "package_name": "com.example.pretium_mock"
+          "package_name": "com.truepay.safaricard"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "241917597382-nj87kdukt960aju3tede9n0i13ojc65i.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyAbkhQZp_sbiGsaWYsqUqdJErvFVnI-KBI"
@@ -21,7 +26,19 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "241917597382-nj87kdukt960aju3tede9n0i13ojc65i.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "241917597382-kr36h75uncq574ts6nigamr22noisqvi.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.truepay.safaricard"
+              }
+            }
+          ]
         }
       }
     }

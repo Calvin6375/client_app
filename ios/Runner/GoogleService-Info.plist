@@ -3,9 +3,9 @@
 <plist version="1.0">
 <dict>
 	<key>CLIENT_ID</key>
-	<string>241917597382-kr36h75uncq574ts6nigamr22noisqvi.apps.googleusercontent.com</string>
+	<string>241917597382-fj9ksb9fsbrl1n7fr7pjnrmqs38i4ljq.apps.googleusercontent.com</string>
 	<key>REVERSED_CLIENT_ID</key>
-	<string>com.googleusercontent.apps.241917597382-kr36h75uncq574ts6nigamr22noisqvi</string>
+	<string>com.googleusercontent.apps.241917597382-fj9ksb9fsbrl1n7fr7pjnrmqs38i4ljq</string>
 	<key>API_KEY</key>
 	<string>AIzaSyDGgjQjuHGrj7vJi3cfunpDm7fxN9OEiJg</string>
 	<key>GCM_SENDER_ID</key>
@@ -13,7 +13,7 @@
 	<key>PLIST_VERSION</key>
 	<string>1</string>
 	<key>BUNDLE_ID</key>
-	<string>com.example.pretiumMock</string>
+	<string>com.truepay.safaricard</string>
 	<key>PROJECT_ID</key>
 	<string>truepay-72060</string>
 	<key>STORAGE_BUCKET</key>
@@ -29,7 +29,7 @@
 	<key>IS_SIGNIN_ENABLED</key>
 	<true></true>
 	<key>GOOGLE_APP_ID</key>
-	<string>1:241917597382:ios:e284f64b6f984d894969c7</string>
+	<string>1:241917597382:ios:11a8be0e251524834969c7</string>
 	<key>DATABASE_URL</key>
 	<string>https://truepay-72060-default-rtdb.firebaseio.com</string>
 </dict>

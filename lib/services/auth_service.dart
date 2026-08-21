@@ -4,10 +4,10 @@ import 'package:pretium/services/dashboard_session_cache.dart';
 import 'package:pretium/utils/logger.dart';
 
 /// Android `applicationId` in `android/app/build.gradle` (password-reset app links).
-const _androidPackageForPasswordReset = 'com.example.pretium_mock';
+const _androidPackageForPasswordReset = 'com.truepay.safaricard';
 
 /// iOS `BUNDLE_ID` in `ios/Runner/GoogleService-Info.plist` (password-reset universal links).
-const _iosBundleIdForPasswordReset = 'com.example.pretiumMock';
+const _iosBundleIdForPasswordReset = 'com.truepay.safaricard';
 
 /// Authentication service
 /// Handles all Firebase Authentication operations

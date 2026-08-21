@@ -62,11 +62,18 @@ class ReviewDetailsScreen extends StatelessWidget {
                       details.recipientPhoneNumber,
                       '${details.amountToReceive.toStringAsFixed(2)} ${details.toCurrency}',
                     ),
-                    if (details.recipientMobileNetwork.trim().isNotEmpty) ...[
+                    if (details.verifiedBeneficiaryName.trim().isNotEmpty) ...[
                       const SizedBox(height: 12),
                       _DetailRow(
-                        label: 'Mobile network',
-                        value: details.recipientMobileNetwork.trim(),
+                        label: 'Verified name',
+                        value: details.verifiedBeneficiaryName.trim(),
+                      ),
+                    ],
+                    if (details.recipientBankName?.trim().isNotEmpty == true) ...[
+                      const SizedBox(height: 12),
+                      _DetailRow(
+                        label: 'Bank',
+                        value: details.recipientBankName!.trim(),
                       ),
                     ],
                   ],
@@ -97,7 +104,7 @@ class ReviewDetailsScreen extends StatelessWidget {
                     ),
                   )
                 : Text(
-                    'Continue',
+                    'Send',
                     style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,

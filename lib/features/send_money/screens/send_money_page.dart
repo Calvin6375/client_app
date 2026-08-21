@@ -5,65 +5,19 @@ import 'package:pretium/features/send_money/screens/review_details_screen.dart';
 import 'package:pretium/features/send_money/screens/recipient_details_screen.dart';
 import 'package:pretium/models/transaction_details_model.dart';
 import 'package:pretium/core/constants/app_colors.dart';
-import 'package:pretium/services/payment_service.dart';
+import 'package:pretium/features/safari_card/services/safari_card_pay_api_service.dart';
+import 'package:pretium/features/safari_card/services/safari_card_pay_flow.dart';
+import 'package:pretium/features/safari_card/utils/payout_error_messages.dart';
+import 'package:pretium/features/safari_card/utils/safari_card_phone.dart';
 import 'package:pretium/utils/async_action_guard.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-
-/// Maps UI payment method to [createDirectPayout] `payoutMethod` (server expects `bank` | `mobile_money`).
-String? _sendMoneyPayoutMethodApi(PaymentMethod method) {
-  switch (method) {
-    case PaymentMethod.mobileMoney:
-      return 'mobile_money';
-    case PaymentMethod.bank:
-      return 'bank';
-    case PaymentMethod.truePay:
-      return null;
-  }
-}
-
-String _sendMoneyPayoutNote(TransactionDetails d) {
-  final name = d.recipientFullName.trim();
-  final network = d.recipientMobileNetwork.trim();
-  final parts = <String>[
-    if (name.isNotEmpty) 'To: $name',
-    '${d.amountToSend.toStringAsFixed(2)} ${d.fromCurrency} → ${d.amountToReceive.toStringAsFixed(2)} ${d.toCurrency}',
-    'Method: ${d.paymentMethod.name}',
-    if (network.isNotEmpty) 'Mobile network: $network',
-  ];
-  return parts.join(' · ');
-}
-
-Map<String, dynamic> _sendMoneyPayoutMetadata(TransactionDetails d) {
-  final meta = <String, dynamic>{
-    'flow': 'send_money',
-    'recipientFullName': d.recipientFullName.trim(),
-    'recipientPhoneNumber': d.recipientPhoneNumber.trim(),
-    'fromCurrency': d.fromCurrency,
-    'toCurrency': d.toCurrency,
-    'amountToSend': d.amountToSend,
-    'amountToReceive': d.amountToReceive,
-    'paymentMethod': d.paymentMethod.name,
-  };
-  final network = d.recipientMobileNetwork.trim();
-  if (network.isNotEmpty) {
-    meta['mobileNetwork'] = network;
-  }
-  final bank = d.recipientBankName?.trim();
-  if (bank != null && bank.isNotEmpty) {
-    meta['recipientBankName'] = bank;
-  }
-  final acct = d.recipientAccountNumber?.trim();
-  if (acct != null && acct.isNotEmpty) {
-    meta['recipientAccountNumber'] = acct;
-  }
-  return meta;
-}
+import 'package:uuid/uuid.dart';
 
 enum SendMoneyStep { amount, payment, recipientDetails, review }
 
 class SendMoneyPage extends StatefulWidget {
   final String? initialFromCurrency;
-  
+
   const SendMoneyPage({super.key, this.initialFromCurrency});
 
   @override
@@ -74,20 +28,21 @@ class _SendMoneyPageState extends State<SendMoneyPage> {
   SendMoneyStep _step = SendMoneyStep.amount;
   late final TransactionDetails _transactionDetails;
   bool _isSubmittingSendMoney = false;
-  
+  final SafariCardPayApiService _payApi = SafariCardPayApiService();
+
   @override
   void initState() {
     super.initState();
-    // Initialize with currency from parameter or defaults
     _transactionDetails = TransactionDetails(
-      fromCurrency: widget.initialFromCurrency ?? 'USD',
-      toCurrency: widget.initialFromCurrency == 'USD' ? 'USDT' : 'USD',
+      fromCurrency: 'KES',
+      toCurrency: 'KES',
     );
   }
 
   void _onPaymentMethodSelected(PaymentMethod method) {
     setState(() {
       _transactionDetails.paymentMethod = method;
+      _transactionDetails.verifiedBeneficiaryName = '';
       _step = SendMoneyStep.recipientDetails;
     });
   }
@@ -102,15 +57,109 @@ class _SendMoneyPageState extends State<SendMoneyPage> {
       _transactionDetails.recipientPhoneNumber = details.recipientPhoneNumber;
       _transactionDetails.recipientBankName = details.recipientBankName;
       _transactionDetails.recipientAccountNumber = details.recipientAccountNumber;
+      _transactionDetails.recipientBankCode = details.recipientBankCode;
       _transactionDetails.recipientMobileNetwork = details.recipientMobileNetwork;
+      _transactionDetails.verifiedBeneficiaryName = details.verifiedBeneficiaryName;
     });
+  }
+
+  Map<String, dynamic> _buildValidateBody() {
+    final name = _transactionDetails.recipientFullName.trim();
+    switch (_transactionDetails.paymentMethod) {
+      case PaymentMethod.mobileMoney:
+        return {
+          'type': 'MPESA_B2C',
+          'recipient': {
+            'phoneNumber': normalizeKenyaPhone(_transactionDetails.recipientPhoneNumber),
+            'name': name,
+          },
+        };
+      case PaymentMethod.bank:
+        return {
+          'type': 'BANK',
+          'recipient': {
+            'bankCode': _transactionDetails.recipientBankCode,
+            'accountNumber': _transactionDetails.recipientAccountNumber?.trim(),
+            'accountName': name,
+          },
+        };
+      case PaymentMethod.truePay:
+        throw StateError('SafariTap-to-SafariTap is not supported for Kenya payouts');
+    }
+  }
+
+  Map<String, dynamic> _buildPayoutBody(String clientRequestId) {
+    final amount = _transactionDetails.amountToSend;
+    final name = _transactionDetails.recipientFullName.trim();
+    final verifiedName = _transactionDetails.verifiedBeneficiaryName.trim();
+    final displayName = verifiedName.isNotEmpty ? verifiedName : name;
+
+    switch (_transactionDetails.paymentMethod) {
+      case PaymentMethod.mobileMoney:
+        return {
+          'type': 'MPESA_B2C',
+          'amount': amount,
+          'currency': 'KES',
+          'clientRequestId': clientRequestId,
+          'recipient': {
+            'phoneNumber': normalizeKenyaPhone(_transactionDetails.recipientPhoneNumber),
+            'name': displayName,
+          },
+          'narrative': 'Safari Card transfer',
+        };
+      case PaymentMethod.bank:
+        return {
+          'type': 'BANK',
+          'amount': amount,
+          'currency': 'KES',
+          'clientRequestId': clientRequestId,
+          'recipient': {
+            'bankCode': _transactionDetails.recipientBankCode,
+            'accountNumber': _transactionDetails.recipientAccountNumber?.trim(),
+            'accountName': displayName,
+          },
+          'narrative': 'Safari Card bank transfer',
+        };
+      case PaymentMethod.truePay:
+        throw StateError('SafariTap-to-SafariTap is not supported for Kenya payouts');
+    }
+  }
+
+  Future<bool> _validateBeneficiary() async {
+    try {
+      final result = await _payApi.validateBeneficiary(_buildValidateBody());
+      if (!result.hasDisplayName) {
+        if (!mounted) return false;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not verify recipient. Check the details.')),
+        );
+        return false;
+      }
+      setState(() {
+        _transactionDetails.verifiedBeneficiaryName = result.beneficiaryName;
+        if (_transactionDetails.recipientFullName.trim().isEmpty) {
+          _transactionDetails.recipientFullName = result.beneficiaryName;
+        }
+      });
+      return true;
+    } on SafariCardPayApiException catch (e) {
+      if (!mounted) return false;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(safariCardPayoutErrorMessage(e)),
+          backgroundColor: Colors.red.shade700,
+        ),
+      );
+      return false;
+    }
   }
 
   void _nextStep() async {
     if (_step == SendMoneyStep.amount) {
       setState(() => _step = SendMoneyStep.payment);
     } else if (_step == SendMoneyStep.recipientDetails) {
-      setState(() => _step = SendMoneyStep.review);
+      final ok = await _validateBeneficiary();
+      if (ok && mounted) setState(() => _step = SendMoneyStep.review);
     } else if (_step == SendMoneyStep.review) {
       await runGuardedAsync(
         this,
@@ -124,64 +173,26 @@ class _SendMoneyPageState extends State<SendMoneyPage> {
             );
             return;
           }
+
           final amount = _transactionDetails.amountToSend;
           if (amount <= 0) return;
-          final phone = _transactionDetails.recipientPhoneNumber.trim();
-          if (phone.isEmpty) {
+
+          if (_transactionDetails.paymentMethod == PaymentMethod.bank &&
+              (amount < 100 || amount > 999999)) {
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Recipient phone number is required')),
+              const SnackBar(content: Text('Bank transfers must be between KES 100 and 999,999')),
             );
             return;
           }
 
-          final paymentService = PaymentService();
-          final phoneE164 = phone.startsWith('+') ? phone : '+$phone';
-          try {
-            final result = await paymentService.createDirectPayout(
-              amount: amount,
-              currency: _transactionDetails.fromCurrency,
-              phoneNumber: phoneE164,
-              note: _sendMoneyPayoutNote(_transactionDetails),
-              payoutMethod: _sendMoneyPayoutMethodApi(_transactionDetails.paymentMethod),
-              metadata: _sendMoneyPayoutMetadata(_transactionDetails),
-            );
-            if (!mounted) return;
-            if (result['success'] != true) {
-              final code = result['code']?.toString();
-              final raw = result['error']?.toString() ?? 'Payout failed';
-              final message = switch (code) {
-                'unauthenticated' => 'Please sign in to send money.',
-                'invalid-argument' => raw,
-                'not-found' => 'Recipient not found. Please check the phone number.',
-                'failed-precondition' =>
-                  'Insufficient balance. You don\'t have enough funds to send this amount.',
-                'internal' => 'Something went wrong. Please try again.',
-                _ => raw,
-              };
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text(message), backgroundColor: Colors.red.shade700),
-              );
-              return;
-            }
-            final cur = result['currency']?.toString() ?? _transactionDetails.fromCurrency;
-            final amt = result['amount'];
-            final amtStr = amt is num ? amt.toString() : amount.toString();
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('Payout submitted: $amtStr $cur'),
-                backgroundColor: Colors.green.shade700,
-              ),
-            );
-            Navigator.of(context).pop();
-          } catch (_) {
-            if (!mounted) return;
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Send money failed. Please try again.'),
-                backgroundColor: Colors.red,
-              ),
-            );
-          }
+          final clientRequestId = const Uuid().v4();
+          final ok = await runSafariCardPayoutFlow(
+            context: context,
+            payoutBody: _buildPayoutBody(clientRequestId),
+            clientRequestId: clientRequestId,
+            api: _payApi,
+          );
+          if (ok && mounted) Navigator.of(context).pop();
         },
       );
     }
@@ -208,17 +219,19 @@ class _SendMoneyPageState extends State<SendMoneyPage> {
       case SendMoneyStep.amount:
         return SendAmountScreen(
           onNext: _nextStep,
-          onUpdate: (details) => _updateTransactionDetails(details),
+          onUpdate: _updateTransactionDetails,
           initialDetails: _transactionDetails,
+          kenyaOnly: true,
         );
       case SendMoneyStep.payment:
-        return PaymentMethodScreen(onNext: _onPaymentMethodSelected);
+        return PaymentMethodScreen(onNext: _onPaymentMethodSelected, kenyaOnly: true);
       case SendMoneyStep.recipientDetails:
         return RecipientDetailsScreen(
           paymentMethod: _transactionDetails.paymentMethod,
           onNext: _nextStep,
-          onUpdate: (details) => _updateTransactionDetails(details),
+          onUpdate: _updateTransactionDetails,
           initialDetails: _transactionDetails,
+          kenyaOnly: true,
         );
       case SendMoneyStep.review:
         return ReviewDetailsScreen(
@@ -236,13 +249,11 @@ class _SendMoneyPageState extends State<SendMoneyPage> {
     final colors = AppColors.getThemeColors(context);
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final primary = Theme.of(context).colorScheme.primary;
-    
+
     return Scaffold(
-      backgroundColor: colors.background, // Theme-aware background
+      backgroundColor: colors.background,
       appBar: AppBar(
-        backgroundColor: isDark
-            ? Colors.transparent  // Transparent for dark mode
-            : primary.withValues(alpha: 0.08), // Light mint tint (8% opacity) for light mode
+        backgroundColor: isDark ? Colors.transparent : primary.withValues(alpha: 0.08),
         elevation: 0,
         title: Text('Send Money', style: TextStyle(color: colors.textPrimary)),
         iconTheme: IconThemeData(color: colors.textPrimary),

@@ -33,4 +33,28 @@ final class CloudFunctionsApiConfig {
       Uri.parse('$baseCryptoApiUrl/crypto/transactions?limit=$limit');
 
   static Uri cryptoSendUri() => Uri.parse('$baseCryptoApiUrl/crypto/send');
+
+  /// Safari Card pay / send HTTP API (`safariCardApi` Cloud Function).
+  static String get baseSafariCardApiUrl {
+    final projectId = DefaultFirebaseOptions.currentPlatform.projectId;
+    return 'https://$functionsRegion-$projectId.cloudfunctions.net/safariCardApi';
+  }
+
+  static Uri safariCardValidateBeneficiaryUri() =>
+      Uri.parse('$baseSafariCardApiUrl/safari-card/payouts/validate-beneficiary');
+
+  static Uri safariCardPayoutsUri({int? limit}) {
+    final base = '$baseSafariCardApiUrl/safari-card/payouts';
+    if (limit != null) return Uri.parse('$base?limit=$limit');
+    return Uri.parse(base);
+  }
+
+  static Uri safariCardPayoutUri(String payoutId) =>
+      Uri.parse('$baseSafariCardApiUrl/safari-card/payouts/$payoutId');
+
+  static Uri safariCardBanksUri() =>
+      Uri.parse('$baseSafariCardApiUrl/safari-card/banks');
+
+  static String get expectedProjectId =>
+      DefaultFirebaseOptions.currentPlatform.projectId;
 }

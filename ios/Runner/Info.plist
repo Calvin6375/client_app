@@ -67,7 +67,7 @@
 				<string>truepay</string>
 			</array>
 			<key>CFBundleURLName</key>
-			<string>com.example.pretium.payment</string>
+			<string>com.truepay.safaricard.payment</string>
 		</dict>
 	</array>
 </dict>
