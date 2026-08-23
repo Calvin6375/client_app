@@ -1,8 +1,13 @@
+import 'dart:io' show Platform;
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:image_picker_android/image_picker_android.dart';
+import 'package:image_picker_platform_interface/image_picker_platform_interface.dart';
+import 'package:pretium/core/crypto/c2b_encryption_service.dart';
 import 'package:pretium/firebase_options.dart';
 import 'package:pretium/features/splash/screens/splash_page.dart';
 import 'package:pretium/features/splash/screens/splash_page_1.dart';
@@ -42,6 +47,13 @@ class _AppScrollBehavior extends MaterialScrollBehavior {
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  if (!kIsWeb && Platform.isAndroid) {
+    final picker = ImagePickerPlatform.instance;
+    if (picker is ImagePickerAndroid) {
+      picker.useAndroidPhotoPicker = true;
+    }
+  }
   
   // Initialize Firebase with error handling
   try {
@@ -49,6 +61,8 @@ Future<void> main() async {
       options: DefaultFirebaseOptions.currentPlatform,
     );
     Logger.success('Firebase initialized successfully');
+
+    await C2bEncryptionService.instance.initialize();
     
     // Register background message handler (must be done before runApp)
     FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);

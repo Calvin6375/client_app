@@ -152,9 +152,6 @@ class TopupDepositCountry {
   static String cardMobileMoneyProviderFor(String currencyCode) =>
       isAfricanCurrency(currencyCode) ? 'paystack' : 'transak';
 
-  static String cardMobileMoneyProviderLabelFor(String currencyCode) =>
-      cardMobileMoneyProviderFor(currencyCode) == 'transak' ? 'Transak' : 'Paystack';
-
   /// Withdrawal wizard is Kenya-only.
   static const List<TopupDepositCountry> withdrawSupported =
       <TopupDepositCountry>[kenya];

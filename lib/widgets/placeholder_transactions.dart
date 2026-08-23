@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:pretium/core/constants/app_colors.dart';
 import 'package:pretium/models/transaction_model.dart';
 import 'package:pretium/features/transactions/screens/transaction_detail_page.dart';
+import 'package:pretium/features/transactions/widgets/transaction_list_tile.dart';
 import 'package:pretium/services/dashboard_session_cache.dart';
 import 'package:pretium/services/transactions_service.dart';
 
@@ -105,53 +106,20 @@ class _PlaceholderTransactionsState extends State<PlaceholderTransactions> {
     }
 
     final transactions = _transactionsResponse!.transactions;
-    final colors = AppColors.getThemeColors(context);
 
     return Column(
       children: transactions.map((transaction) {
-        final title = transaction.title ??
-                     (transaction.isDebit ? 'Sent' : 'Received');
-        final subtitle = transaction.subtitle ?? 
-                        transaction.description ?? 
-                        (transaction.currency ?? '');
-        final amount = transaction.amount;
-        final currency = transaction.currency ?? 'KES';
-        final isDebit = transaction.isDebit;
-
-        return ListTile(
+        return TransactionListTile(
+          transaction: transaction,
+          style: TransactionListTileStyle.compact,
           onTap: () {
             Navigator.of(context).push(
               MaterialPageRoute<void>(
-                builder: (context) => TransactionDetailPage(transaction: transaction),
+                builder: (context) =>
+                    TransactionDetailPage(transaction: transaction),
               ),
             );
           },
-          leading: CircleAvatar(
-            backgroundColor: colors.infoLight,
-            child: Icon(
-              isDebit ? Icons.call_made : Icons.call_received,
-              color: colors.primary,
-            ),
-          ),
-          title: Text(
-            title,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(color: colors.textPrimary),
-          ),
-          subtitle: Text(
-            subtitle,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(color: colors.textSecondary),
-          ),
-          trailing: Text(
-            '${isDebit ? '-' : '+'}$currency ${amount.toStringAsFixed(2)}',
-            style: TextStyle(
-              color: isDebit ? colors.error : colors.success,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
         );
       }).toList(),
     );

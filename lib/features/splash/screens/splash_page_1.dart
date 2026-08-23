@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:pretium/app/route_names.dart';
 import 'package:pretium/core/constants/app_colors.dart';
 
 class SplashPage1 extends StatefulWidget {
@@ -20,9 +21,7 @@ class _SplashPage1State extends State<SplashPage1> {
       );
     } else {
       // Navigate to the next screen
-      Navigator.of(
-        context,
-      ).pushReplacementNamed('/login'); // or your desired route
+      Navigator.of(context).pushReplacementNamed(RouteNames.login);
     }
   }
 
@@ -69,9 +68,7 @@ class _SplashPage1State extends State<SplashPage1> {
               right: 5,
               child: TextButton(
                 onPressed: () {
-                  Navigator.of(
-                    context,
-                  ).pushReplacementNamed('/login'); // or your desired route
+                  Navigator.of(context).pushReplacementNamed(RouteNames.login);
                 },
                 child: Text(
                   'Skip',

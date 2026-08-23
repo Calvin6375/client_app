@@ -1,12 +1,18 @@
 // Transaction details — receipt-style view with TrouPay watermark download.
 
+import 'dart:async';
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:pretium/core/constants/app_colors.dart';
 import 'package:pretium/features/topup/utils/receipt_image_export.dart';
 import 'package:pretium/features/topup/utils/receipt_save_helper.dart';
 import 'package:pretium/models/transaction_model.dart';
+import 'package:pretium/services/transactions_service.dart';
 import 'package:pretium/utils/async_action_guard.dart';
+import 'package:pretium/utils/logger.dart';
+import 'package:pretium/utils/provider_display_sanitizer.dart';
 
 class TransactionDetailPage extends StatefulWidget {
   final Transaction transaction;
@@ -22,9 +28,46 @@ class TransactionDetailPage extends StatefulWidget {
 
 class _TransactionDetailPageState extends State<TransactionDetailPage> {
   final GlobalKey _receiptCardKey = GlobalKey();
+  final TransactionsService _transactionsService = TransactionsService();
   bool _savingReceipt = false;
+  bool _loadingDetails = true;
+  Transaction? _transaction;
+  String? _loadError;
 
-  Transaction get _t => widget.transaction;
+  Transaction get _t => _transaction ?? widget.transaction;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_loadFullTransaction());
+  }
+
+  Future<void> _loadFullTransaction() async {
+    const encoder = JsonEncoder.withIndent('  ');
+    Logger.info(
+      'Transaction detail — list item parsed:\n${encoder.convert(widget.transaction.toJson())}',
+    );
+
+    try {
+      final full = await _transactionsService.getTransaction(widget.transaction.id);
+      Logger.info(
+        'Transaction detail — single fetch parsed:\n${encoder.convert(full.toJson())}',
+      );
+      if (!mounted) return;
+      setState(() {
+        _transaction = full;
+        _loadingDetails = false;
+        _loadError = null;
+      });
+    } catch (e) {
+      Logger.warning('Transaction detail — single fetch failed', e);
+      if (!mounted) return;
+      setState(() {
+        _loadingDetails = false;
+        _loadError = e.toString();
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -32,15 +75,24 @@ class _TransactionDetailPageState extends State<TransactionDetailPage> {
     final primary = Theme.of(context).colorScheme.primary;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    final title = _t.title ?? (_t.isDebit ? 'Sent' : 'Received');
+    final title = _t.displayTitle;
     final currency = _t.currency ?? _metaString(['currency']) ?? 'KES';
-    final isDebit = _t.isDebit;
+    final typeLabel = () {
+      final fromRecon = ProviderDisplaySanitizer.labelFromReconType(
+        _t.reconType,
+        isDebit: _t.isDebit,
+      );
+      if (fromRecon.isNotEmpty) return fromRecon;
+      final sanitizedType = ProviderDisplaySanitizer.sanitize(_t.type);
+      if (sanitizedType.isNotEmpty) return sanitizedType;
+      return _t.directionLabel;
+    }();
     final resolvedStatus = _resolvedTransactionStatus();
     final statusLabel = _capitalize(resolvedStatus.replaceAll('_', ' '));
     final showDownloadReceipt = _shouldShowDownloadReceipt(resolvedStatus);
     final detailRows = _buildDetailRows(
       reference: _referenceDisplay(),
-      typeLabel: isDebit ? 'Debit (outgoing)' : 'Credit (incoming)',
+      typeLabel: typeLabel,
       dateStr: _formatDateTime(_t.createdAt),
       statusLabel: statusLabel,
       currency: currency,
@@ -63,11 +115,22 @@ class _TransactionDetailPageState extends State<TransactionDetailPage> {
         centerTitle: true,
       ),
       body: SafeArea(
-        child: SingleChildScrollView(
+        child: _loadingDetails
+            ? const Center(child: CircularProgressIndicator())
+            : SingleChildScrollView(
           padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              if (_loadError != null)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Text(
+                    'Showing summary only (full details unavailable).',
+                    style: TextStyle(color: colors.textSecondary, fontSize: 13),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
               Text(
                 title,
                 textAlign: TextAlign.center,
@@ -98,7 +161,7 @@ class _TransactionDetailPageState extends State<TransactionDetailPage> {
                       Text('Total amount', style: TextStyle(fontSize: 13, color: colors.textSecondary)),
                       const SizedBox(height: 8),
                       Text(
-                        '$currency ${_t.amount.toStringAsFixed(2)}',
+                        _t.formattedSignedAmount(currencyOverride: currency),
                         style: TextStyle(fontSize: 26, fontWeight: FontWeight.w800, color: colors.textPrimary),
                       ),
                       Divider(height: 32, color: colors.divider),
@@ -205,6 +268,12 @@ class _TransactionDetailPageState extends State<TransactionDetailPage> {
     'paymentMethodId',
     'payoutMethod',
     'payout_method',
+    'payoutId',
+    'payout_id',
+    'providerTrackingId',
+    'provider_tracking_id',
+    'recipientType',
+    'recipient_type',
     'provider',
     'mobileProvider',
     'review.paymentMethod',
@@ -222,10 +291,18 @@ class _TransactionDetailPageState extends State<TransactionDetailPage> {
     'Provider',
     'Payout method',
     'Mobile provider',
+    'Payout Id',
+    'Payout ID',
+    'Provider Tracking Id',
+    'Provider Tracking ID',
   };
 
-  static bool _isCopyableLabel(String label) =>
-      label == 'Reference' || label == 'Funding order ID';
+  static bool _isCopyableLabel(String label) {
+    final normalized = label.trim().toLowerCase();
+    return normalized == 'reference' ||
+        normalized == 'funding order id' ||
+        normalized == 'mpesa reference';
+  }
 
   /// Builds labeled rows for every meaningful field from the API response.
   List<({String label, String value, bool copyable})> _buildDetailRows({
@@ -263,16 +340,19 @@ class _TransactionDetailPageState extends State<TransactionDetailPage> {
     consumeKeys(['id', 'transactionId', 'transaction_id']);
 
     addRow('Type', typeLabel);
-    consumeKeys(['type']);
+    consumeKeys(['type', 'displayName', 'label', 'title', 'reconType']);
 
-    final category = _t.subtitle?.trim();
-    if (category != null && category.isNotEmpty) {
+    addRow('Direction', _t.directionLabel);
+    consumeKeys(['direction']);
+
+    final category = ProviderDisplaySanitizer.sanitize(_t.subtitle);
+    if (category.isNotEmpty) {
       addRow('Category', category);
     }
     consumeKeys(['subtitle', 'category']);
 
-    final description = _t.description?.trim();
-    if (description != null && description.isNotEmpty) {
+    final description = ProviderDisplaySanitizer.sanitize(_t.description);
+    if (description.isNotEmpty) {
       addRow('Description', description);
     }
     consumeKeys(['description']);
@@ -285,6 +365,8 @@ class _TransactionDetailPageState extends State<TransactionDetailPage> {
 
     addRow('Currency', currency);
     consumeKeys(['currency']);
+
+    _addRecipientRows(addRow, consumeKeys);
 
     // Prefer friendly labels for known metadata / extra keys.
     const orderedLabels = <String, String>{
@@ -303,6 +385,7 @@ class _TransactionDetailPageState extends State<TransactionDetailPage> {
       'clientWalletCurrency': 'Wallet currency',
       'clientFiatBalance': 'Fiat balance',
       'amount': 'Amount',
+      'signedAmount': 'Signed amount',
     };
 
     final flat = _flattenedApiFields();
@@ -343,6 +426,7 @@ class _TransactionDetailPageState extends State<TransactionDetailPage> {
     for (final key in remaining) {
       if (key == 'review') continue;
       if (_hiddenFieldKeys.contains(key)) continue;
+      if (ProviderDisplaySanitizer.isHiddenMetadataKey(key)) continue;
       final value = _stringifyValue(flat[key]);
       if (value.isEmpty) continue;
       final label = _humanizeKey(key.replaceFirst(RegExp(r'^review\.'), ''));
@@ -385,6 +469,10 @@ class _TransactionDetailPageState extends State<TransactionDetailPage> {
       'Date & time',
       'Status',
       'Currency',
+      'Recipient name',
+      'Account type',
+      'Account',
+      'Account reference',
     ];
     final target = order.indexOf(label);
     if (target < 0) return rows.length;
@@ -393,6 +481,96 @@ class _TransactionDetailPageState extends State<TransactionDetailPage> {
       if (at < 0 || at > target) return i;
     }
     return rows.length;
+  }
+
+  void _addRecipientRows(
+    void Function(String label, String value, {bool copyable}) addRow,
+    void Function(Iterable<String> keys) consumeKeys,
+  ) {
+    final recipient = _recipientMap();
+    if (recipient == null || recipient.isEmpty) return;
+
+    consumeKeys(['recipient']);
+
+    final name = _recipientField(recipient, ['name']);
+    if (name.isNotEmpty) addRow('Recipient name', name);
+
+    final accountType = _formatAccountType(
+      _recipientFieldRaw(recipient, ['account_type', 'accountType']),
+    );
+    if (accountType.isNotEmpty) addRow('Account type', accountType);
+
+    final account = _recipientField(recipient, ['account']);
+    if (account.isNotEmpty) addRow('Account', account, copyable: true);
+
+    final accountReference = _recipientField(
+      recipient,
+      ['account_reference', 'accountReference'],
+    );
+    if (accountReference.isNotEmpty) {
+      addRow('Account reference', accountReference, copyable: true);
+    }
+
+    consumeKeys([
+      'recipient.name',
+      'recipient.account_type',
+      'recipient.accountType',
+      'recipient.account',
+      'recipient.account_reference',
+      'recipient.accountReference',
+      'recipientType',
+      'recipient_type',
+    ]);
+  }
+
+  Map<String, dynamic>? _recipientMap() {
+    if (_t.recipient != null && _t.recipient!.isNotEmpty) {
+      return _t.recipient;
+    }
+    for (final source in [_t.metadata, _t.extraFields]) {
+      if (source == null) continue;
+      final raw = source['recipient'];
+      if (raw is Map) {
+        return raw.map((k, v) => MapEntry(k.toString(), v));
+      }
+    }
+    return null;
+  }
+
+  dynamic _recipientFieldRaw(
+    Map<String, dynamic> recipient,
+    List<String> keys,
+  ) {
+    for (final key in keys) {
+      final value = recipient[key];
+      if (value != null && value.toString().trim().isNotEmpty) return value;
+    }
+    return null;
+  }
+
+  String _recipientField(Map<String, dynamic> recipient, List<String> keys) {
+    final value = _recipientFieldRaw(recipient, keys);
+    if (value == null) return '';
+    return ProviderDisplaySanitizer.sanitize(value.toString());
+  }
+
+  String _formatAccountType(dynamic value) {
+    final raw = value?.toString().trim() ?? '';
+    if (raw.isEmpty) return '';
+    final spaced = raw.replaceAllMapped(
+      RegExp(r'([a-z])([A-Z])|([A-Z]+)([A-Z][a-z])'),
+      (m) => '${m[1] ?? m[3]} ${m[2] ?? m[4]}',
+    );
+    return spaced
+        .replaceAll('_', ' ')
+        .split(RegExp(r'\s+'))
+        .where((part) => part.isNotEmpty)
+        .map(
+          (part) => part.length == 1
+              ? part.toUpperCase()
+              : part[0].toUpperCase() + part.substring(1).toLowerCase(),
+        )
+        .join(' ');
   }
 
   /// Flattens metadata + unknown top-level API fields (including nested `review`).
@@ -404,6 +582,10 @@ class _TransactionDetailPageState extends State<TransactionDetailPage> {
         if (k == 'review' && v is Map) {
           Map<String, dynamic>.from(v).forEach((rk, rv) {
             flat['review.$rk'] = rv;
+          });
+        } else if (k == 'recipient' && v is Map) {
+          Map<String, dynamic>.from(v).forEach((rk, rv) {
+            flat['recipient.$rk'] = rv;
           });
         } else {
           flat[k] = v;
@@ -454,7 +636,7 @@ class _TransactionDetailPageState extends State<TransactionDetailPage> {
       return d.toStringAsFixed(2);
     }
     if (v is Map || v is List) return v.toString();
-    return v.toString().trim();
+    return ProviderDisplaySanitizer.sanitize(v.toString());
   }
 
   String _humanizeKey(String k) {

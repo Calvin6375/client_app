@@ -1,4 +1,5 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
     package="com.truepay.safaricard">
     <!-- Internet permission for Firebase -->
     <uses-permission android:name="android.permission.INTERNET"/>
@@ -7,10 +8,11 @@
     <uses-permission android:name="android.permission.CAMERA"/>
     <!-- Firebase Cloud Messaging -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
-    <!-- Save receipt images to gallery (gal) / upload QR from gallery -->
+    <!-- Legacy storage (API 32 and below). Android 13+ uses system photo picker / MediaStore. -->
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="32"/>
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32"/>
-    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES"/>
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" tools:node="remove"/>
+    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" tools:node="remove"/>
     
     <application
         android:label="SafariTap"

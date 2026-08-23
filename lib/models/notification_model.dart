@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:pretium/utils/provider_display_sanitizer.dart';
 
 /// Model representing a notification from Firestore
 class NotificationModel {
@@ -25,6 +26,18 @@ class NotificationModel {
     this.createdAt,
     this.updatedAt,
   });
+
+  /// User-visible title with third-party provider names removed.
+  String get displayTitle {
+    final sanitized = ProviderDisplaySanitizer.sanitize(title);
+    return sanitized.isNotEmpty ? sanitized : title;
+  }
+
+  /// User-visible message with third-party provider names removed.
+  String get displayMessage {
+    final sanitized = ProviderDisplaySanitizer.sanitize(message);
+    return sanitized.isNotEmpty ? sanitized : message;
+  }
 
   /// Create NotificationModel from Firestore document
   factory NotificationModel.fromFirestore(DocumentSnapshot doc) {

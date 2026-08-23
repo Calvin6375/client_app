@@ -100,6 +100,7 @@ mixin SafariCardPayValidationMixin<T extends StatefulWidget> on State<T> {
     required BuildContext context,
     required Map<String, dynamic> payoutBody,
     required String clientRequestId,
+    required String flowLabel,
     required VoidCallback onPaid,
   }) async {
     if (FirebaseAuth.instance.currentUser == null) {
@@ -112,6 +113,7 @@ mixin SafariCardPayValidationMixin<T extends StatefulWidget> on State<T> {
     final ok = await runSafariCardPayoutFlow(
       context: context,
       payoutBody: payoutBody,
+      flowLabel: flowLabel,
       clientRequestId: clientRequestId,
       api: payApi,
     );
@@ -199,6 +201,7 @@ class SafariCardPayBillViewState extends State<SafariCardPayBillView>
         await submitPayout(
           context: context,
           clientRequestId: clientRequestId,
+          flowLabel: 'PayBill',
           onPaid: widget.onPaid,
           payoutBody: {
             'type': 'MPESA_B2B',
@@ -346,6 +349,7 @@ class SafariCardBuyGoodsViewState extends State<SafariCardBuyGoodsView>
         await submitPayout(
           context: context,
           clientRequestId: clientRequestId,
+          flowLabel: 'Buy Goods',
           onPaid: widget.onPaid,
           payoutBody: {
             'type': 'MPESA_B2B',
@@ -480,6 +484,7 @@ class SafariCardPochiViewState extends State<SafariCardPochiView>
         await submitPayout(
           context: context,
           clientRequestId: clientRequestId,
+          flowLabel: 'Pochi La Biashara',
           onPaid: widget.onPaid,
           payoutBody: {
             'type': 'MPESA_B2C',

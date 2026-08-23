@@ -276,9 +276,6 @@ class _TopUpPageState extends State<TopUpPage> {
   String get _cardMobileMoneyProvider =>
       TopupDepositCountry.cardMobileMoneyProviderFor(_selectedCurrency);
 
-  String get _cardMobileMoneyProviderLabel =>
-      TopupDepositCountry.cardMobileMoneyProviderLabelFor(_selectedCurrency);
-
   /// Card checkout: createPayment (Cloud Function) → open hosted checkout in-app.
   Future<void> _processFiatTopUp() async {
     if (_amountCtrl.text.isEmpty) {
@@ -359,7 +356,7 @@ class _TopUpPageState extends State<TopUpPage> {
           builder: (_) => PaymentCheckoutWebViewPage(
             checkoutUrl: checkoutUrl,
             paymentId: invoiceId,
-            title: '$_cardMobileMoneyProviderLabel checkout',
+            title: 'Secure checkout',
           ),
         ),
       );

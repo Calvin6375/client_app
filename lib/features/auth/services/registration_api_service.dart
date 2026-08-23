@@ -2,13 +2,16 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 import 'package:pretium/core/constants/cloud_functions_api_config.dart';
+import 'package:pretium/core/http/c2b_http_codec.dart';
 import 'package:pretium/utils/logger.dart';
 
 /// Registers a customer against the HTTP API (`POST …/api/register`).
 ///
 /// Request body includes [Institution] and [Channel] as required by the backend.
 final class RegistrationApiService {
-  RegistrationApiService();
+  RegistrationApiService({C2bHttpCodec? codec}) : _codec = codec ?? C2bHttpCodec.instance;
+
+  final C2bHttpCodec _codec;
 
   static const String institution = 'Customer App';
   static const String channel = 'C2B';
@@ -34,12 +37,12 @@ final class RegistrationApiService {
       if (country != null && country.isNotEmpty) 'country': country,
     };
 
-    final headers = {
+    final headers = await _codec.mergeHeaders({
       'Content-Type': 'application/json',
       'Accept': 'application/json',
-    };
+    });
 
-    final bodyJson = jsonEncode(body);
+    final bodyJson = await _codec.encodeJsonBody(jsonEncode(body));
 
     Logger.info('📤 RegistrationApiService POST $uri');
     Logger.debug(
@@ -51,14 +54,15 @@ final class RegistrationApiService {
 
     final response = await http.post(uri, headers: headers, body: bodyJson);
 
+    final plainBody = await _codec.plainResponseBody(response);
+
     Logger.info(
-      '📥 RegistrationApiService response: ${response.statusCode}\n'
-      '   body: ${response.body}',
+      '📥 RegistrationApiService response: ${response.statusCode}',
     );
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw RegistrationApiException(
-        _messageFromResponse(response.statusCode, response.body),
+        _messageFromResponse(response.statusCode, plainBody),
       );
     }
   }

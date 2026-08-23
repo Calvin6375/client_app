@@ -8,6 +8,7 @@ import 'package:pretium/models/transaction_model.dart';
 import 'package:pretium/services/transactions_service.dart';
 import 'package:pretium/features/transactions/screens/transaction_detail_page.dart';
 import 'package:pretium/features/transactions/widgets/transaction_charts.dart';
+import 'package:pretium/features/transactions/widgets/transaction_list_tile.dart';
 import 'package:pretium/app/route_names.dart';
 
 class TransactionsPage extends StatefulWidget {
@@ -22,6 +23,7 @@ class _TransactionsPageState extends State<TransactionsPage> {
   TransactionsResponse? _response;
   List<Transaction> _chartTransactions = const [];
   bool _isLoading = true;
+  bool _loadingMore = false;
   String? _error;
   String _filter = 'all'; // 'all' | 'income' | 'expenses' | 'pending'
 
@@ -29,6 +31,34 @@ class _TransactionsPageState extends State<TransactionsPage> {
   void initState() {
     super.initState();
     _loadTransactions();
+  }
+
+  Future<TransactionsResponse> _fetchFilteredTransactions({
+    int limit = 50,
+    String? startAfter,
+  }) {
+    switch (_filter) {
+      case 'income':
+        return _transactionsService.getCreditTransactions(
+          limit: limit,
+          startAfter: startAfter,
+        );
+      case 'expenses':
+        return _transactionsService.getDebitTransactions(
+          limit: limit,
+          startAfter: startAfter,
+        );
+      case 'pending':
+        return _transactionsService.getPendingTransactions(
+          limit: limit,
+          startAfter: startAfter,
+        );
+      default:
+        return _transactionsService.getTransactions(
+          limit: limit,
+          startAfter: startAfter,
+        );
+    }
   }
 
   Future<void> _loadTransactions() async {
@@ -46,20 +76,7 @@ class _TransactionsPageState extends State<TransactionsPage> {
     });
     try {
       final chartRes = await _transactionsService.getTransactions(limit: 50);
-      TransactionsResponse res;
-      switch (_filter) {
-        case 'income':
-          res = await _transactionsService.getCreditTransactions(limit: 50);
-          break;
-        case 'expenses':
-          res = await _transactionsService.getDebitTransactions(limit: 50);
-          break;
-        case 'pending':
-          res = await _transactionsService.getPendingTransactions(limit: 50);
-          break;
-        default:
-          res = await _transactionsService.getTransactions(limit: 50);
-      }
+      final res = await _fetchFilteredTransactions(limit: 50);
       if (mounted) {
         setState(() {
           _chartTransactions = chartRes.transactions;
@@ -74,6 +91,34 @@ class _TransactionsPageState extends State<TransactionsPage> {
           _isLoading = false;
         });
       }
+    }
+  }
+
+  Future<void> _loadMoreTransactions() async {
+    final current = _response;
+    if (_loadingMore || current == null || !current.hasMore) return;
+    final startAfter = current.nextPageToken;
+    if (startAfter == null || startAfter.isEmpty) return;
+
+    setState(() => _loadingMore = true);
+    try {
+      final nextPage = await _fetchFilteredTransactions(
+        limit: 50,
+        startAfter: startAfter,
+      );
+      if (!mounted) return;
+      setState(() {
+        _response = TransactionsResponse(
+          transactions: [...current.transactions, ...nextPage.transactions],
+          nextPageToken: nextPage.nextPageToken,
+          totalCount: nextPage.totalCount,
+          hasMore: nextPage.hasMore,
+          sources: nextPage.sources,
+        );
+        _loadingMore = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _loadingMore = false);
     }
   }
 
@@ -126,7 +171,7 @@ class _TransactionsPageState extends State<TransactionsPage> {
       );
       for (final t in grouped[key]!) {
         items.add(
-          _TransactionTile(
+          TransactionListTile(
             transaction: t,
             onTap: () {
               Navigator.of(context).push(
@@ -138,6 +183,23 @@ class _TransactionsPageState extends State<TransactionsPage> {
           ),
         );
       }
+    }
+    if (_response?.hasMore == true) {
+      items.add(
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+          child: OutlinedButton(
+            onPressed: _loadingMore ? null : _loadMoreTransactions,
+            child: _loadingMore
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Text('Load more'),
+          ),
+        ),
+      );
     }
     return items;
   }
@@ -417,128 +479,5 @@ class _FilterChip extends StatelessWidget {
         ),
       ),
     );
-  }
-}
-
-class _TransactionTile extends StatelessWidget {
-  final Transaction transaction;
-  final VoidCallback onTap;
-
-  const _TransactionTile({
-    required this.transaction,
-    required this.onTap,
-  });
-
-  IconData _iconFor(String? title) {
-    final t = (title ?? '').toLowerCase();
-    if (t.contains('apple')) return Icons.computer;
-    if (t.contains('salary') || t.contains('deposit')) return Icons.work;
-    if (t.contains('coffee') || t.contains('starbucks')) return Icons.coffee;
-    if (t.contains('netflix')) return Icons.play_circle_filled;
-    if (t.contains('uber') || t.contains('trip')) return Icons.directions_car;
-    if (t.contains('amazon')) return Icons.shopping_bag;
-    if (t.contains('refund')) return Icons.reply;
-    if (t.contains('electric') || t.contains('bill')) return Icons.bolt;
-    return Icons.receipt;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = AppColors.getThemeColors(context);
-    final primary = Theme.of(context).colorScheme.primary;
-    final title = transaction.title ?? (transaction.isDebit ? 'Sent' : 'Received');
-    final date = transaction.createdAt;
-    final dateStr = date != null
-        ? '${_month(date.month)} ${date.day}, ${date.year} • ${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}'
-        : '';
-    final amount = transaction.amount;
-    final currency = transaction.currency ?? 'USD';
-    final isDebit = transaction.isDebit;
-    final status = transaction.status ?? 'Completed';
-
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-          child: Row(
-            children: [
-              CircleAvatar(
-                backgroundColor: primary.withValues(alpha: 0.15),
-                child: Icon(_iconFor(title), color: primary, size: 22),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: TextStyle(
-                        color: colors.textPrimary,
-                        fontWeight: FontWeight.w500,
-                        fontSize: 15,
-                      ),
-                    ),
-                    if (dateStr.isNotEmpty)
-                      Text(
-                        dateStr,
-                        style: TextStyle(
-                          color: colors.textSecondary,
-                          fontSize: 12,
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Text(
-                    '${isDebit ? '-' : '+'}${amount.toStringAsFixed(2)} $currency',
-                    style: TextStyle(
-                      color: isDebit ? colors.error : colors.success,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 14,
-                    ),
-                  ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: status == 'Completed'
-                          ? colors.successLight
-                          : status == 'Pending'
-                              ? colors.warningLight
-                              : colors.errorLight,
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Text(
-                      status,
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: status == 'Completed'
-                            ? colors.success
-                            : status == 'Pending'
-                                ? colors.warning
-                                : colors.error,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  static String _month(int m) {
-    const months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
-    ];
-    return months[m - 1];
   }
 }

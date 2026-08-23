@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:http/http.dart' as http;
 import 'package:pretium/core/constants/cloud_functions_api_config.dart';
+import 'package:pretium/core/http/c2b_http_codec.dart';
 import 'package:pretium/features/safari_card/models/safari_card_bank.dart';
 import 'package:pretium/features/safari_card/models/safari_card_payout.dart';
 import 'package:pretium/utils/logger.dart';
@@ -40,6 +41,7 @@ final class SafariCardPayApiService {
       : _http = httpClient ?? http.Client();
 
   final http.Client _http;
+  final C2bHttpCodec _codec = C2bHttpCodec.instance;
 
   /// Fresh Firebase ID token for [Authorization: Bearer …] (never App Check / refresh token).
   Future<String> _requireIdToken({bool forceRefresh = true}) async {
@@ -61,11 +63,11 @@ final class SafariCardPayApiService {
   }
 
   Future<Map<String, String>> _headers({bool forceRefresh = true}) async {
-    return {
+    return _codec.mergeHeaders({
       'Authorization': 'Bearer ${await _requireIdToken(forceRefresh: forceRefresh)}',
       'Content-Type': 'application/json',
       'Accept': 'application/json',
-    };
+    });
   }
 
   SafariCardPayApiException _apiExceptionFromBody(
@@ -97,7 +99,8 @@ final class SafariCardPayApiService {
   }) async {
     Map<String, dynamic> body;
     try {
-      final decoded = jsonDecode(response.body);
+      final plainBody = await _codec.plainResponseBody(response);
+      final decoded = jsonDecode(plainBody);
       body = decoded is Map<String, dynamic> ? decoded : {};
     } catch (_) {
       body = {};
@@ -105,7 +108,7 @@ final class SafariCardPayApiService {
 
     if (response.statusCode == 401 && retryOn401) {
       final errorCode = body['code']?.toString();
-      Logger.error('SafariCardPayApi 401: ${response.body}');
+      Logger.error('SafariCardPayApi 401: ${response.statusCode}');
 
       // Only refresh Firebase ID token when backend rejects auth — not IntaSend/provider 401s.
       if (errorCode == 'UNAUTHORIZED' || (errorCode == null && body.isEmpty)) {
@@ -122,7 +125,7 @@ final class SafariCardPayApiService {
 
     if (response.statusCode != expectedStatus || body['success'] != true) {
       if (response.statusCode != 401) {
-        Logger.error('SafariCardPayApi ${response.statusCode}: ${response.body}');
+        Logger.error('SafariCardPayApi ${response.statusCode}');
       }
       throw _apiExceptionFromBody(response.statusCode, body, response.body);
     }
@@ -137,7 +140,7 @@ final class SafariCardPayApiService {
     Future<http.Response> send({required bool forceRefresh}) async => _http.post(
           CloudFunctionsApiConfig.safariCardValidateBeneficiaryUri(),
           headers: await _headers(forceRefresh: forceRefresh),
-          body: jsonEncode(body),
+          body: await _codec.encodeJsonBody(jsonEncode(body)),
         );
     final response = await send(forceRefresh: true);
     final parsed = await _decodeResponse(response, send: send);
@@ -151,10 +154,23 @@ final class SafariCardPayApiService {
     Future<http.Response> send({required bool forceRefresh}) async => _http.post(
           CloudFunctionsApiConfig.safariCardPayoutsUri(),
           headers: await _headers(forceRefresh: forceRefresh),
-          body: jsonEncode(body),
+          body: await _codec.encodeJsonBody(jsonEncode(body)),
         );
     final response = await send(forceRefresh: true);
     final parsed = await _decodeResponse(response, expectedStatus: 201, send: send);
+    return SafariCardPayout.fromJson(
+      Map<String, dynamic>.from(parsed['data'] as Map),
+    );
+  }
+
+  Future<SafariCardPayout> getPayoutByClientRequestId(String clientRequestId) async {
+    Logger.info('SafariCardPayApi GET by-client-request/$clientRequestId');
+    Future<http.Response> send({required bool forceRefresh}) async => _http.get(
+          CloudFunctionsApiConfig.safariCardPayoutByClientRequestUri(clientRequestId),
+          headers: await _headers(forceRefresh: forceRefresh),
+        );
+    final response = await send(forceRefresh: true);
+    final parsed = await _decodeResponse(response, send: send);
     return SafariCardPayout.fromJson(
       Map<String, dynamic>.from(parsed['data'] as Map),
     );
@@ -201,16 +217,26 @@ final class SafariCardPayApiService {
   }
 
   Future<SafariCardPayout> pollPayoutUntilTerminal(
-    String payoutId, {
+    String clientRequestId, {
     Duration interval = const Duration(seconds: 2),
     Duration timeout = const Duration(minutes: 3),
+    void Function(SafariCardPayout snapshot)? onUpdate,
   }) async {
     final deadline = DateTime.now().add(timeout);
     while (DateTime.now().isBefore(deadline)) {
-      final payout = await getPayout(payoutId);
-      if (payout.isTerminal) return payout;
+      try {
+        final payout = await getPayoutByClientRequestId(clientRequestId);
+        onUpdate?.call(payout);
+        if (payout.isTerminal) return payout;
+      } on SafariCardPayApiException catch (e) {
+        if (e.statusCode == 404) {
+          // POST may still be in flight — keep polling briefly.
+        } else {
+          rethrow;
+        }
+      }
       await Future<void>.delayed(interval);
     }
-    throw TimeoutException('Payment is still processing');
+    throw TimeoutException('Payout still processing');
   }
 }

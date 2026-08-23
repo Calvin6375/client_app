@@ -189,6 +189,7 @@ class _SendMoneyPageState extends State<SendMoneyPage> {
           final ok = await runSafariCardPayoutFlow(
             context: context,
             payoutBody: _buildPayoutBody(clientRequestId),
+            flowLabel: 'Send money',
             clientRequestId: clientRequestId,
             api: _payApi,
           );

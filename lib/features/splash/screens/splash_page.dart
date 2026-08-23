@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
 import 'package:pretium/core/constants/app_colors.dart';
+import 'package:pretium/features/auth/utils/app_startup_router.dart';
 
 class SplashPage extends StatefulWidget {
   const SplashPage({super.key});
@@ -64,12 +65,14 @@ class _SplashPageState extends State<SplashPage>
       }
     });
 
-    // Navigate after 3 seconds (reduced from 5)
-    Timer(const Duration(seconds: 3), () {
-      if (mounted) {
-        Navigator.of(context).pushReplacementNamed('/splash_page_1');
-      }
-    });
+    unawaited(_routeAfterSplash());
+  }
+
+  Future<void> _routeAfterSplash() async {
+    // Brief branding moment, then route by session (login vs home).
+    await Future<void>.delayed(const Duration(milliseconds: 1200));
+    if (!mounted) return;
+    await AppStartupRouter.navigateFromSplash(context);
   }
 
   @override

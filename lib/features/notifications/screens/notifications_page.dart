@@ -7,6 +7,7 @@ import 'package:pretium/core/constants/app_colors.dart';
 import 'package:pretium/models/notification_model.dart';
 import 'package:pretium/services/notification_service.dart';
 import 'package:pretium/utils/async_action_guard.dart';
+import 'package:pretium/utils/provider_display_sanitizer.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 final _markAllAsReadGuard = AsyncActionGuard();
@@ -402,7 +403,7 @@ class _NotificationDetailSheet extends StatelessWidget {
                       const SizedBox(width: 12),
                       Expanded(
                         child: Text(
-                          notification.title,
+                          notification.displayTitle,
                           style: TextStyle(
                             color: colors.textPrimary,
                             fontSize: 18,
@@ -425,7 +426,7 @@ class _NotificationDetailSheet extends StatelessWidget {
                   ),
                   const SizedBox(height: 6),
                   SelectableText(
-                    notification.message,
+                    notification.displayMessage,
                     style: TextStyle(
                       color: colors.textPrimary,
                       fontSize: 15,
@@ -732,6 +733,7 @@ class _NotificationDetailSheet extends StatelessWidget {
     final remaining = flat.keys.where((k) => !consumed.contains(k)).toList()..sort();
     for (final k in remaining) {
       if (k == 'review') continue;
+      if (ProviderDisplaySanitizer.isHiddenMetadataKey(k)) continue;
       final label = _humanizeKey(k.replaceFirst(RegExp(r'^review\.'), ''));
       out.add((
         label: label,
@@ -746,7 +748,7 @@ class _NotificationDetailSheet extends StatelessWidget {
   static String _stringifyFlatValue(dynamic v) {
     if (v == null) return '';
     if (v is Map || v is List) return v.toString();
-    return v.toString();
+    return ProviderDisplaySanitizer.sanitize(v.toString());
   }
 
   static String _formatNumberish(dynamic v) {
@@ -1030,7 +1032,7 @@ class _NotificationTile extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      notification.title,
+                      notification.displayTitle,
                       style: TextStyle(
                         color: colors.textPrimary,
                         fontSize: 15,
@@ -1039,7 +1041,7 @@ class _NotificationTile extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      notification.message,
+                      notification.displayMessage,
                       style: TextStyle(
                         color: colors.textSecondary,
                         fontSize: 13,

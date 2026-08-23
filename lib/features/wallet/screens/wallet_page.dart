@@ -7,6 +7,7 @@ import 'package:pretium/app/route_names.dart';
 import 'package:pretium/models/transaction_model.dart';
 import 'package:pretium/services/transactions_service.dart';
 import 'package:pretium/features/transactions/screens/transaction_detail_page.dart';
+import 'package:pretium/features/transactions/widgets/transaction_list_tile.dart';
 import 'package:pretium/features/send_money/screens/send_money_page.dart';
 import '/widgets/wallet_card.dart';
 
@@ -403,27 +404,6 @@ class _RecentTransactionsList extends StatelessWidget {
     required this.onTapTransaction,
   });
 
-  static IconData _iconFor(String? title) {
-    final t = (title ?? '').toLowerCase();
-    if (t.contains('apple')) return Icons.shopping_bag;
-    if (t.contains('salary') || t.contains('deposit')) return Icons.account_balance_wallet;
-    if (t.contains('coffee') || t.contains('starbucks')) return Icons.restaurant;
-    if (t.contains('netflix')) return Icons.play_circle_filled;
-    if (t.contains('uber') || t.contains('trip')) return Icons.directions_car;
-    if (t.contains('amazon')) return Icons.shopping_cart;
-    if (t.contains('refund')) return Icons.reply;
-    if (t.contains('electric') || t.contains('bill') || t.contains('utility')) return Icons.bolt;
-    return Icons.receipt;
-  }
-
-  static String _formatDate(DateTime? d) {
-    if (d == null) return '';
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    final h = d.hour == 0 ? 12 : (d.hour > 12 ? d.hour - 12 : d.hour);
-    final amPm = d.hour >= 12 ? 'PM' : 'AM';
-    return '${months[d.month - 1]} ${d.day}, ${d.year} • $h:${d.minute.toString().padLeft(2, '0')} $amPm';
-  }
-
   @override
   Widget build(BuildContext context) {
     final colors = AppColors.getThemeColors(context);
@@ -461,90 +441,15 @@ class _RecentTransactionsList extends StatelessWidget {
     }
 
     return Column(
-      children: list.map((t) {
-        final title = t.title ?? (t.isDebit ? 'Sent' : 'Received');
-        final dateStr = _formatDate(t.createdAt);
-        final amount = t.amount;
-        final isDebit = t.isDebit;
-        final status = t.status ?? 'Completed';
-
-        return Container(
-          margin: const EdgeInsets.only(bottom: 12),
-          decoration: BoxDecoration(
-            color: colors.surface,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: colors.border.withValues(alpha: 0.5)),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.04),
-                blurRadius: 8,
-                offset: const Offset(0, 2),
-              ),
-            ],
-          ),
-          child: Material(
-            color: Colors.transparent,
-            child: InkWell(
-              onTap: () => onTapTransaction(t),
-              borderRadius: BorderRadius.circular(12),
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Row(
-                  children: [
-                    CircleAvatar(
-                      backgroundColor: primary.withValues(alpha: 0.12),
-                      radius: 24,
-                      child: Icon(_iconFor(title), color: primary, size: 24),
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            title,
-                            style: TextStyle(
-                              color: colors.textPrimary,
-                              fontWeight: FontWeight.w600,
-                              fontSize: 15,
-                            ),
-                          ),
-                          if (dateStr.isNotEmpty) ...[
-                            const SizedBox(height: 4),
-                            Text(
-                              dateStr,
-                              style: TextStyle(
-                                color: colors.textSecondary,
-                                fontSize: 12,
-                              ),
-                            ),
-                          ],
-                          const SizedBox(height: 4),
-                          Text(
-                            status,
-                            style: TextStyle(
-                              color: colors.textTertiary,
-                              fontSize: 12,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    Text(
-                      '${isDebit ? '-' : '+'}\$${amount.toStringAsFixed(2)}',
-                      style: TextStyle(
-                        color: isDebit ? colors.error : colors.success,
-                        fontWeight: FontWeight.w600,
-                        fontSize: 15,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+      children: list
+          .map(
+            (transaction) => TransactionListTile(
+              transaction: transaction,
+              style: TransactionListTileStyle.card,
+              onTap: () => onTapTransaction(transaction),
             ),
-          ),
-        );
-      }).toList(),
+          )
+          .toList(),
     );
   }
 }

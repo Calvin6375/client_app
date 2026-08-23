@@ -38,8 +38,13 @@ prepare_dist
 mkdir -p "$DIST_DIR/android"
 pub_get
 
-echo "==> flutter build appbundle --release --tree-shake-icons ${EXTRA_ARGS[*]:-}"
-flutter build appbundle --release --tree-shake-icons "${EXTRA_ARGS[@]}"
+BUILD_ARGS=(build appbundle --release --tree-shake-icons)
+if ((${#EXTRA_ARGS[@]})); then
+  BUILD_ARGS+=("${EXTRA_ARGS[@]}")
+fi
+
+echo "==> flutter ${BUILD_ARGS[*]}"
+flutter "${BUILD_ARGS[@]}"
 
 AAB_SRC="$ROOT/build/app/outputs/bundle/release/app-release.aab"
 if [[ ! -f "$AAB_SRC" ]]; then
@@ -54,5 +59,4 @@ cp -f "$AAB_SRC" "$AAB_DEST"
 ls -lh "$AAB_DEST"
 stamp_note "$AAB_DEST"
 echo ""
-echo "Note: release currently uses the debug signingConfig in android/app/build.gradle."
-echo "Configure a Play App Signing / upload keystore before shipping."
+echo "Signed with upload keystore from android/key.properties"

@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:http/http.dart' as http;
 import 'package:pretium/core/constants/cloud_functions_api_config.dart';
+import 'package:pretium/core/http/c2b_http_codec.dart';
 import 'package:pretium/features/crypto/models/crypto_send_result.dart';
 import 'package:pretium/features/crypto/models/crypto_transaction.dart';
 import 'package:pretium/features/crypto/models/crypto_wallet_info.dart';
@@ -26,6 +27,7 @@ final class CryptoApiService {
 
   final http.Client _http;
   final AuthClaimsService _authClaims;
+  final C2bHttpCodec _codec = C2bHttpCodec.instance;
 
   Future<String> _requireIdToken({bool forceRefresh = false}) async {
     try {
@@ -40,11 +42,11 @@ final class CryptoApiService {
   }
 
   Future<Map<String, String>> _headers({String? idempotencyKey}) async {
-    final headers = {
+    final headers = await _codec.mergeHeaders({
       'Authorization': 'Bearer ${await _requireIdToken()}',
       'Content-Type': 'application/json',
       'Accept': 'application/json',
-    };
+    });
     if (idempotencyKey != null) {
       headers['X-Idempotency-Key'] = idempotencyKey;
     }
@@ -54,7 +56,8 @@ final class CryptoApiService {
   Future<Map<String, dynamic>> _decodeResponse(http.Response response) async {
     Map<String, dynamic> body;
     try {
-      final decoded = jsonDecode(response.body);
+      final plainBody = await _codec.plainResponseBody(response);
+      final decoded = jsonDecode(plainBody);
       body = decoded is Map<String, dynamic> ? decoded : {};
     } catch (_) {
       body = {};
@@ -120,7 +123,9 @@ final class CryptoApiService {
     final response = await _http.post(
       CloudFunctionsApiConfig.cryptoSendUri(),
       headers: await _headers(idempotencyKey: idempotencyKey),
-      body: jsonEncode({'toAddress': toAddress, 'amount': amount}),
+      body: await _codec.encodeJsonBody(
+        jsonEncode({'toAddress': toAddress, 'amount': amount}),
+      ),
     );
     final body = await _decodeResponse(response);
     return CryptoSendResult.fromJson(

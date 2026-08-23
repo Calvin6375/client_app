@@ -19,6 +19,17 @@ final class CloudFunctionsApiConfig {
   /// Path must match the deployed HTTP handler; adjust if the backend uses a different route.
   static Uri registerUri() => Uri.parse('$baseApiUrl/register');
 
+  /// Transactions feed HTTP API (`transactionsApi` Cloud Function).
+  static String get baseTransactionsApiUrl {
+    final projectId = DefaultFirebaseOptions.currentPlatform.projectId;
+    return 'https://$functionsRegion-$projectId.cloudfunctions.net/transactionsApi';
+  }
+
+  static Uri transactionsUri() => Uri.parse('$baseTransactionsApiUrl/transactions');
+
+  static Uri transactionUri(String transactionId) =>
+      Uri.parse('$baseTransactionsApiUrl/transactions/$transactionId');
+
   /// Circle USDC wallet HTTP API (`cryptoApi` Cloud Function).
   static String get baseCryptoApiUrl {
     final projectId = DefaultFirebaseOptions.currentPlatform.projectId;
@@ -51,6 +62,9 @@ final class CloudFunctionsApiConfig {
 
   static Uri safariCardPayoutUri(String payoutId) =>
       Uri.parse('$baseSafariCardApiUrl/safari-card/payouts/$payoutId');
+
+  static Uri safariCardPayoutByClientRequestUri(String clientRequestId) =>
+      Uri.parse('$baseSafariCardApiUrl/safari-card/payouts/by-client-request/$clientRequestId');
 
   static Uri safariCardBanksUri() =>
       Uri.parse('$baseSafariCardApiUrl/safari-card/banks');
