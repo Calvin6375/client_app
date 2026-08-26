@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build all SafariCard release targets that are available on this machine.
+# Build all SafariTap release targets that are available on this machine.
 #
 # Usage:
 #   ./scripts/build_all.sh

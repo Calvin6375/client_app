@@ -5,7 +5,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>SafariCard</string>
+	<string>SafariTap</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -67,7 +67,7 @@
 				<string>truepay</string>
 			</array>
 			<key>CFBundleURLName</key>
-			<string>com.truepay.safaricard.payment</string>
+			<string>com.truepay.safaritap.payment</string>
 		</dict>
 	</array>
 </dict>

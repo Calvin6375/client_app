@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build the SafariCard Flutter Web Progressive Web App (PWA).
+# Build the SafariTap Flutter Web Progressive Web App (PWA).
 #
 # Usage:
 #   ./scripts/build_web.sh

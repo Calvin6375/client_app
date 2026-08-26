@@ -1,6 +1,6 @@
-import 'package:pretium/features/safari_card/services/safari_card_pay_api_service.dart';
+import 'package:pretium/features/safari_tap/services/safari_tap_pay_api_service.dart';
 
-String safariCardPayoutErrorMessage(SafariCardPayApiException error) {
+String safariTapPayoutErrorMessage(SafariTapPayApiException error) {
   final code = error.code ?? '';
   final raw = error.message?.trim();
   final hint = error.hint?.trim();
@@ -25,7 +25,7 @@ String safariCardPayoutErrorMessage(SafariCardPayApiException error) {
   };
 }
 
-String _providerErrorMessage(String? raw, SafariCardPayApiException error) {
+String _providerErrorMessage(String? raw, SafariTapPayApiException error) {
   if (raw != null &&
       raw.toLowerCase().contains('intasend') &&
       raw.toLowerCase().contains('authenticating')) {

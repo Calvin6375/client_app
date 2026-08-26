@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build a release Android APK for SafariCard.
+# Build a release Android APK for SafariTap.
 #
 # Usage:
 #   ./scripts/build_android_apk.sh
@@ -69,7 +69,7 @@ COPIED=()
 shopt -s nullglob
 for apk in "$APK_DIR"/*.apk; do
   base="$(basename "$apk")"
-  dest="$DIST_DIR/android/SafariCard_${VERSION}_${base}"
+  dest="$DIST_DIR/android/SafariTap_${VERSION}_${base}"
   cp -f "$apk" "$dest"
   COPIED+=("$dest")
 done

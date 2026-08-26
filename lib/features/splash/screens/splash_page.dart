@@ -147,7 +147,7 @@ class _SplashPageState extends State<SplashPage>
                 FadeTransition(
                   opacity: _fadeAnimation,
                   child: Text(
-                    'SafariCard',
+                    'SafariTap',
                     style: TextStyle(
                       fontSize: 36,
                       fontWeight: FontWeight.bold,

@@ -3,12 +3,12 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:pretium/core/constants/app_colors.dart';
-import 'package:pretium/features/safari_card/models/safari_card_payout.dart';
-import 'package:pretium/features/safari_card/services/safari_card_pay_api_service.dart';
-import 'package:pretium/features/safari_card/utils/payout_error_messages.dart';
+import 'package:pretium/features/safari_tap/models/safari_tap_payout.dart';
+import 'package:pretium/features/safari_tap/services/safari_tap_pay_api_service.dart';
+import 'package:pretium/features/safari_tap/utils/payout_error_messages.dart';
 
-class SafariCardPayoutSummary {
-  const SafariCardPayoutSummary({
+class SafariTapPayoutSummary {
+  const SafariTapPayoutSummary({
     required this.flowLabel,
     required this.amount,
     required this.currency,
@@ -24,7 +24,7 @@ class SafariCardPayoutSummary {
   final String? accountLabel;
   final String? accountValue;
 
-  static SafariCardPayoutSummary fromPayoutBody(
+  static SafariTapPayoutSummary fromPayoutBody(
     Map<String, dynamic> body, {
     required String flowLabel,
   }) {
@@ -48,7 +48,7 @@ class SafariCardPayoutSummary {
       accountValue = r['accountNumber']?.toString();
     }
 
-    return SafariCardPayoutSummary(
+    return SafariTapPayoutSummary(
       flowLabel: flowLabel,
       amount: (body['amount'] as num?)?.toDouble() ?? 0,
       currency: body['currency']?.toString() ?? 'KES',
@@ -61,8 +61,8 @@ class SafariCardPayoutSummary {
   }
 }
 
-class SafariCardPayoutProcessingPage extends StatefulWidget {
-  const SafariCardPayoutProcessingPage({
+class SafariTapPayoutProcessingPage extends StatefulWidget {
+  const SafariTapPayoutProcessingPage({
     super.key,
     required this.clientRequestId,
     required this.summary,
@@ -71,16 +71,16 @@ class SafariCardPayoutProcessingPage extends StatefulWidget {
   });
 
   final String clientRequestId;
-  final SafariCardPayoutSummary summary;
-  final SafariCardPayout initialPayout;
-  final SafariCardPayApiService? api;
+  final SafariTapPayoutSummary summary;
+  final SafariTapPayout initialPayout;
+  final SafariTapPayApiService? api;
 
   @override
-  State<SafariCardPayoutProcessingPage> createState() =>
-      _SafariCardPayoutProcessingPageState();
+  State<SafariTapPayoutProcessingPage> createState() =>
+      _SafariTapPayoutProcessingPageState();
 }
 
-class _SafariCardPayoutProcessingPageState extends State<SafariCardPayoutProcessingPage> {
+class _SafariTapPayoutProcessingPageState extends State<SafariTapPayoutProcessingPage> {
   static const _pollIntervals = <Duration>[
     Duration(seconds: 5),
     Duration(seconds: 10),
@@ -88,15 +88,15 @@ class _SafariCardPayoutProcessingPageState extends State<SafariCardPayoutProcess
     Duration(seconds: 30),
   ];
 
-  late SafariCardPayApiService _api;
-  SafariCardPayout? _payout;
+  late SafariTapPayApiService _api;
+  SafariTapPayout? _payout;
   String? _fetchError;
   bool _refreshing = false;
   Timer? _pollTimer;
   int _pollStep = 0;
   bool _autoPollFinished = false;
 
-  SafariCardPayout get _current => _payout ?? widget.initialPayout;
+  SafariTapPayout get _current => _payout ?? widget.initialPayout;
 
   bool get _isTerminal => _current.isTerminal;
 
@@ -124,7 +124,7 @@ class _SafariCardPayoutProcessingPageState extends State<SafariCardPayoutProcess
   @override
   void initState() {
     super.initState();
-    _api = widget.api ?? SafariCardPayApiService();
+    _api = widget.api ?? SafariTapPayApiService();
     _payout = widget.initialPayout.isTerminal ? widget.initialPayout : null;
     if (!_isTerminal) {
       _startAutoPoll();
@@ -180,7 +180,7 @@ class _SafariCardPayoutProcessingPageState extends State<SafariCardPayoutProcess
         _refreshing = false;
       });
       if (payout.isTerminal) _stopAutoPoll();
-    } on SafariCardPayApiException catch (e) {
+    } on SafariTapPayApiException catch (e) {
       if (!mounted) return;
       if (e.statusCode == 404) {
         setState(() {
@@ -190,7 +190,7 @@ class _SafariCardPayoutProcessingPageState extends State<SafariCardPayoutProcess
         return;
       }
       setState(() {
-        _fetchError = safariCardPayoutErrorMessage(e);
+        _fetchError = safariTapPayoutErrorMessage(e);
         _refreshing = false;
       });
     } catch (e) {

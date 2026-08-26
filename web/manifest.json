@@ -1,8 +1,8 @@
 {
   "id": "/",
-  "name": "SafariCard",
-  "short_name": "SafariCard",
-  "description": "SafariCard digital wallet — send money, swap currencies, top up with Paystack or Transak, and manage USDC with Circle.",
+  "name": "SafariTap",
+  "short_name": "SafariTap",
+  "description": "SafariTap digital wallet — send money, swap currencies, top up with Paystack or Transak, and manage USDC with Circle.",
   "lang": "en",
   "dir": "ltr",
   "start_url": "/",

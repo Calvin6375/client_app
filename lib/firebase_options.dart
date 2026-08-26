@@ -57,7 +57,7 @@ class DefaultFirebaseOptions {
 
   static const FirebaseOptions android = FirebaseOptions(
     apiKey: 'AIzaSyAbkhQZp_sbiGsaWYsqUqdJErvFVnI-KBI',
-    appId: '1:241917597382:android:a5e45a6f0e6c57804969c7',
+    appId: '1:241917597382:android:558c80785347f67c4969c7',
     messagingSenderId: '241917597382',
     projectId: 'truepay-72060',
     databaseURL: 'https://truepay-72060-default-rtdb.firebaseio.com',
@@ -66,22 +66,22 @@ class DefaultFirebaseOptions {
 
   static const FirebaseOptions ios = FirebaseOptions(
     apiKey: 'AIzaSyDGgjQjuHGrj7vJi3cfunpDm7fxN9OEiJg',
-    appId: '1:241917597382:ios:11a8be0e251524834969c7',
+    appId: '1:241917597382:ios:4edf578d7eca45e54969c7',
     messagingSenderId: '241917597382',
     projectId: 'truepay-72060',
     databaseURL: 'https://truepay-72060-default-rtdb.firebaseio.com',
     storageBucket: 'truepay-72060.firebasestorage.app',
-    iosBundleId: 'com.truepay.safaricard',
+    iosBundleId: 'com.truepay.safaritap',
   );
 
   static const FirebaseOptions macos = FirebaseOptions(
     apiKey: 'AIzaSyDGgjQjuHGrj7vJi3cfunpDm7fxN9OEiJg',
-    appId: '1:241917597382:ios:11a8be0e251524834969c7',
+    appId: '1:241917597382:ios:4edf578d7eca45e54969c7',
     messagingSenderId: '241917597382',
     projectId: 'truepay-72060',
     databaseURL: 'https://truepay-72060-default-rtdb.firebaseio.com',
     storageBucket: 'truepay-72060.firebasestorage.app',
-    iosBundleId: 'com.truepay.safaricard',
+    iosBundleId: 'com.truepay.safaritap',
   );
 }
 

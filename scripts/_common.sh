@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Shared helpers for SafariCard / pretium release build scripts.
+# Shared helpers for SafariTap / pretium release build scripts.
 # shellcheck shell=bash
 
 set -euo pipefail
@@ -46,7 +46,7 @@ stamp_note() {
   version="$(app_version)"
   echo ""
   echo "========================================"
-  echo "  SafariCard build complete"
+  echo "  SafariTap build complete"
   echo "  version : $version"
   echo "  output  : $target"
   echo "  time    : $(date '+%Y-%m-%d %H:%M:%S')"

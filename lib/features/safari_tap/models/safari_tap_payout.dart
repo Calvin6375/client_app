@@ -1,5 +1,5 @@
-class SafariCardPayout {
-  const SafariCardPayout({
+class SafariTapPayout {
+  const SafariTapPayout({
     this.payoutId = '',
     this.clientRequestId,
     required this.status,
@@ -46,8 +46,8 @@ class SafariCardPayout {
 
   double get displayDebit => totalDebit > 0 ? totalDebit : amount;
 
-  factory SafariCardPayout.fromJson(Map<String, dynamic> json) {
-    return SafariCardPayout(
+  factory SafariTapPayout.fromJson(Map<String, dynamic> json) {
+    return SafariTapPayout(
       payoutId: json['payoutId']?.toString() ?? '',
       clientRequestId: json['clientRequestId']?.toString(),
       status: json['status']?.toString() ?? 'UNKNOWN',

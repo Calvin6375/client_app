@@ -31,7 +31,7 @@ if (keystorePropertiesFile.exists()) {
 }
 
 android {
-    namespace "com.truepay.safaricard"
+    namespace "com.truepay.safaritap"
     // Plugins (e.g. shared_preferences_android) may require current compileSdk; backward compatible.
     compileSdk 36
 
@@ -46,7 +46,7 @@ android {
     }
 
     defaultConfig {
-        applicationId "com.truepay.safaricard"
+        applicationId "com.truepay.safaritap"
         minSdkVersion flutter.minSdkVersion
         targetSdk flutter.targetSdkVersion
         multiDexEnabled true

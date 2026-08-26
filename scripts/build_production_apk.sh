@@ -63,7 +63,7 @@ COPIED=()
 shopt -s nullglob
 for apk in "$APK_DIR"/*.apk; do
   base="$(basename "$apk")"
-  dest="$DIST_DIR/android/SafariCard_${VERSION}_prod_${base}"
+  dest="$DIST_DIR/android/SafariTap_${VERSION}_prod_${base}"
   cp -f "$apk" "$dest"
   COPIED+=("$dest")
 done

@@ -1,19 +1,19 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:pretium/core/constants/app_colors.dart';
-import 'package:pretium/features/safari_card/services/safari_card_pay_api_service.dart';
-import 'package:pretium/features/safari_card/services/safari_card_pay_flow.dart';
-import 'package:pretium/features/safari_card/utils/payout_error_messages.dart';
-import 'package:pretium/features/safari_card/utils/safari_card_phone.dart';
-import 'package:pretium/features/safari_card/widgets/merchant_validation_panel.dart';
+import 'package:pretium/features/safari_tap/services/safari_tap_pay_api_service.dart';
+import 'package:pretium/features/safari_tap/services/safari_tap_pay_flow.dart';
+import 'package:pretium/features/safari_tap/utils/payout_error_messages.dart';
+import 'package:pretium/features/safari_tap/utils/safari_tap_phone.dart';
+import 'package:pretium/features/safari_tap/widgets/merchant_validation_panel.dart';
 import 'package:pretium/utils/async_action_guard.dart';
 import 'package:pretium/widgets/currency_logo.dart';
 import 'package:uuid/uuid.dart';
 
-const String kSafariCardPayCurrency = 'KES';
+const String kSafariTapPayCurrency = 'KES';
 
-class SafariCardKesBalanceRow extends StatelessWidget {
-  const SafariCardKesBalanceRow({
+class SafariTapKesBalanceRow extends StatelessWidget {
+  const SafariTapKesBalanceRow({
     super.key,
     required this.balance,
     required this.loading,
@@ -36,7 +36,7 @@ class SafariCardKesBalanceRow extends StatelessWidget {
       ),
       child: Row(
         children: [
-          const CurrencyLogo(code: kSafariCardPayCurrency, size: 22),
+          const CurrencyLogo(code: kSafariTapPayCurrency, size: 22),
           const SizedBox(width: 10),
           Expanded(
             child: Column(
@@ -60,12 +60,12 @@ class SafariCardKesBalanceRow extends StatelessWidget {
   }
 }
 
-mixin SafariCardPayValidationMixin<T extends StatefulWidget> on State<T> {
+mixin SafariTapPayValidationMixin<T extends StatefulWidget> on State<T> {
   String? beneficiaryName;
   bool validationLoading = false;
   String? validationError;
 
-  SafariCardPayApiService get payApi;
+  SafariTapPayApiService get payApi;
 
   Future<bool> validateBeneficiary(Map<String, dynamic> body) async {
     setState(() {
@@ -87,10 +87,10 @@ mixin SafariCardPayValidationMixin<T extends StatefulWidget> on State<T> {
         beneficiaryName = result.beneficiaryName;
       });
       return true;
-    } on SafariCardPayApiException catch (e) {
+    } on SafariTapPayApiException catch (e) {
       setState(() {
         validationLoading = false;
-        validationError = safariCardPayoutErrorMessage(e);
+        validationError = safariTapPayoutErrorMessage(e);
       });
       return false;
     }
@@ -110,7 +110,7 @@ mixin SafariCardPayValidationMixin<T extends StatefulWidget> on State<T> {
       return false;
     }
 
-    final ok = await runSafariCardPayoutFlow(
+    final ok = await runSafariTapPayoutFlow(
       context: context,
       payoutBody: payoutBody,
       flowLabel: flowLabel,
@@ -122,8 +122,8 @@ mixin SafariCardPayValidationMixin<T extends StatefulWidget> on State<T> {
   }
 }
 
-class SafariCardPayBillView extends StatefulWidget {
-  const SafariCardPayBillView({
+class SafariTapPayBillView extends StatefulWidget {
+  const SafariTapPayBillView({
     super.key,
     required this.kesBalance,
     required this.loadingBalance,
@@ -133,22 +133,22 @@ class SafariCardPayBillView extends StatefulWidget {
 
   final double kesBalance;
   final bool loadingBalance;
-  final SafariCardPayApiService payApi;
+  final SafariTapPayApiService payApi;
   final VoidCallback onPaid;
 
   @override
-  State<SafariCardPayBillView> createState() => SafariCardPayBillViewState();
+  State<SafariTapPayBillView> createState() => SafariTapPayBillViewState();
 }
 
-class SafariCardPayBillViewState extends State<SafariCardPayBillView>
-    with SafariCardPayValidationMixin {
+class SafariTapPayBillViewState extends State<SafariTapPayBillView>
+    with SafariTapPayValidationMixin {
   final _businessCtrl = TextEditingController();
   final _accountCtrl = TextEditingController();
   final _amountCtrl = TextEditingController();
   bool _submitting = false;
 
   @override
-  SafariCardPayApiService get payApi => widget.payApi;
+  SafariTapPayApiService get payApi => widget.payApi;
 
   void applyScannedCode(String code) => setState(() => _businessCtrl.text = code);
 
@@ -207,14 +207,14 @@ class SafariCardPayBillViewState extends State<SafariCardPayBillView>
             'type': 'MPESA_B2B',
             'accountType': 'PayBill',
             'amount': amount,
-            'currency': kSafariCardPayCurrency,
+            'currency': kSafariTapPayCurrency,
             'clientRequestId': clientRequestId,
             'recipient': {
               'account': business,
               'accountReference': account,
               'name': beneficiaryName ?? 'PayBill',
             },
-            'narrative': 'Safari Card payment',
+            'narrative': 'SafariTap payment',
           },
         );
       },
@@ -233,9 +233,9 @@ class SafariCardPayBillViewState extends State<SafariCardPayBillView>
           child: ListView(
             padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
             children: [
-              SafariCardKesBalanceRow(balance: widget.kesBalance, loading: widget.loadingBalance),
+              SafariTapKesBalanceRow(balance: widget.kesBalance, loading: widget.loadingBalance),
               const SizedBox(height: 20),
-              SafariCardPayField(
+              SafariTapPayField(
                 controller: _businessCtrl,
                 label: 'PayBill number',
                 hint: 'e.g. 888880',
@@ -246,7 +246,7 @@ class SafariCardPayBillViewState extends State<SafariCardPayBillView>
                 }),
               ),
               const SizedBox(height: 12),
-              SafariCardPayField(
+              SafariTapPayField(
                 controller: _accountCtrl,
                 label: 'Account reference',
                 hint: 'Invoice / account reference',
@@ -256,7 +256,7 @@ class SafariCardPayBillViewState extends State<SafariCardPayBillView>
                 }),
               ),
               const SizedBox(height: 12),
-              SafariCardPayAmountField(controller: _amountCtrl),
+              SafariTapPayAmountField(controller: _amountCtrl),
               MerchantValidationPanel(
                 beneficiaryName: beneficiaryName,
                 loading: validationLoading,
@@ -265,13 +265,13 @@ class SafariCardPayBillViewState extends State<SafariCardPayBillView>
               ),
               const SizedBox(height: 16),
               Text(
-                'Payments are sent in KES from your Safari Card wallet.',
+                'Payments are sent in KES from your SafariTap wallet.',
                 style: TextStyle(color: colors.textTertiary, fontSize: 12),
               ),
             ],
           ),
         ),
-        SafariCardPayBottomButton(
+        SafariTapPayBottomButton(
           label: 'Confirm Payment',
           loading: _submitting,
           onPressed: _pay,
@@ -281,8 +281,8 @@ class SafariCardPayBillViewState extends State<SafariCardPayBillView>
   }
 }
 
-class SafariCardBuyGoodsView extends StatefulWidget {
-  const SafariCardBuyGoodsView({
+class SafariTapBuyGoodsView extends StatefulWidget {
+  const SafariTapBuyGoodsView({
     super.key,
     required this.kesBalance,
     required this.loadingBalance,
@@ -292,21 +292,21 @@ class SafariCardBuyGoodsView extends StatefulWidget {
 
   final double kesBalance;
   final bool loadingBalance;
-  final SafariCardPayApiService payApi;
+  final SafariTapPayApiService payApi;
   final VoidCallback onPaid;
 
   @override
-  State<SafariCardBuyGoodsView> createState() => SafariCardBuyGoodsViewState();
+  State<SafariTapBuyGoodsView> createState() => SafariTapBuyGoodsViewState();
 }
 
-class SafariCardBuyGoodsViewState extends State<SafariCardBuyGoodsView>
-    with SafariCardPayValidationMixin {
+class SafariTapBuyGoodsViewState extends State<SafariTapBuyGoodsView>
+    with SafariTapPayValidationMixin {
   final _tillCtrl = TextEditingController();
   final _amountCtrl = TextEditingController();
   bool _submitting = false;
 
   @override
-  SafariCardPayApiService get payApi => widget.payApi;
+  SafariTapPayApiService get payApi => widget.payApi;
 
   void applyScannedCode(String code) => setState(() => _tillCtrl.text = code);
 
@@ -355,13 +355,13 @@ class SafariCardBuyGoodsViewState extends State<SafariCardBuyGoodsView>
             'type': 'MPESA_B2B',
             'accountType': 'TillNumber',
             'amount': amount,
-            'currency': kSafariCardPayCurrency,
+            'currency': kSafariTapPayCurrency,
             'clientRequestId': clientRequestId,
             'recipient': {
               'account': till,
               'name': beneficiaryName ?? 'Till',
             },
-            'narrative': 'Safari Card payment',
+            'narrative': 'SafariTap payment',
           },
         );
       },
@@ -380,9 +380,9 @@ class SafariCardBuyGoodsViewState extends State<SafariCardBuyGoodsView>
           child: ListView(
             padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
             children: [
-              SafariCardKesBalanceRow(balance: widget.kesBalance, loading: widget.loadingBalance),
+              SafariTapKesBalanceRow(balance: widget.kesBalance, loading: widget.loadingBalance),
               const SizedBox(height: 20),
-              SafariCardPayField(
+              SafariTapPayField(
                 controller: _tillCtrl,
                 label: 'Till number',
                 hint: 'Lipa Na M-Pesa till',
@@ -393,7 +393,7 @@ class SafariCardBuyGoodsViewState extends State<SafariCardBuyGoodsView>
                 }),
               ),
               const SizedBox(height: 12),
-              SafariCardPayAmountField(controller: _amountCtrl),
+              SafariTapPayAmountField(controller: _amountCtrl),
               MerchantValidationPanel(
                 beneficiaryName: beneficiaryName,
                 loading: validationLoading,
@@ -401,13 +401,13 @@ class SafariCardBuyGoodsViewState extends State<SafariCardBuyGoodsView>
               ),
               const SizedBox(height: 16),
               Text(
-                'Payments are sent in KES from your Safari Card wallet.',
+                'Payments are sent in KES from your SafariTap wallet.',
                 style: TextStyle(color: colors.textTertiary, fontSize: 12),
               ),
             ],
           ),
         ),
-        SafariCardPayBottomButton(
+        SafariTapPayBottomButton(
           label: 'Confirm Payment',
           loading: _submitting,
           onPressed: _pay,
@@ -417,8 +417,8 @@ class SafariCardBuyGoodsViewState extends State<SafariCardBuyGoodsView>
   }
 }
 
-class SafariCardPochiView extends StatefulWidget {
-  const SafariCardPochiView({
+class SafariTapPochiView extends StatefulWidget {
+  const SafariTapPochiView({
     super.key,
     required this.kesBalance,
     required this.loadingBalance,
@@ -428,21 +428,21 @@ class SafariCardPochiView extends StatefulWidget {
 
   final double kesBalance;
   final bool loadingBalance;
-  final SafariCardPayApiService payApi;
+  final SafariTapPayApiService payApi;
   final VoidCallback onPaid;
 
   @override
-  State<SafariCardPochiView> createState() => SafariCardPochiViewState();
+  State<SafariTapPochiView> createState() => SafariTapPochiViewState();
 }
 
-class SafariCardPochiViewState extends State<SafariCardPochiView>
-    with SafariCardPayValidationMixin {
+class SafariTapPochiViewState extends State<SafariTapPochiView>
+    with SafariTapPayValidationMixin {
   final _pochiCtrl = TextEditingController();
   final _amountCtrl = TextEditingController();
   bool _submitting = false;
 
   @override
-  SafariCardPayApiService get payApi => widget.payApi;
+  SafariTapPayApiService get payApi => widget.payApi;
 
   void applyScannedCode(String code) => setState(() => _pochiCtrl.text = code);
 
@@ -489,13 +489,13 @@ class SafariCardPochiViewState extends State<SafariCardPochiView>
           payoutBody: {
             'type': 'MPESA_B2C',
             'amount': amount,
-            'currency': kSafariCardPayCurrency,
+            'currency': kSafariTapPayCurrency,
             'clientRequestId': clientRequestId,
             'recipient': {
               'phoneNumber': pochi,
               'name': beneficiaryName ?? 'Recipient',
             },
-            'narrative': 'Safari Card payment',
+            'narrative': 'SafariTap payment',
           },
         );
       },
@@ -514,9 +514,9 @@ class SafariCardPochiViewState extends State<SafariCardPochiView>
           child: ListView(
             padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
             children: [
-              SafariCardKesBalanceRow(balance: widget.kesBalance, loading: widget.loadingBalance),
+              SafariTapKesBalanceRow(balance: widget.kesBalance, loading: widget.loadingBalance),
               const SizedBox(height: 20),
-              SafariCardPayField(
+              SafariTapPayField(
                 controller: _pochiCtrl,
                 label: 'Pochi number',
                 hint: '07XXXXXXXX or 2547XXXXXXXX',
@@ -527,7 +527,7 @@ class SafariCardPochiViewState extends State<SafariCardPochiView>
                 }),
               ),
               const SizedBox(height: 12),
-              SafariCardPayAmountField(controller: _amountCtrl),
+              SafariTapPayAmountField(controller: _amountCtrl),
               MerchantValidationPanel(
                 beneficiaryName: beneficiaryName,
                 loading: validationLoading,
@@ -535,13 +535,13 @@ class SafariCardPochiViewState extends State<SafariCardPochiView>
               ),
               const SizedBox(height: 16),
               Text(
-                'Payments are sent in KES from your Safari Card wallet.',
+                'Payments are sent in KES from your SafariTap wallet.',
                 style: TextStyle(color: colors.textTertiary, fontSize: 12),
               ),
             ],
           ),
         ),
-        SafariCardPayBottomButton(
+        SafariTapPayBottomButton(
           label: 'Confirm Payment',
           loading: _submitting,
           onPressed: _pay,
@@ -551,8 +551,8 @@ class SafariCardPochiViewState extends State<SafariCardPochiView>
   }
 }
 
-class SafariCardPayField extends StatelessWidget {
-  const SafariCardPayField({
+class SafariTapPayField extends StatelessWidget {
+  const SafariTapPayField({
     super.key,
     required this.controller,
     required this.label,
@@ -587,14 +587,14 @@ class SafariCardPayField extends StatelessWidget {
   }
 }
 
-class SafariCardPayAmountField extends StatelessWidget {
-  const SafariCardPayAmountField({super.key, required this.controller});
+class SafariTapPayAmountField extends StatelessWidget {
+  const SafariTapPayAmountField({super.key, required this.controller});
 
   final TextEditingController controller;
 
   @override
   Widget build(BuildContext context) {
-    return SafariCardPayField(
+    return SafariTapPayField(
       controller: controller,
       label: 'Amount (KES)',
       hint: '0.00',
@@ -603,8 +603,8 @@ class SafariCardPayAmountField extends StatelessWidget {
   }
 }
 
-class SafariCardPayBottomButton extends StatelessWidget {
-  const SafariCardPayBottomButton({
+class SafariTapPayBottomButton extends StatelessWidget {
+  const SafariTapPayBottomButton({
     super.key,
     required this.label,
     required this.loading,

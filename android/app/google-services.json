@@ -8,9 +8,9 @@
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:241917597382:android:a5e45a6f0e6c57804969c7",
+        "mobilesdk_app_id": "1:241917597382:android:558c80785347f67c4969c7",
         "android_client_info": {
-          "package_name": "com.truepay.safaricard"
+          "package_name": "com.truepay.safaritap"
         }
       },
       "oauth_client": [
@@ -32,10 +32,10 @@
               "client_type": 3
             },
             {
-              "client_id": "241917597382-kr36h75uncq574ts6nigamr22noisqvi.apps.googleusercontent.com",
+              "client_id": "241917597382-63hvh77ulod78kltofp6soug9baheek6.apps.googleusercontent.com",
               "client_type": 2,
               "ios_info": {
-                "bundle_id": "com.truepay.safaricard"
+                "bundle_id": "com.truepay.safaritap"
               }
             }
           ]

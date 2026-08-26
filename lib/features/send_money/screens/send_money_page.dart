@@ -5,10 +5,10 @@ import 'package:pretium/features/send_money/screens/review_details_screen.dart';
 import 'package:pretium/features/send_money/screens/recipient_details_screen.dart';
 import 'package:pretium/models/transaction_details_model.dart';
 import 'package:pretium/core/constants/app_colors.dart';
-import 'package:pretium/features/safari_card/services/safari_card_pay_api_service.dart';
-import 'package:pretium/features/safari_card/services/safari_card_pay_flow.dart';
-import 'package:pretium/features/safari_card/utils/payout_error_messages.dart';
-import 'package:pretium/features/safari_card/utils/safari_card_phone.dart';
+import 'package:pretium/features/safari_tap/services/safari_tap_pay_api_service.dart';
+import 'package:pretium/features/safari_tap/services/safari_tap_pay_flow.dart';
+import 'package:pretium/features/safari_tap/utils/payout_error_messages.dart';
+import 'package:pretium/features/safari_tap/utils/safari_tap_phone.dart';
 import 'package:pretium/utils/async_action_guard.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:uuid/uuid.dart';
@@ -28,7 +28,7 @@ class _SendMoneyPageState extends State<SendMoneyPage> {
   SendMoneyStep _step = SendMoneyStep.amount;
   late final TransactionDetails _transactionDetails;
   bool _isSubmittingSendMoney = false;
-  final SafariCardPayApiService _payApi = SafariCardPayApiService();
+  final SafariTapPayApiService _payApi = SafariTapPayApiService();
 
   @override
   void initState() {
@@ -105,7 +105,7 @@ class _SendMoneyPageState extends State<SendMoneyPage> {
             'phoneNumber': normalizeKenyaPhone(_transactionDetails.recipientPhoneNumber),
             'name': displayName,
           },
-          'narrative': 'Safari Card transfer',
+          'narrative': 'SafariTap transfer',
         };
       case PaymentMethod.bank:
         return {
@@ -118,7 +118,7 @@ class _SendMoneyPageState extends State<SendMoneyPage> {
             'accountNumber': _transactionDetails.recipientAccountNumber?.trim(),
             'accountName': displayName,
           },
-          'narrative': 'Safari Card bank transfer',
+          'narrative': 'SafariTap bank transfer',
         };
       case PaymentMethod.truePay:
         throw StateError('SafariTap-to-SafariTap is not supported for Kenya payouts');
@@ -142,11 +142,11 @@ class _SendMoneyPageState extends State<SendMoneyPage> {
         }
       });
       return true;
-    } on SafariCardPayApiException catch (e) {
+    } on SafariTapPayApiException catch (e) {
       if (!mounted) return false;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(safariCardPayoutErrorMessage(e)),
+          content: Text(safariTapPayoutErrorMessage(e)),
           backgroundColor: Colors.red.shade700,
         ),
       );
@@ -186,7 +186,7 @@ class _SendMoneyPageState extends State<SendMoneyPage> {
           }
 
           final clientRequestId = const Uuid().v4();
-          final ok = await runSafariCardPayoutFlow(
+          final ok = await runSafariTapPayoutFlow(
             context: context,
             payoutBody: _buildPayoutBody(clientRequestId),
             flowLabel: 'Send money',

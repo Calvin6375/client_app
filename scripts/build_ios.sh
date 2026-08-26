@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build a release iOS app / IPA for SafariCard.
+# Build a release iOS app / IPA for SafariTap.
 #
 # Usage:
 #   ./scripts/build_ios.sh                 # flutter build ipa (requires signing)
@@ -89,7 +89,7 @@ if [[ "$MODE" == "ipa" ]]; then
 
   VERSION="$(app_version | tr '+' '_')"
   for ipa in "${IPAS[@]}"; do
-    dest="$DIST_DIR/ios/SafariCard_${VERSION}_$(basename "$ipa")"
+    dest="$DIST_DIR/ios/SafariTap_${VERSION}_$(basename "$ipa")"
     cp -f "$ipa" "$dest"
     ls -lh "$dest"
   done

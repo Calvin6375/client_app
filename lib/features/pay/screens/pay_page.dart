@@ -2,8 +2,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:pretium/core/constants/app_colors.dart';
 import 'package:pretium/features/pay/screens/qr_scan_page.dart';
-import 'package:pretium/features/pay/screens/safari_card_pay_views.dart';
-import 'package:pretium/features/safari_card/services/safari_card_pay_api_service.dart';
+import 'package:pretium/features/pay/screens/safari_tap_pay_views.dart';
+import 'package:pretium/features/safari_tap/services/safari_tap_pay_api_service.dart';
 import 'package:pretium/models/wallet_model.dart';
 import 'package:pretium/repositories/wallet_repository.dart';
 import 'package:pretium/services/dashboard_session_cache.dart';
@@ -25,15 +25,15 @@ class PayPage extends StatefulWidget {
 
 class _PayPageState extends State<PayPage> {
   _PayOption? _selected;
-  final _payBillKey = GlobalKey<SafariCardPayBillViewState>();
-  final _buyGoodsKey = GlobalKey<SafariCardBuyGoodsViewState>();
-  final _pochiKey = GlobalKey<SafariCardPochiViewState>();
+  final _payBillKey = GlobalKey<SafariTapPayBillViewState>();
+  final _buyGoodsKey = GlobalKey<SafariTapBuyGoodsViewState>();
+  final _pochiKey = GlobalKey<SafariTapPochiViewState>();
 
   final WalletRepository _walletRepository = WalletRepository();
 
   final Map<String, double> _balances = {};
   bool _loadingWallets = true;
-  final SafariCardPayApiService _payApi = SafariCardPayApiService();
+  final SafariTapPayApiService _payApi = SafariTapPayApiService();
 
   @override
   void initState() {
@@ -162,21 +162,21 @@ class _PayPageState extends State<PayPage> {
       body: _selected == null
           ? _PayHub(onSelect: _openOption)
           : switch (_selected!) {
-              _PayOption.payBill => SafariCardPayBillView(
+              _PayOption.payBill => SafariTapPayBillView(
                   key: _payBillKey,
                   kesBalance: _kesBalance,
                   loadingBalance: _loadingWallets,
                   payApi: _payApi,
                   onPaid: () => Navigator.of(context).pop(true),
                 ),
-              _PayOption.buyGoods => SafariCardBuyGoodsView(
+              _PayOption.buyGoods => SafariTapBuyGoodsView(
                   key: _buyGoodsKey,
                   kesBalance: _kesBalance,
                   loadingBalance: _loadingWallets,
                   payApi: _payApi,
                   onPaid: () => Navigator.of(context).pop(true),
                 ),
-              _PayOption.pochiLaBiashara => SafariCardPochiView(
+              _PayOption.pochiLaBiashara => SafariTapPochiView(
                   key: _pochiKey,
                   kesBalance: _kesBalance,
                   loadingBalance: _loadingWallets,

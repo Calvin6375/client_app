@@ -908,7 +908,7 @@ class _WalletCardWidgetState extends State<WalletCardWidget> {
                         ),
                       ),
                       const Spacer(),
-                      // Bottom row: expiry, CVC, SafariCard brand
+                      // Bottom row: expiry, CVC, SafariTap brand
                       Row(
                         crossAxisAlignment: CrossAxisAlignment.end,
                         children: [
@@ -924,7 +924,7 @@ class _WalletCardWidgetState extends State<WalletCardWidget> {
                             colors: colors,
                           ),
                           const Spacer(),
-                          const _SafariCardBrand(),
+                          const _SafariTapBrand(),
                         ],
                       ),
                     ],
@@ -1023,8 +1023,8 @@ class _CardDetailColumn extends StatelessWidget {
   }
 }
 
-class _SafariCardBrand extends StatelessWidget {
-  const _SafariCardBrand();
+class _SafariTapBrand extends StatelessWidget {
+  const _SafariTapBrand();
 
   @override
   Widget build(BuildContext context) {
@@ -1064,7 +1064,7 @@ class _SafariCardBrand extends StatelessWidget {
                     style: TextStyle(color: colors.textPrimary),
                   ),
                   TextSpan(
-                    text: 'Card',
+                    text: 'Tap',
                     style: TextStyle(color: primary),
                   ),
                 ],

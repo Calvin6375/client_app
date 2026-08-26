@@ -1,4 +1,4 @@
-# SafariCard
+# SafariTap
 
 Flutter digital wallet for fiat and crypto: balances, top-ups, transfers, swaps, and Circle USDC. Package name: `pretium`. Backend: Firebase (Auth, Realtime Database, Firestore, Cloud Functions, FCM).
 
@@ -25,7 +25,7 @@ Flutter digital wallet for fiat and crypto: balances, top-ups, transfers, swaps,
 
 ## Overview
 
-SafariCard is a dual-wallet app for African and international currencies plus stablecoins:
+SafariTap is a dual-wallet app for African and international currencies plus stablecoins:
 
 - **Fiat wallet**: USD, KES, NGN, GHS, UGX (and related deposit countries)
 - **Crypto wallet**: USDT (legacy balances) and **USDC** via Circle
@@ -338,7 +338,7 @@ Production URL: https://app.truepay.live
 
 Artifacts are copied under `dist/{android,ios,web}`.
 
-This builds a release PWA with Flutter’s offline-first service worker, branded splash (`web/index.html`), and SafariCard manifest/icons. Hosting cache headers live in `firebase.json`.
+This builds a release PWA with Flutter’s offline-first service worker, branded splash (`web/index.html`), and SafariTap manifest/icons. Hosting cache headers live in `firebase.json`.
 
 Payment provider credentials and Circle keys belong in Cloud Functions config / secrets — not in the Flutter client.
 
@@ -418,7 +418,7 @@ flutter test
 
 ## Version
 
-- **1.0.0+13** — SafariCard wallet: dual fiat/crypto, Paystack/Transak top-up, Circle USDC, send/swap, notifications, biometrics, light/dark theme
+- **1.0.0+13** — SafariTap wallet: dual fiat/crypto, Paystack/Transak top-up, Circle USDC, send/swap, notifications, biometrics, light/dark theme
 
 ---
 

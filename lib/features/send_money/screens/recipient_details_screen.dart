@@ -3,8 +3,8 @@ import 'package:pretium/features/send_money/screens/payment_method_screen.dart';
 import 'package:pretium/models/transaction_details_model.dart';
 import 'package:pretium/core/constants/app_colors.dart';
 import 'package:pretium/features/auth/widgets/phone_number_field.dart';
-import 'package:pretium/features/safari_card/models/safari_card_bank.dart';
-import 'package:pretium/features/safari_card/services/safari_card_pay_api_service.dart';
+import 'package:pretium/features/safari_tap/models/safari_tap_bank.dart';
+import 'package:pretium/features/safari_tap/services/safari_tap_pay_api_service.dart';
 
 /// Mobile network options for the recipient currency (mobile money).
 List<String> _mobileNetworksForCurrency(String currency) {
@@ -93,7 +93,7 @@ class _RecipientDetailsScreenState extends State<RecipientDetailsScreen> {
   late String _selectedCountryCode;
   String? _selectedMobileNetwork;
   String? _selectedBankCode;
-  List<SafariCardBank> _banks = const [];
+  List<SafariTapBank> _banks = const [];
   bool _loadingBanks = false;
 
   @override
@@ -130,7 +130,7 @@ class _RecipientDetailsScreenState extends State<RecipientDetailsScreen> {
   Future<void> _loadBanks() async {
     setState(() => _loadingBanks = true);
     try {
-      final banks = await SafariCardPayApiService().listBanks();
+      final banks = await SafariTapPayApiService().listBanks();
       if (!mounted) return;
       setState(() {
         _banks = banks;
@@ -145,7 +145,7 @@ class _RecipientDetailsScreenState extends State<RecipientDetailsScreen> {
     }
   }
 
-  SafariCardBank? get _selectedBank {
+  SafariTapBank? get _selectedBank {
     if (_selectedBankCode == null) return null;
     for (final bank in _banks) {
       if (bank.code == _selectedBankCode) return bank;

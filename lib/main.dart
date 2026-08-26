@@ -273,7 +273,7 @@ class _MyAppState extends State<MyApp> {
         builder: (context, themeProvider, _) {
           return MaterialApp(
             navigatorKey: _navigatorKey,
-            title: 'SafariCard',
+            title: 'SafariTap',
             debugShowCheckedModeBanner: false,
             scrollBehavior: const _AppScrollBehavior(),
             theme: _buildLightTheme(), // Light theme with glassmorphism

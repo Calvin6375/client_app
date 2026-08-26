@@ -53,7 +53,7 @@ if [[ ! -f "$AAB_SRC" ]]; then
 fi
 
 VERSION="$(app_version | tr '+' '_')"
-AAB_DEST="$DIST_DIR/android/SafariCard_${VERSION}.aab"
+AAB_DEST="$DIST_DIR/android/SafariTap_${VERSION}.aab"
 cp -f "$AAB_SRC" "$AAB_DEST"
 
 ls -lh "$AAB_DEST"
