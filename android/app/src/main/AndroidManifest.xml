@@ -4,6 +4,8 @@
     <!-- Internet permission for Firebase -->
     <uses-permission android:name="android.permission.INTERNET"/>
     <uses-permission android:name="android.permission.USE_BIOMETRIC"/>
+    <!-- Send money: pick recipient from contacts -->
+    <uses-permission android:name="android.permission.READ_CONTACTS"/>
     <!-- QR pay: live camera scan -->
     <uses-permission android:name="android.permission.CAMERA"/>
     <!-- Firebase Cloud Messaging -->

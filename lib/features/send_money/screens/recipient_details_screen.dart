@@ -5,6 +5,7 @@ import 'package:pretium/core/constants/app_colors.dart';
 import 'package:pretium/features/auth/widgets/phone_number_field.dart';
 import 'package:pretium/features/safari_tap/models/safari_tap_bank.dart';
 import 'package:pretium/features/safari_tap/services/safari_tap_pay_api_service.dart';
+import 'package:pretium/widgets/app_shimmer.dart';
 
 /// Mobile network options for the recipient currency (mobile money).
 List<String> _mobileNetworksForCurrency(String currency) {
@@ -344,8 +345,12 @@ class _RecipientDetailsScreenState extends State<RecipientDetailsScreen> {
         return null;
       },
       isExpanded: true,
-      hint: Text(_loadingBanks ? 'Loading banks…' : 'Select bank'),
-      icon: Icon(Icons.keyboard_arrow_down_rounded, color: colors.textSecondary),
+      hint: _loadingBanks
+          ? const ShimmerBusyIndicator(width: 100, height: 12)
+          : const Text('Select bank'),
+      icon: _loadingBanks
+          ? const ShimmerBusyIndicator(width: 16, height: 12)
+          : Icon(Icons.keyboard_arrow_down_rounded, color: colors.textSecondary),
       dropdownColor: isDark ? colors.surface : Colors.white,
       style: TextStyle(color: colors.textPrimary, fontSize: 16),
       decoration: InputDecoration(

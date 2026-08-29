@@ -56,7 +56,7 @@ class FinancialServices extends StatelessWidget {
             _buildServiceButton(
               context,
               FontAwesomeIcons.arrowRightArrowLeft,
-              "Swap",
+              "Exchange",
               true,
               () {
                 Navigator.of(context).push(

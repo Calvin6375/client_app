@@ -6,6 +6,7 @@ import 'package:pretium/core/constants/app_colors.dart';
 import 'package:pretium/features/crypto/models/crypto_wallet_info.dart';
 import 'package:pretium/features/crypto/screens/crypto_transactions_screen.dart';
 import 'package:pretium/features/crypto/services/crypto_api_service.dart';
+import 'package:pretium/widgets/app_shimmer.dart';
 
 class UsdcReceiveScreen extends StatefulWidget {
   const UsdcReceiveScreen({super.key});
@@ -96,11 +97,9 @@ class _UsdcReceiveScreenState extends State<UsdcReceiveScreen> {
           padding: const EdgeInsets.all(20),
           children: [
             if (_loading)
-              const Center(
-                child: Padding(
-                  padding: EdgeInsets.all(48),
-                  child: CircularProgressIndicator(),
-                ),
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 24),
+                child: CardBlockShimmer(),
               )
             else if (_error != null)
               _ErrorState(message: _error!, onRetry: _loadWallet)

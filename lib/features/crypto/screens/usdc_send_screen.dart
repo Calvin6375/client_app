@@ -4,6 +4,7 @@ import 'package:pretium/features/crypto/models/crypto_send_result.dart';
 import 'package:pretium/features/crypto/services/crypto_api_service.dart';
 import 'package:pretium/utils/async_action_guard.dart';
 import 'package:uuid/uuid.dart';
+import 'package:pretium/widgets/app_shimmer.dart';
 
 class UsdcSendScreen extends StatefulWidget {
   const UsdcSendScreen({super.key, this.availableBalance});
@@ -142,7 +143,7 @@ class _UsdcSendScreenState extends State<UsdcSendScreen> {
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const CircularProgressIndicator(),
+            const AppShimmer(child: ShimmerCircle(size: 40)),
             const SizedBox(height: 16),
             Text(
               'Your send of ${result.amount.toStringAsFixed(2)} USDC is being processed. '
@@ -193,11 +194,7 @@ class _UsdcSendScreenState extends State<UsdcSendScreen> {
                 children: [
                   Text('Available', style: TextStyle(color: colors.textSecondary)),
                   _loadingBalance
-                      ? SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: primary),
-                        )
+                      ? const ShimmerBusyIndicator(width: 72, height: 14)
                       : Text(
                           '${(_availableBalance ?? 0).toStringAsFixed(2)} USDC',
                           style: TextStyle(
@@ -252,11 +249,7 @@ class _UsdcSendScreenState extends State<UsdcSendScreen> {
                 padding: const EdgeInsets.symmetric(vertical: 16),
               ),
               child: _submitting
-                  ? const SizedBox(
-                      width: 24,
-                      height: 24,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                    )
+                  ? const ShimmerBusyIndicator(onPrimary: true)
                   : const Text('Send USDC'),
             ),
             if (_pendingResult != null) ...[

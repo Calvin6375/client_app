@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:pretium/features/topup/models/topup_deposit_country.dart';
 
-/// Renders a currency mark: asset logos for USDT/USDC, emoji (or icon) otherwise.
+/// Renders a currency mark: PNG logos for USDT/USDC, flag emoji for fiat.
 class CurrencyLogo extends StatelessWidget {
   const CurrencyLogo({
     super.key,
@@ -11,6 +12,8 @@ class CurrencyLogo extends StatelessWidget {
 
   final String code;
   final double size;
+
+  /// Optional override. Prefer omitting this so [emojiFor] can resolve flags.
   final String? fallbackEmoji;
 
   static String? assetPathFor(String code) {
@@ -24,24 +27,31 @@ class CurrencyLogo extends StatelessWidget {
     }
   }
 
-  static String? defaultEmojiFor(String code) {
-    switch (code.trim().toUpperCase()) {
-      case 'USD':
+  /// Flag / symbol for [code]. Fiat uses [TopupDepositCountry]; crypto uses glyphs.
+  static String emojiFor(String code) {
+    final upper = code.trim().toUpperCase();
+    switch (upper) {
+      case 'USDT':
+        return '₮';
+      case 'USDC':
         return '🇺🇸';
-      case 'KES':
-        return '🇰🇪';
-      case 'NGN':
-        return '🇳🇬';
-      case 'GHS':
-        return '🇬🇭';
-      case 'UGX':
-        return '🇺🇬';
-      case 'EUR':
-        return '🇪🇺';
-      case 'GBP':
-        return '🇬🇧';
       default:
-        return null;
+        return TopupDepositCountry.flagEmojiForCode(upper);
+    }
+  }
+
+  @Deprecated('Use emojiFor')
+  static String? defaultEmojiFor(String code) => emojiFor(code);
+
+  static String displayNameFor(String code) {
+    final upper = code.trim().toUpperCase();
+    switch (upper) {
+      case 'USDT':
+        return 'Tether';
+      case 'USDC':
+        return 'USD Coin';
+      default:
+        return TopupDepositCountry.resolve(upper).currencyName;
     }
   }
 
@@ -56,21 +66,33 @@ class CurrencyLogo extends StatelessWidget {
         width: size,
         height: size,
         fit: BoxFit.contain,
-        errorBuilder: (_, __, ___) => _fallback(context),
+        errorBuilder: (_, __, ___) => _emojiMark(context),
       );
     }
-    return _fallback(context);
+    return _emojiMark(context);
   }
 
-  Widget _fallback(BuildContext context) {
-    final emoji = fallbackEmoji ?? defaultEmojiFor(code);
-    if (emoji != null && emoji.isNotEmpty) {
-      return Text(emoji, style: TextStyle(fontSize: size * 0.9, height: 1));
-    }
-    return Icon(
-      Icons.currency_bitcoin,
-      size: size,
-      color: Theme.of(context).colorScheme.onSurface,
+  Widget _emojiMark(BuildContext context) {
+    final emoji = (fallbackEmoji != null &&
+            fallbackEmoji!.isNotEmpty &&
+            fallbackEmoji != '💱' &&
+            fallbackEmoji != '🌍')
+        ? fallbackEmoji!
+        : emojiFor(code);
+
+    return SizedBox(
+      width: size,
+      height: size,
+      child: Center(
+        child: Text(
+          emoji,
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontSize: size * 0.92,
+            height: 1.05,
+          ),
+        ),
+      ),
     );
   }
 }

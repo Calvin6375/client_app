@@ -3,6 +3,7 @@ import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:image_picker_android/image_picker_android.dart';
@@ -21,6 +22,7 @@ import 'package:pretium/features/pay/screens/pay_page.dart';
 import 'package:pretium/app/route_names.dart';
 import 'package:pretium/utils/logger.dart';
 import 'package:pretium/core/constants/app_colors.dart';
+import 'package:pretium/core/theme/system_ui.dart';
 import 'package:pretium/core/theme/theme_provider.dart';
 import 'package:pretium/features/wallet_verification/screens/wallet_verification_screen.dart';
 import 'package:pretium/features/notifications/screens/notifications_page.dart';
@@ -47,6 +49,7 @@ class _AppScrollBehavior extends MaterialScrollBehavior {
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
 
   if (!kIsWeb && Platform.isAndroid) {
     final picker = ImagePickerPlatform.instance;
@@ -123,6 +126,7 @@ class _MyAppState extends State<MyApp> {
         foregroundColor: colors.textPrimary,
         elevation: 0,
         iconTheme: IconThemeData(color: colors.textPrimary),
+        systemOverlayStyle: edgeToEdgeSystemUiOverlay(Brightness.light),
       ),
       cardTheme: CardThemeData(
         color: colors.surface,
@@ -207,6 +211,7 @@ class _MyAppState extends State<MyApp> {
         foregroundColor: colors.textPrimary,
         elevation: 0,
         iconTheme: IconThemeData(color: colors.textPrimary),
+        systemOverlayStyle: edgeToEdgeSystemUiOverlay(Brightness.dark),
       ),
       cardTheme: CardThemeData(
         color: colors.surface,
@@ -280,7 +285,14 @@ class _MyAppState extends State<MyApp> {
             darkTheme: _buildDarkTheme(), // Dark fintech theme
             themeMode: themeProvider.themeMode, // Dynamic theme mode
             builder: (context, child) {
-              final content = child ?? const SizedBox.shrink();
+              // MaterialApp applies SystemUiOverlayStyle.light/dark, which still
+              // sets deprecated Android bar colors. Override with icon-only style.
+              final overlay = edgeToEdgeSystemUiOverlay(Theme.of(context).brightness);
+              SystemChrome.setSystemUIOverlayStyle(overlay);
+              final content = AnnotatedRegion<SystemUiOverlayStyle>(
+                value: overlay,
+                child: child ?? const SizedBox.shrink(),
+              );
               // Phone-width shell on large web viewports — feels like an installed wallet app.
               if (!kIsWeb) return content;
               return ColoredBox(

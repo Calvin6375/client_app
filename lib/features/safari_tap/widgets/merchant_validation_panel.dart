@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:pretium/core/constants/app_colors.dart';
+import 'package:pretium/widgets/app_shimmer.dart';
 
 /// Shows beneficiary / merchant name after validation, or a placeholder while idle.
 class MerchantValidationPanel extends StatelessWidget {
@@ -55,14 +56,7 @@ class MerchantValidationPanel extends StatelessWidget {
           if (loading)
             Row(
               children: [
-                SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: Theme.of(context).colorScheme.primary,
-                  ),
-                ),
+                const ShimmerBusyIndicator(),
                 const SizedBox(width: 12),
                 Text('Validating…', style: TextStyle(color: colors.textSecondary)),
               ],

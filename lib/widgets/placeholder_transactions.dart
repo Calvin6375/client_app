@@ -6,6 +6,7 @@ import 'package:pretium/features/transactions/screens/transaction_detail_page.da
 import 'package:pretium/features/transactions/widgets/transaction_list_tile.dart';
 import 'package:pretium/services/dashboard_session_cache.dart';
 import 'package:pretium/services/transactions_service.dart';
+import 'package:pretium/widgets/app_shimmer.dart';
 
 class PlaceholderTransactions extends StatefulWidget {
   const PlaceholderTransactions({super.key});
@@ -89,11 +90,11 @@ class _PlaceholderTransactionsState extends State<PlaceholderTransactions> {
     final user = FirebaseAuth.instance.currentUser;
 
     if (user == null) {
-      return const _SkeletonList();
+      return const TransactionListShimmer(itemCount: 3);
     }
 
     if (_isLoading) {
-      return const _SkeletonList();
+      return const TransactionListShimmer(itemCount: 3);
     }
 
     if (_error != null) {
@@ -122,33 +123,6 @@ class _PlaceholderTransactionsState extends State<PlaceholderTransactions> {
           },
         );
       }).toList(),
-    );
-  }
-}
-
-class _SkeletonList extends StatelessWidget {
-  const _SkeletonList();
-  @override
-  Widget build(BuildContext context) {
-    final colors = AppColors.getThemeColors(context);
-    return Column(
-      children: List.generate(
-        3,
-        (index) => ListTile(
-          leading: CircleAvatar(backgroundColor: colors.border),
-          title: Container(height: 10, color: colors.border),
-          subtitle: Container(
-            height: 10,
-            width: 100,
-            color: colors.borderLight,
-          ),
-          trailing: Container(
-            height: 10,
-            width: 60,
-            color: colors.border,
-          ),
-        ),
-      ),
     );
   }
 }

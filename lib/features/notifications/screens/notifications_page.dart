@@ -9,6 +9,7 @@ import 'package:pretium/services/notification_service.dart';
 import 'package:pretium/utils/async_action_guard.dart';
 import 'package:pretium/utils/provider_display_sanitizer.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:pretium/widgets/app_shimmer.dart';
 
 final _markAllAsReadGuard = AsyncActionGuard();
 final _openDetailGuard = AsyncActionGuard();
@@ -135,14 +136,7 @@ class _NotificationsPageState extends State<NotificationsPage> {
                       ? null
                       : () => _markAllAsRead(context, user.uid),
                   icon: _isMarkingAllRead
-                      ? SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: colors.textPrimary,
-                          ),
-                        )
+                      ? const ShimmerBusyIndicator()
                       : Icon(Icons.done_all_rounded, color: colors.textPrimary),
                 ),
             ],
@@ -177,8 +171,14 @@ class _NotificationsPageState extends State<NotificationsPage> {
                       Positioned.fill(
                         child: ColoredBox(
                           color: colors.background.withValues(alpha: 0.45),
-                          child: Center(
-                            child: CircularProgressIndicator(color: primary),
+                          child: const Center(
+                            child: Padding(
+                              padding: EdgeInsets.symmetric(horizontal: 24),
+                              child: SizedBox(
+                                width: double.infinity,
+                                child: CardBlockShimmer(height: 80),
+                              ),
+                            ),
                           ),
                         ),
                       ),
@@ -203,7 +203,7 @@ class _NotificationsPageState extends State<NotificationsPage> {
   }) {
     if (snapshot.connectionState == ConnectionState.waiting &&
         !snapshot.hasData) {
-      return Center(child: CircularProgressIndicator(color: primary));
+      return const NotificationListShimmer();
     }
     if (snapshot.hasError) {
       return Center(
@@ -1013,13 +1013,7 @@ class _NotificationTile extends StatelessWidget {
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: isLoading
-                    ? Padding(
-                        padding: const EdgeInsets.all(10),
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: primary,
-                        ),
-                      )
+                    ? const Center(child: ShimmerBusyIndicator())
                     : Icon(
                         _notificationIconFor(notification),
                         color: primary,

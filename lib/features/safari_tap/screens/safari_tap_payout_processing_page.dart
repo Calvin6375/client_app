@@ -6,6 +6,7 @@ import 'package:pretium/core/constants/app_colors.dart';
 import 'package:pretium/features/safari_tap/models/safari_tap_payout.dart';
 import 'package:pretium/features/safari_tap/services/safari_tap_pay_api_service.dart';
 import 'package:pretium/features/safari_tap/utils/payout_error_messages.dart';
+import 'package:pretium/widgets/app_shimmer.dart';
 
 class SafariTapPayoutSummary {
   const SafariTapPayoutSummary({
@@ -423,10 +424,8 @@ class _StatusHeader extends StatelessWidget {
       icon = const Icon(Icons.error_outline, color: AppColors.errorRed, size: 48);
       accent = AppColors.errorRed;
     } else {
-      icon = SizedBox(
-        width: 48,
-        height: 48,
-        child: CircularProgressIndicator(strokeWidth: 3, color: primary),
+      icon = const AppShimmer(
+        child: ShimmerCircle(size: 48),
       );
       accent = primary;
     }

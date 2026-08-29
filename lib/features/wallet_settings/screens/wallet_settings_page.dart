@@ -11,6 +11,7 @@ import 'package:pretium/services/auth_service.dart';
 import 'package:pretium/services/biometric_session_service.dart';
 import 'package:pretium/utils/async_action_guard.dart';
 import 'package:pretium/app/route_names.dart';
+import 'package:pretium/widgets/app_shimmer.dart';
 
 class WalletSettingsPage extends StatefulWidget {
   const WalletSettingsPage({super.key});
@@ -168,7 +169,7 @@ class _WalletSettingsPageState extends State<WalletSettingsPage> {
         ],
       ),
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
+          ? const SettingsPageShimmer()
           : SingleChildScrollView(
               padding: const EdgeInsets.symmetric(horizontal: 20),
               child: Column(

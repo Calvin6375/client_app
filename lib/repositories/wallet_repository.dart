@@ -303,6 +303,73 @@ class WalletRepository {
     }
   }
 
+  /// Lists fiat wallet currencies that exist under `wallet/{uid}/fiat`.
+  /// Only keys present in RTDB are returned (balance may be 0).
+  Future<Map<String, Wallet>> listOwnedFiatWallets(String uid) async {
+    return _listOwnedWalletsAt('wallet/$uid/fiat', isCrypto: false);
+  }
+
+  /// Lists crypto wallet currencies that exist under `wallet/{uid}/crypto`.
+  /// Only keys present in RTDB are returned (balance may be 0).
+  Future<Map<String, Wallet>> listOwnedCryptoWallets(String uid) async {
+    return _listOwnedWalletsAt('wallet/$uid/crypto', isCrypto: true);
+  }
+
+  Future<Map<String, Wallet>> _listOwnedWalletsAt(
+    String path, {
+    required bool isCrypto,
+  }) async {
+    try {
+      final snapshot = await _database.ref(path).get();
+      if (!snapshot.exists || snapshot.value == null) {
+        return {};
+      }
+      if (snapshot.value is! Map) {
+        Logger.warning('Unexpected wallet list type at $path: ${snapshot.value.runtimeType}');
+        return {};
+      }
+
+      final raw = Map<Object?, Object?>.from(snapshot.value as Map);
+      final result = <String, Wallet>{};
+
+      for (final entry in raw.entries) {
+        final code = entry.key?.toString().toUpperCase();
+        if (code == null || code.isEmpty) continue;
+
+        final value = entry.value;
+        if (value is num) {
+          result[code] = Wallet(currencyCode: code, balance: value.toDouble());
+          continue;
+        }
+        if (value is Map) {
+          try {
+            final data = Map<String, dynamic>.from(value);
+            final wallet = Wallet.fromJson(data);
+            result[code] = Wallet(
+              currencyCode: code,
+              balance: wallet.balance,
+              updatedAt: wallet.updatedAt,
+            );
+          } catch (e) {
+            Logger.error('Failed to parse owned wallet $code at $path', e);
+            result[code] = Wallet(currencyCode: code, balance: 0);
+          }
+          continue;
+        }
+        // Node exists but shape is unknown — still treat as an owned wallet.
+        result[code] = Wallet(currencyCode: code, balance: 0);
+      }
+
+      Logger.debug(
+        'Owned ${isCrypto ? 'crypto' : 'fiat'} wallets at $path: ${result.keys.join(', ')}',
+      );
+      return result;
+    } catch (e) {
+      Logger.error('Failed to list owned wallets at $path', e);
+      rethrow;
+    }
+  }
+
   /// NOTE: This method is intentionally not implemented
   /// Wallet updates MUST be done via Cloud Functions only
   /// 

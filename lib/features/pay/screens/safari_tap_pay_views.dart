@@ -9,6 +9,7 @@ import 'package:pretium/features/safari_tap/widgets/merchant_validation_panel.da
 import 'package:pretium/utils/async_action_guard.dart';
 import 'package:pretium/widgets/currency_logo.dart';
 import 'package:uuid/uuid.dart';
+import 'package:pretium/widgets/app_shimmer.dart';
 
 const String kSafariTapPayCurrency = 'KES';
 
@@ -43,14 +44,20 @@ class SafariTapKesBalanceRow extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text('Available KES', style: TextStyle(color: colors.textSecondary, fontSize: 12)),
-                Text(
-                  loading ? '…' : balance.toStringAsFixed(2),
-                  style: TextStyle(
-                    color: colors.textPrimary,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 15,
+                if (loading)
+                  const Padding(
+                    padding: EdgeInsets.only(top: 4),
+                    child: ShimmerBusyIndicator(width: 72, height: 14),
+                  )
+                else
+                  Text(
+                    balance.toStringAsFixed(2),
+                    style: TextStyle(
+                      color: colors.textPrimary,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 15,
+                    ),
                   ),
-                ),
               ],
             ),
           ),
@@ -633,11 +640,7 @@ class SafariTapPayBottomButton extends StatelessWidget {
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
             ),
             child: loading
-                ? const SizedBox(
-                    width: 22,
-                    height: 22,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                  )
+                ? const ShimmerBusyIndicator(onPrimary: true)
                 : Text(label, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
           ),
         ),

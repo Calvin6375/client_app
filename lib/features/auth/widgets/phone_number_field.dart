@@ -95,9 +95,9 @@ class _PhoneNumberFieldState extends State<PhoneNumberField> {
   @override
   void didUpdateWidget(covariant PhoneNumberField oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.lockCountryCode &&
-        widget.initialCountryCode != null &&
-        widget.initialCountryCode != oldWidget.initialCountryCode) {
+    if (widget.initialCountryCode != null &&
+        widget.initialCountryCode != oldWidget.initialCountryCode &&
+        widget.initialCountryCode != _selectedCountry.dialCode) {
       setState(_applyInitialCountryCode);
     }
   }
@@ -196,7 +196,10 @@ class _PhoneNumberFieldState extends State<PhoneNumberField> {
                                           : FontWeight.normal,
                                       color: isSelected
                                           ? widget.primaryColor
-                                          : Colors.black,
+                                          : Theme.of(context)
+                                              .textTheme
+                                              .bodyMedium
+                                              ?.color,
                                     ),
                                   ),
                                   selected: isSelected,
@@ -204,9 +207,14 @@ class _PhoneNumberFieldState extends State<PhoneNumberField> {
                                     setState(() {
                                       _selectedCountry = country;
                                     });
-                                    widget.onCountryCodeChanged
-                                        ?.call(country.dialCode);
+                                    // Close first, then notify parent so a parent
+                                    // rebuild cannot dispose this sheet mid-frame.
                                     Navigator.pop(sheetContext);
+                                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                                      if (!mounted) return;
+                                      widget.onCountryCodeChanged
+                                          ?.call(country.dialCode);
+                                    });
                                   },
                                 );
                               },
@@ -219,11 +227,57 @@ class _PhoneNumberFieldState extends State<PhoneNumberField> {
           },
         );
       },
-    ).whenComplete(searchController.dispose);
+    ).whenComplete(() {
+      // Dispose after the sheet finishes unmounting its TextField.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        searchController.dispose();
+      });
+    });
   }
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final prefixColor = isDark ? Colors.white : Colors.black;
+    final borderColor = isDark ? const Color(0xFF334155) : Colors.grey.shade300;
+
+    Widget countryPrefix({required bool interactive}) {
+      final row = Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            _selectedCountry.flag,
+            style: const TextStyle(fontSize: 20),
+          ),
+          const SizedBox(width: 4),
+          Text(
+            '+${_selectedCountry.dialCode}',
+            style: TextStyle(
+              color: prefixColor,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          if (interactive)
+            Icon(Icons.arrow_drop_down, color: prefixColor),
+        ],
+      );
+
+      return interactive
+          ? GestureDetector(
+              onTap: _showCountryCodePicker,
+              behavior: HitTestBehavior.opaque,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: row,
+              ),
+            )
+          : Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: row,
+            );
+    }
+
     return TextFormField(
       controller: widget.phoneController,
       keyboardType: TextInputType.phone,
@@ -231,53 +285,10 @@ class _PhoneNumberFieldState extends State<PhoneNumberField> {
         FilteringTextInputFormatter.digitsOnly,
       ],
       cursorColor: widget.primaryColor,
+      style: TextStyle(color: isDark ? Colors.white : Colors.black87),
       validator: widget.validator,
       decoration: InputDecoration(
-        prefixIcon: widget.lockCountryCode
-            ? Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      _selectedCountry.flag,
-                      style: const TextStyle(fontSize: 20),
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      '+${_selectedCountry.dialCode}',
-                      style: const TextStyle(
-                        color: Colors.black,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ],
-                ),
-              )
-            : GestureDetector(
-                onTap: _showCountryCodePicker,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        _selectedCountry.flag,
-                        style: const TextStyle(fontSize: 20),
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        '+${_selectedCountry.dialCode}',
-                        style: const TextStyle(
-                          color: Colors.black,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                      const Icon(Icons.arrow_drop_down, color: Colors.black),
-                    ],
-                  ),
-                ),
-              ),
+        prefixIcon: countryPrefix(interactive: !widget.lockCountryCode),
         labelText: 'Phone Number',
         hintText: 'Enter your phone number',
         hintStyle: TextStyle(color: Colors.grey.shade400),
@@ -295,7 +306,7 @@ class _PhoneNumberFieldState extends State<PhoneNumberField> {
           borderRadius: const BorderRadius.all(Radius.circular(12)),
         ),
         enabledBorder: OutlineInputBorder(
-          borderSide: BorderSide(color: Colors.grey.shade300),
+          borderSide: BorderSide(color: borderColor),
           borderRadius: const BorderRadius.all(Radius.circular(12)),
         ),
       ),

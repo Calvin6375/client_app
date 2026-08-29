@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:pretium/features/send_money/screens/send_amount_screen.dart';
+import 'package:pretium/features/send_money/screens/send_money_form_screen.dart';
 import 'package:pretium/features/send_money/screens/payment_method_screen.dart';
 import 'package:pretium/features/send_money/screens/review_details_screen.dart';
-import 'package:pretium/features/send_money/screens/recipient_details_screen.dart';
 import 'package:pretium/models/transaction_details_model.dart';
 import 'package:pretium/core/constants/app_colors.dart';
 import 'package:pretium/features/safari_tap/services/safari_tap_pay_api_service.dart';
@@ -13,7 +12,7 @@ import 'package:pretium/utils/async_action_guard.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:uuid/uuid.dart';
 
-enum SendMoneyStep { amount, payment, recipientDetails, review }
+enum SendMoneyStep { form, review }
 
 class SendMoneyPage extends StatefulWidget {
   final String? initialFromCurrency;
@@ -25,9 +24,10 @@ class SendMoneyPage extends StatefulWidget {
 }
 
 class _SendMoneyPageState extends State<SendMoneyPage> {
-  SendMoneyStep _step = SendMoneyStep.amount;
+  SendMoneyStep _step = SendMoneyStep.form;
   late final TransactionDetails _transactionDetails;
   bool _isSubmittingSendMoney = false;
+  bool _isValidating = false;
   final SafariTapPayApiService _payApi = SafariTapPayApiService();
 
   @override
@@ -36,15 +36,8 @@ class _SendMoneyPageState extends State<SendMoneyPage> {
     _transactionDetails = TransactionDetails(
       fromCurrency: 'KES',
       toCurrency: 'KES',
+      paymentMethod: PaymentMethod.mobileMoney,
     );
-  }
-
-  void _onPaymentMethodSelected(PaymentMethod method) {
-    setState(() {
-      _transactionDetails.paymentMethod = method;
-      _transactionDetails.verifiedBeneficiaryName = '';
-      _step = SendMoneyStep.recipientDetails;
-    });
   }
 
   void _updateTransactionDetails(TransactionDetails details) {
@@ -53,6 +46,7 @@ class _SendMoneyPageState extends State<SendMoneyPage> {
       _transactionDetails.fromCurrency = details.fromCurrency;
       _transactionDetails.amountToReceive = details.amountToReceive;
       _transactionDetails.toCurrency = details.toCurrency;
+      _transactionDetails.paymentMethod = details.paymentMethod;
       _transactionDetails.recipientFullName = details.recipientFullName;
       _transactionDetails.recipientPhoneNumber = details.recipientPhoneNumber;
       _transactionDetails.recipientBankName = details.recipientBankName;
@@ -84,7 +78,14 @@ class _SendMoneyPageState extends State<SendMoneyPage> {
           },
         };
       case PaymentMethod.truePay:
-        throw StateError('SafariTap-to-SafariTap is not supported for Kenya payouts');
+        // Wallet-to-wallet payout is not exposed on the Kenya SafariTap API yet.
+        return {
+          'type': 'SAFARITAP_WALLET',
+          'recipient': {
+            'phoneNumber': _transactionDetails.recipientPhoneNumber.replaceAll(RegExp(r'[^\d]'), ''),
+            'name': name,
+          },
+        };
     }
   }
 
@@ -121,11 +122,20 @@ class _SendMoneyPageState extends State<SendMoneyPage> {
           'narrative': 'SafariTap bank transfer',
         };
       case PaymentMethod.truePay:
-        throw StateError('SafariTap-to-SafariTap is not supported for Kenya payouts');
+        throw StateError('SafariTap wallet payout is not available yet');
     }
   }
 
   Future<bool> _validateBeneficiary() async {
+    if (_transactionDetails.paymentMethod == PaymentMethod.truePay) {
+      // No validate-beneficiary endpoint for SafariTap wallet yet.
+      setState(() {
+        _transactionDetails.verifiedBeneficiaryName =
+            _transactionDetails.recipientFullName.trim();
+      });
+      return true;
+    }
+
     try {
       final result = await _payApi.validateBeneficiary(_buildValidateBody());
       if (!result.hasDisplayName) {
@@ -154,92 +164,87 @@ class _SendMoneyPageState extends State<SendMoneyPage> {
     }
   }
 
-  void _nextStep() async {
-    if (_step == SendMoneyStep.amount) {
-      setState(() => _step = SendMoneyStep.payment);
-    } else if (_step == SendMoneyStep.recipientDetails) {
+  Future<void> _onFormContinue() async {
+    if (_isValidating) return;
+    setState(() => _isValidating = true);
+    try {
       final ok = await _validateBeneficiary();
       if (ok && mounted) setState(() => _step = SendMoneyStep.review);
-    } else if (_step == SendMoneyStep.review) {
-      await runGuardedAsync(
-        this,
-        isSubmitting: () => _isSubmittingSendMoney,
-        setSubmitting: (value) => setState(() => _isSubmittingSendMoney = value),
-        action: () async {
-          final user = FirebaseAuth.instance.currentUser;
-          if (user == null) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Please sign in to send money')),
-            );
-            return;
-          }
-
-          final amount = _transactionDetails.amountToSend;
-          if (amount <= 0) return;
-
-          if (_transactionDetails.paymentMethod == PaymentMethod.bank &&
-              (amount < 100 || amount > 999999)) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Bank transfers must be between KES 100 and 999,999')),
-            );
-            return;
-          }
-
-          final clientRequestId = const Uuid().v4();
-          final ok = await runSafariTapPayoutFlow(
-            context: context,
-            payoutBody: _buildPayoutBody(clientRequestId),
-            flowLabel: 'Send money',
-            clientRequestId: clientRequestId,
-            api: _payApi,
-          );
-          if (ok && mounted) Navigator.of(context).pop();
-        },
-      );
+    } finally {
+      if (mounted) setState(() => _isValidating = false);
     }
   }
 
-  void _previousStep() {
-    setState(() {
-      if (_step == SendMoneyStep.payment) {
-        _step = SendMoneyStep.amount;
-      } else if (_step == SendMoneyStep.recipientDetails) {
-        _step = SendMoneyStep.payment;
-      } else if (_step == SendMoneyStep.review) {
-        _step = SendMoneyStep.recipientDetails;
-      }
-    });
+  Future<void> _onReviewConfirm() async {
+    await runGuardedAsync(
+      this,
+      isSubmitting: () => _isSubmittingSendMoney,
+      setSubmitting: (value) => setState(() => _isSubmittingSendMoney = value),
+      action: () async {
+        final user = FirebaseAuth.instance.currentUser;
+        if (user == null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Please sign in to send money')),
+          );
+          return;
+        }
+
+        final amount = _transactionDetails.amountToSend;
+        if (amount <= 0) return;
+
+        if (_transactionDetails.paymentMethod == PaymentMethod.truePay) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'SafariTap wallet transfers are coming soon. Use Mobile Money or Bank Transfer.',
+              ),
+            ),
+          );
+          return;
+        }
+
+        if (_transactionDetails.paymentMethod == PaymentMethod.bank &&
+            (amount < 100 || amount > 999999)) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Bank transfers must be between KES 100 and 999,999')),
+          );
+          return;
+        }
+
+        final clientRequestId = const Uuid().v4();
+        final ok = await runSafariTapPayoutFlow(
+          context: context,
+          payoutBody: _buildPayoutBody(clientRequestId),
+          flowLabel: 'Send money',
+          clientRequestId: clientRequestId,
+          api: _payApi,
+        );
+        if (ok && mounted) Navigator.of(context).pop();
+      },
+    );
   }
 
-  void _goToStep(SendMoneyStep step) {
-    setState(() => _step = step);
+  void _previousStep() {
+    if (_step == SendMoneyStep.review) {
+      setState(() => _step = SendMoneyStep.form);
+    }
   }
 
   Widget _buildCurrentStep() {
     switch (_step) {
-      case SendMoneyStep.amount:
-        return SendAmountScreen(
-          onNext: _nextStep,
+      case SendMoneyStep.form:
+        return SendMoneyFormScreen(
+          onContinue: _onFormContinue,
           onUpdate: _updateTransactionDetails,
           initialDetails: _transactionDetails,
-          kenyaOnly: true,
-        );
-      case SendMoneyStep.payment:
-        return PaymentMethodScreen(onNext: _onPaymentMethodSelected, kenyaOnly: true);
-      case SendMoneyStep.recipientDetails:
-        return RecipientDetailsScreen(
-          paymentMethod: _transactionDetails.paymentMethod,
-          onNext: _nextStep,
-          onUpdate: _updateTransactionDetails,
-          initialDetails: _transactionDetails,
-          kenyaOnly: true,
+          isValidating: _isValidating,
         );
       case SendMoneyStep.review:
         return ReviewDetailsScreen(
-          onNext: _nextStep,
+          onNext: _onReviewConfirm,
           details: _transactionDetails,
-          onEditTransferDetails: () => _goToStep(SendMoneyStep.amount),
-          onEditRecipientDetails: () => _goToStep(SendMoneyStep.recipientDetails),
+          onEditTransferDetails: () => setState(() => _step = SendMoneyStep.form),
+          onEditRecipientDetails: () => setState(() => _step = SendMoneyStep.form),
           isSubmitting: _isSubmittingSendMoney,
         );
     }
@@ -258,7 +263,7 @@ class _SendMoneyPageState extends State<SendMoneyPage> {
         elevation: 0,
         title: Text('Send Money', style: TextStyle(color: colors.textPrimary)),
         iconTheme: IconThemeData(color: colors.textPrimary),
-        leading: _step != SendMoneyStep.amount
+        leading: _step == SendMoneyStep.review
             ? IconButton(
                 icon: Icon(Icons.arrow_back, color: colors.textPrimary),
                 onPressed: _previousStep,

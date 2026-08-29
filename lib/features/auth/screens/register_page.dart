@@ -16,6 +16,7 @@ import 'package:pretium/features/auth/services/registration_api_service.dart';
 import 'package:pretium/features/auth/utils/post_auth_routing.dart';
 import 'package:pretium/services/auth_claims_service.dart';
 import 'package:pretium/core/constants/auth_config.dart';
+import 'package:pretium/widgets/app_shimmer.dart';
 
 // Use app-level theme; no local constant color
 
@@ -419,10 +420,16 @@ class _RegisterPageState extends State<RegisterPage> {
                       ),
                     ),
                     onPressed: (_canSubmit && !_isSubmitting) ? _register : null,
-                    child: Text(
-                      _isSubmitting ? 'Creating...' : 'Create Account',
-                      style: const TextStyle(fontSize: 18, color: Colors.white),
-                    ),
+                    child: _isSubmitting
+                        ? const ShimmerBusyIndicator(
+                            width: 96,
+                            height: 14,
+                            onPrimary: true,
+                          )
+                        : const Text(
+                            'Create Account',
+                            style: TextStyle(fontSize: 18, color: Colors.white),
+                          ),
                   ),
                 ),
 

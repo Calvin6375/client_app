@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:pretium/core/constants/app_colors.dart';
 import 'package:pretium/services/payment_callback_service.dart';
 import 'package:webview_flutter/webview_flutter.dart';
+import 'package:pretium/widgets/app_shimmer.dart';
 
 /// In-app hosted checkout (Paystack / Transak). Stays inside the app and
 /// intercepts payment return URLs so confirmation never depends on Safari.
@@ -130,11 +131,7 @@ class _PaymentCheckoutWebViewPageState extends State<PaymentCheckoutWebViewPage>
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(2),
           child: _isLoading
-              ? LinearProgressIndicator(
-                  minHeight: 2,
-                  backgroundColor: colors.background,
-                  color: Theme.of(context).colorScheme.primary,
-                )
+              ? const ShimmerProgressBar()
               : const SizedBox(height: 2),
         ),
       ),

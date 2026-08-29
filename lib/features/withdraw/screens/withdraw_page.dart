@@ -9,6 +9,7 @@ import 'package:pretium/repositories/wallet_repository.dart';
 import 'package:pretium/services/payment_service.dart';
 import 'package:pretium/utils/async_action_guard.dart';
 import 'package:pretium/utils/firebase_utils.dart';
+import 'package:pretium/widgets/app_shimmer.dart';
 
 enum _WithdrawDestination { mobileMoney, bank, cryptoWallet }
 
@@ -425,7 +426,6 @@ class _BalanceCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = AppColors.getThemeColors(context);
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final primary = Theme.of(context).colorScheme.primary;
 
     return Container(
       width: double.infinity,
@@ -446,11 +446,7 @@ class _BalanceCard extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           if (loading)
-            SizedBox(
-              width: 22,
-              height: 22,
-              child: CircularProgressIndicator(strokeWidth: 2, color: primary),
-            )
+            const ShimmerBusyIndicator(width: 120, height: 24)
           else
             Text(
               '$currency ${balance.toStringAsFixed(2)}',
@@ -792,14 +788,7 @@ class _BottomBar extends StatelessWidget {
               ),
             ),
             child: loading
-                ? const SizedBox(
-                    width: 24,
-                    height: 24,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: Colors.white,
-                    ),
-                  )
+                ? const ShimmerBusyIndicator(onPrimary: true)
                 : Text(
                     label,
                     style: const TextStyle(

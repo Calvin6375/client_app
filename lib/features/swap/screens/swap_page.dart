@@ -11,6 +11,9 @@ import 'package:pretium/core/constants/app_colors.dart';
 import 'package:pretium/widgets/currency_logo.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:pretium/utils/firebase_utils.dart';
+import 'package:pretium/widgets/app_shimmer.dart';
+import 'package:pretium/widgets/slide_to_confirm.dart';
+import 'package:pretium/services/dashboard_session_cache.dart';
 
 class SwapPage extends StatefulWidget {
   final String? initialFromCurrency;
@@ -36,23 +39,26 @@ class _SwapPageState extends State<SwapPage> {
   double _fromBalance = 0.0;
   double _toBalance = 0.0;
   bool _loadingBalances = true;
+  bool _loadingWallets = true;
   late double _rate;
 
+  /// Currencies the user actually owns (fiat + crypto wallet nodes).
+  final List<String> _ownedCurrencyCodes = [];
+  final Map<String, double> _ownedBalances = {};
+
   void _swapCurrencies() {
+    if (_ownedCurrencyCodes.length < 2) return;
     setState(() {
       final temp = _fromCurrency;
       _fromCurrency = _toCurrency;
       _toCurrency = temp;
-      
-      // Swap balances
+
       final tempBalance = _fromBalance;
       _fromBalance = _toBalance;
       _toBalance = tempBalance;
-      
-      // Clear input
+
       _fromCtrl.clear();
-      
-      // Refetch rate
+
       _rate = _rates.getRate(_fromCurrency, _toCurrency);
       _loadRate();
     });
@@ -60,6 +66,14 @@ class _SwapPageState extends State<SwapPage> {
 
   void _nextStep() async {
     if (_step == _SwapStep.input) {
+      if (_fromCurrency == _toCurrency || _ownedCurrencyCodes.length < 2) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Choose two different wallets to exchange.'),
+          ),
+        );
+        return;
+      }
       setState(() => _step = _SwapStep.confirmation);
     } else if (_step == _SwapStep.confirmation) {
       await runGuardedAsync(
@@ -71,7 +85,7 @@ class _SwapPageState extends State<SwapPage> {
           if (user == null) {
             if (mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Please sign in to swap')),
+                const SnackBar(content: Text('Please sign in to exchange')),
               );
             }
             return;
@@ -112,12 +126,12 @@ class _SwapPageState extends State<SwapPage> {
           } on FirebaseFunctionsException catch (e) {
             if (!mounted) return;
             final message = switch (e.code) {
-              'unauthenticated' => 'Please sign in to swap.',
-              'invalid-argument' => 'Invalid swap request. Please check your input.',
+              'unauthenticated' => 'Please sign in to exchange.',
+              'invalid-argument' => 'Invalid exchange request. Please check your input.',
               'failed-precondition' =>
-                'Insufficient balance. You don\'t have enough $_fromCurrency to complete this swap.',
+                'Insufficient balance. You don\'t have enough $_fromCurrency to complete this exchange.',
               'internal' => 'Something went wrong. Please try again.',
-              _ => 'Swap failed. Please try again.',
+              _ => 'Exchange failed. Please try again.',
             };
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(content: Text(message), backgroundColor: Colors.red.shade700),
@@ -127,7 +141,7 @@ class _SwapPageState extends State<SwapPage> {
             if (!mounted) return;
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(
-                content: Text('Swap failed. Please try again.'),
+                content: Text('Exchange failed. Please try again.'),
                 backgroundColor: Colors.red,
               ),
             );
@@ -149,17 +163,10 @@ class _SwapPageState extends State<SwapPage> {
   void initState() {
     super.initState();
     _confettiController = ConfettiController(duration: const Duration(seconds: 1));
-    
-    // Set initial currency from parameter or default
-    if (widget.initialFromCurrency != null) {
-      _fromCurrency = widget.initialFromCurrency!;
-      // Default to USDT if from currency is fiat, otherwise default to USD
-      _toCurrency = _fromCurrency == 'USDT' ? 'USD' : 'USDT';
-    }
-    
+
+    _hydrateOwnedWalletsFromCache();
     _rate = _rates.getRate(_fromCurrency, _toCurrency);
-    _loadBalances();
-    _loadRate();
+    _loadOwnedWallets();
 
     // Listen to live rate updates
     _rates.ratesStream.listen((map) {
@@ -171,6 +178,173 @@ class _SwapPageState extends State<SwapPage> {
         });
       }
     });
+  }
+
+  bool _isCryptoCurrency(String code) {
+    final upper = code.toUpperCase();
+    return upper == 'USDT' || upper == 'USDC';
+  }
+
+  void _hydrateOwnedWalletsFromCache() {
+    final snap = DashboardSessionCache.instance.readWalletLastKnown();
+    if (snap == null) return;
+
+    final codes = <String>{
+      ...snap.availableFiatCurrencies.map((c) => c.toUpperCase()),
+      ...snap.availableCryptoCurrencies.map((c) => c.toUpperCase()),
+    };
+    if (codes.isEmpty) return;
+
+    _ownedCurrencyCodes
+      ..clear()
+      ..addAll(codes);
+    _ownedBalances
+      ..clear()
+      ..addEntries([
+        for (final e in snap.fiatWallets.entries)
+          MapEntry(e.key.toUpperCase(), e.value.balance),
+        for (final e in snap.cryptoWallets.entries)
+          MapEntry(e.key.toUpperCase(), e.value.balance),
+      ]);
+    _applyOwnedCurrencyDefaults();
+    _fromBalance = _ownedBalances[_fromCurrency] ?? 0;
+    _toBalance = _ownedBalances[_toCurrency] ?? 0;
+    _loadingWallets = false;
+    _loadingBalances = false;
+  }
+
+  void _applyOwnedCurrencyDefaults() {
+    if (_ownedCurrencyCodes.isEmpty) return;
+
+    final preferredFrom = widget.initialFromCurrency?.toUpperCase();
+    if (preferredFrom != null && _ownedCurrencyCodes.contains(preferredFrom)) {
+      _fromCurrency = preferredFrom;
+    } else if (!_ownedCurrencyCodes.contains(_fromCurrency)) {
+      _fromCurrency = _ownedCurrencyCodes.first;
+    }
+
+    final preferredTo = _isCryptoCurrency(_fromCurrency)
+        ? _ownedCurrencyCodes.firstWhere(
+            (c) => !_isCryptoCurrency(c),
+            orElse: () => _ownedCurrencyCodes.firstWhere(
+              (c) => c != _fromCurrency,
+              orElse: () => _fromCurrency,
+            ),
+          )
+        : _ownedCurrencyCodes.firstWhere(
+            (c) => _isCryptoCurrency(c),
+            orElse: () => _ownedCurrencyCodes.firstWhere(
+              (c) => c != _fromCurrency,
+              orElse: () => _fromCurrency,
+            ),
+          );
+
+    _toCurrency = preferredTo == _fromCurrency && _ownedCurrencyCodes.length > 1
+        ? _ownedCurrencyCodes.firstWhere((c) => c != _fromCurrency)
+        : preferredTo;
+  }
+
+  Future<void> _loadOwnedWallets() async {
+    if (!isFirebaseInitialized()) {
+      if (mounted) {
+        setState(() {
+          _loadingWallets = false;
+          _loadingBalances = false;
+        });
+      }
+      return;
+    }
+
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      if (mounted) {
+        setState(() {
+          _loadingWallets = false;
+          _loadingBalances = false;
+        });
+      }
+      return;
+    }
+
+    if (mounted) {
+      setState(() {
+        _loadingWallets = true;
+        _loadingBalances = true;
+      });
+    }
+
+    try {
+      final fiat = await _walletRepository.listOwnedFiatWallets(user.uid);
+      final crypto = await _walletRepository.listOwnedCryptoWallets(user.uid);
+
+      final codes = <String>{
+        ...fiat.keys.map((c) => c.toUpperCase()),
+        ...crypto.keys.map((c) => c.toUpperCase()),
+      };
+
+      // If RTDB parent listing is empty, fall back to probing known currencies
+      // the same way the home wallet card does (existence = non-null fiat node).
+      if (codes.isEmpty) {
+        for (final currency in const ['KES', 'USD', 'NGN', 'GHS', 'UGX']) {
+          try {
+            final wallet =
+                await _walletRepository.getWalletBalance(user.uid, currency: currency);
+            if (wallet != null) {
+              fiat[currency] = wallet;
+              codes.add(currency);
+            }
+          } catch (_) {}
+        }
+        for (final currency in const ['USDT', 'USDC']) {
+          try {
+            final wallet =
+                await _walletRepository.getCryptoWalletBalance(user.uid, currency);
+            // Crypto helper returns a zero wallet even when missing — only keep
+            // currencies that also appear in a successful parent list or cache.
+            if (wallet != null) {
+              final cached = DashboardSessionCache.instance
+                  .readWalletLastKnown()
+                  ?.availableCryptoCurrencies
+                  .map((c) => c.toUpperCase())
+                  .contains(currency);
+              if (cached == true || wallet.balance > 0) {
+                crypto[currency] = wallet;
+                codes.add(currency);
+              }
+            }
+          } catch (_) {}
+        }
+      }
+
+      if (!mounted) return;
+
+      setState(() {
+        _ownedCurrencyCodes
+          ..clear()
+          ..addAll(codes);
+        _ownedBalances
+          ..clear()
+          ..addEntries([
+            for (final e in fiat.entries) MapEntry(e.key.toUpperCase(), e.value.balance),
+            for (final e in crypto.entries) MapEntry(e.key.toUpperCase(), e.value.balance),
+          ]);
+        _applyOwnedCurrencyDefaults();
+        _fromBalance = _ownedBalances[_fromCurrency] ?? 0;
+        _toBalance = _ownedBalances[_toCurrency] ?? 0;
+        _loadingWallets = false;
+        _loadingBalances = false;
+      });
+
+      _rate = _rates.getRate(_fromCurrency, _toCurrency);
+      await _loadRate();
+    } catch (e, st) {
+      Logger.error('Failed to load owned wallets for exchange', e, st);
+      if (!mounted) return;
+      setState(() {
+        _loadingWallets = false;
+        _loadingBalances = false;
+      });
+    }
   }
   
   Future<void> _loadRate() async {
@@ -184,6 +358,16 @@ class _SwapPageState extends State<SwapPage> {
         _rate = newRate;
       });
     }
+  }
+
+  Future<double> _balanceFor(String currency, String uid) async {
+    final code = currency.toUpperCase();
+    if (_isCryptoCurrency(code)) {
+      final wallet = await _walletRepository.getCryptoWalletBalance(uid, code);
+      return wallet?.balance ?? 0.0;
+    }
+    final wallet = await _walletRepository.getWalletBalance(uid, currency: code);
+    return wallet?.balance ?? 0.0;
   }
 
   Future<void> _loadBalances() async {
@@ -201,28 +385,17 @@ class _SwapPageState extends State<SwapPage> {
 
       setState(() => _loadingBalances = true);
 
-      // Load balance for "from" currency
-      if (_fromCurrency == 'USDT') {
-        final cryptoWallet = await _walletRepository.getCryptoWalletBalance(user.uid, 'USDT');
-        _fromBalance = cryptoWallet?.balance ?? 0.0;
-      } else {
-        // Load fiat wallet for the currency (USD, KES, NGN, GHS)
-        final fiatWallet = await _walletRepository.getWalletBalance(user.uid, currency: _fromCurrency);
-        _fromBalance = fiatWallet?.balance ?? 0.0;
-      }
-
-      // Load balance for "to" currency
-      if (_toCurrency == 'USDT') {
-        final cryptoWallet = await _walletRepository.getCryptoWalletBalance(user.uid, 'USDT');
-        _toBalance = cryptoWallet?.balance ?? 0.0;
-      } else {
-        // Load fiat wallet for the currency (USD, KES, NGN, GHS)
-        final fiatWallet = await _walletRepository.getWalletBalance(user.uid, currency: _toCurrency);
-        _toBalance = fiatWallet?.balance ?? 0.0;
-      }
+      final fromBal = await _balanceFor(_fromCurrency, user.uid);
+      final toBal = await _balanceFor(_toCurrency, user.uid);
 
       if (!mounted) return;
-      setState(() => _loadingBalances = false);
+      setState(() {
+        _fromBalance = fromBal;
+        _toBalance = toBal;
+        _ownedBalances[_fromCurrency] = fromBal;
+        _ownedBalances[_toCurrency] = toBal;
+        _loadingBalances = false;
+      });
     } catch (e) {
       if (!mounted) return;
       setState(() => _loadingBalances = false);
@@ -256,7 +429,7 @@ class _SwapPageState extends State<SwapPage> {
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
               title: Center(
                 child: Text(
-                  'Swap Successful',
+                  'Exchange Successful',
                   style: TextStyle(color: colors.textPrimary),
                 ),
               ),
@@ -278,7 +451,7 @@ class _SwapPageState extends State<SwapPage> {
                   child: ElevatedButton(
                     onPressed: () {
                       navigator.pop(); // Dismiss dialog
-                      navigator.pop(); // Pop swap page to navigate to home
+                      navigator.pop(); // Pop exchange page to navigate to home
                     },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: primary,
@@ -318,15 +491,47 @@ class _SwapPageState extends State<SwapPage> {
     );
   }
 
-  void _showCurrencyPicker(BuildContext context, bool isFromCurrency) {
-    final availableCurrencies = [
-      const Currency(code: 'USD', name: 'US Dollar', flagEmoji: '🇺🇸'),
-      const Currency(code: 'KES', name: 'Kenyan Shilling', flagEmoji: '🇰🇪'),
-      const Currency(code: 'NGN', name: 'Nigerian Naira', flagEmoji: '🇳🇬'),
-      const Currency(code: 'GHS', name: 'Ghanaian Cedi', flagEmoji: '🇬🇭'),
-      const Currency(code: 'USDT', name: 'Tether', flagEmoji: '₮'),
+  List<Currency> _ownedCurrencyOptions({String? excluding}) {
+    final exclude = excluding?.toUpperCase();
+    final codes = _ownedCurrencyCodes
+        .where((code) => exclude == null || code != exclude)
+        .toList()
+      ..sort();
+
+    // Keep at least the current selection if it's the only owned wallet.
+    if (codes.isEmpty && excluding != null) {
+      return [
+        Currency(
+          code: excluding,
+          name: CurrencyLogo.displayNameFor(excluding),
+          flagEmoji: CurrencyLogo.emojiFor(excluding),
+        ),
+      ];
+    }
+
+    return [
+      for (final code in codes)
+        Currency(
+          code: code,
+          name: CurrencyLogo.displayNameFor(code),
+          flagEmoji: CurrencyLogo.emojiFor(code),
+        ),
     ];
-    
+  }
+
+  void _showCurrencyPicker(BuildContext context, bool isFromCurrency) {
+    final other = isFromCurrency ? _toCurrency : _fromCurrency;
+    final availableCurrencies = _ownedCurrencyOptions(excluding: other);
+
+    if (availableCurrencies.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No wallets available to exchange yet.'),
+        ),
+      );
+      return;
+    }
+
     showModalBottomSheet(
       context: context,
       builder: (context) => CurrencyPickerBottomSheet(
@@ -335,21 +540,30 @@ class _SwapPageState extends State<SwapPage> {
         onSelected: (currency) async {
           setState(() {
             if (isFromCurrency) {
-              _fromCurrency = currency.code;
-              // Don't auto-select - let user choose the other currency
+              _fromCurrency = currency.code.toUpperCase();
+              if (_toCurrency == _fromCurrency) {
+                final alt = _ownedCurrencyCodes.firstWhere(
+                  (c) => c != _fromCurrency,
+                  orElse: () => _toCurrency,
+                );
+                _toCurrency = alt;
+              }
             } else {
-              _toCurrency = currency.code;
-              // Don't auto-select - let user choose the other currency
+              _toCurrency = currency.code.toUpperCase();
+              if (_fromCurrency == _toCurrency) {
+                final alt = _ownedCurrencyCodes.firstWhere(
+                  (c) => c != _toCurrency,
+                  orElse: () => _fromCurrency,
+                );
+                _fromCurrency = alt;
+              }
             }
-            // Clear input when currency changes
             _fromCtrl.clear();
           });
-          
-          // Load balances and refresh rate after state update
+
           await _loadBalances();
           await _loadRate();
-          
-          // Force UI update with new rate
+
           if (mounted) {
             setState(() {
               _rate = _rates.getRate(_fromCurrency, _toCurrency);
@@ -372,7 +586,13 @@ class _SwapPageState extends State<SwapPage> {
             ? Colors.transparent  // Transparent for dark mode
             : primary.withValues(alpha: 0.08), // Light mint tint (8% opacity) for light mode
         elevation: 0,
-        title: Text('Swap', style: TextStyle(color: colors.textPrimary)),
+        title: Text(
+          _step == _SwapStep.confirmation ? 'Confirm sending' : 'Exchange',
+          style: TextStyle(
+            color: colors.textPrimary,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
         iconTheme: IconThemeData(color: colors.textPrimary),
         leading: _step == _SwapStep.confirmation
             ? IconButton(
@@ -381,40 +601,111 @@ class _SwapPageState extends State<SwapPage> {
               )
             : null,
       ),
-      body: IndexedStack(
-        index: _step.index,
-        children: [
-          _SwapInputScreen(
-            fromCtrl: _fromCtrl,
-            fromCurrency: _fromCurrency,
-            toCurrency: _toCurrency,
-            fromBalance: _fromBalance,
-            toBalance: _toBalance,
-            rate: _rate,
-            loadingBalances: _loadingBalances,
-            onSwapCurrencies: _swapCurrencies,
-            onNext: _nextStep,
-            onFromCurrencyTap: () => _showCurrencyPicker(context, true),
-            onToCurrencyTap: () => _showCurrencyPicker(context, false),
-          ),
-          _SwapConfirmationScreen(
-            fromAmount: double.tryParse(_fromCtrl.text) ?? 0,
-            fromCurrency: _fromCurrency,
-            toAmount: (double.tryParse(_fromCtrl.text) ?? 0) * _rate,
-            toCurrency: _toCurrency,
-            rate: _rate,
-            onNext: _nextStep,
-            isSubmitting: _isSubmittingSwap,
-          ),
-          // Success is a dialog, so this is just a placeholder
-          const SizedBox.shrink(),
-        ],
+      body: _loadingWallets && _ownedCurrencyCodes.isEmpty
+          ? const Center(child: PageContentShimmer(blocks: 3))
+          : _ownedCurrencyCodes.length < 2
+              ? _ExchangeNoWalletsState(
+                  ownedCount: _ownedCurrencyCodes.length,
+                  onRefresh: _loadOwnedWallets,
+                )
+              : IndexedStack(
+                  index: _step.index,
+                  children: [
+                    _ExchangeInputScreen(
+                      fromCtrl: _fromCtrl,
+                      fromCurrency: _fromCurrency,
+                      toCurrency: _toCurrency,
+                      fromBalance: _fromBalance,
+                      toBalance: _toBalance,
+                      rate: _rate,
+                      loadingBalances: _loadingBalances,
+                      onSwapCurrencies: _swapCurrencies,
+                      onNext: _nextStep,
+                      onFromCurrencyTap: () => _showCurrencyPicker(context, true),
+                      onToCurrencyTap: () => _showCurrencyPicker(context, false),
+                    ),
+                    _ExchangeConfirmationScreen(
+                      fromAmount: double.tryParse(_fromCtrl.text) ?? 0,
+                      fromCurrency: _fromCurrency,
+                      toAmount: (double.tryParse(_fromCtrl.text) ?? 0) * _rate,
+                      toCurrency: _toCurrency,
+                      rate: _rate,
+                      onNext: _nextStep,
+                      isSubmitting: _isSubmittingSwap,
+                    ),
+                    // Success is a dialog, so this is just a placeholder
+                    const SizedBox.shrink(),
+                  ],
+                ),
+    );
+  }
+}
+
+String _formatExchangeAmount(double amount, String currency) {
+  if (amount <= 0) return '0.00';
+  final isCrypto = currency.toUpperCase() == 'USDT' ||
+      currency.toUpperCase() == 'USDC';
+  if (isCrypto) {
+    if (amount < 1) return amount.toStringAsFixed(6);
+    return amount.toStringAsFixed(4);
+  }
+  return amount.toStringAsFixed(2);
+}
+
+class _ExchangeNoWalletsState extends StatelessWidget {
+  const _ExchangeNoWalletsState({
+    required this.ownedCount,
+    required this.onRefresh,
+  });
+
+  final int ownedCount;
+  final Future<void> Function() onRefresh;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = AppColors.getThemeColors(context);
+    final primary = Theme.of(context).colorScheme.primary;
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.account_balance_wallet_outlined,
+                size: 56, color: colors.textTertiary),
+            const SizedBox(height: 16),
+            Text(
+              ownedCount == 0
+                  ? 'No wallets found'
+                  : 'You need at least two wallets to exchange',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: colors.textPrimary,
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              ownedCount == 0
+                  ? 'Fund a fiat or crypto wallet, then try again.'
+                  : 'Open another currency wallet on your home screen, then return here.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: colors.textSecondary, fontSize: 14),
+            ),
+            const SizedBox(height: 20),
+            TextButton(
+              onPressed: onRefresh,
+              child: Text('Refresh', style: TextStyle(color: primary)),
+            ),
+          ],
+        ),
       ),
     );
   }
 }
 
-class _SwapInputScreen extends StatefulWidget {
+class _ExchangeInputScreen extends StatefulWidget {
   final VoidCallback onNext;
   final TextEditingController fromCtrl;
   final String fromCurrency;
@@ -427,7 +718,7 @@ class _SwapInputScreen extends StatefulWidget {
   final VoidCallback onFromCurrencyTap;
   final VoidCallback onToCurrencyTap;
 
-  const _SwapInputScreen({
+  const _ExchangeInputScreen({
     required this.onNext,
     required this.fromCtrl,
     required this.fromCurrency,
@@ -442,21 +733,19 @@ class _SwapInputScreen extends StatefulWidget {
   });
 
   @override
-  State<_SwapInputScreen> createState() => _SwapInputScreenState();
+  State<_ExchangeInputScreen> createState() => _ExchangeInputScreenState();
 }
 
-class _SwapInputScreenState extends State<_SwapInputScreen> {
+class _ExchangeInputScreenState extends State<_ExchangeInputScreen> {
   @override
   void initState() {
     super.initState();
-    // Listen to text changes to update the received amount
     widget.fromCtrl.addListener(_onAmountChanged);
   }
 
   @override
-  void didUpdateWidget(_SwapInputScreen oldWidget) {
+  void didUpdateWidget(_ExchangeInputScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // If rate or currencies changed, update the received amount
     if (oldWidget.rate != widget.rate ||
         oldWidget.fromCurrency != widget.fromCurrency ||
         oldWidget.toCurrency != widget.toCurrency) {
@@ -471,123 +760,143 @@ class _SwapInputScreenState extends State<_SwapInputScreen> {
   }
 
   void _onAmountChanged() {
-    // Trigger rebuild when amount changes to recalculate received amount
-    if (mounted) {
-      setState(() {});
-    }
+    if (mounted) setState(() {});
   }
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final primaryColor = theme.colorScheme.primary;
+    final colors = AppColors.getThemeColors(context);
+    final primary = Theme.of(context).colorScheme.primary;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final fromAmount = double.tryParse(widget.fromCtrl.text) ?? 0;
     final toAmount = fromAmount * widget.rate;
-    // Calculate fee (e.g., 0.5% of the swap amount)
-    final fee = fromAmount * 0.005;
-    final totalFromAmount = fromAmount + fee;
-    
-    // Log fee calculation
-    if (fromAmount > 0) {
-      Logger.debug('💰 FEE CALCULATION');
-      Logger.debug('  From Amount: $fromAmount ${widget.fromCurrency}');
-      Logger.debug('  Fee Rate: 0.5% (0.005)');
-      Logger.debug('  Calculated Fee: $fee ${widget.fromCurrency}');
-      Logger.debug('  Total Amount: $totalFromAmount ${widget.fromCurrency}');
-      Logger.debug('  Exchange Rate: ${widget.rate}');
-      Logger.debug('  To Amount: $toAmount ${widget.toCurrency}');
-    }
+    final canContinue = fromAmount > 0 && widget.rate > 0;
+
+    // Soft filled CTA like the reference (light primary when enabled).
+    final continueBg = canContinue
+        ? (isDark ? primary.withValues(alpha: 0.85) : primary)
+        : colors.surfaceVariant.withValues(alpha: isDark ? 0.55 : 0.9);
+    final continueFg = canContinue ? Colors.white : colors.textTertiary;
 
     return Column(
       children: [
         Expanded(
-          child: ListView(
-            padding: const EdgeInsets.all(16.0),
+          child: Stack(
+            alignment: Alignment.center,
             children: [
-              const SizedBox(height: 8),
-              _SwapCurrencyCard(
-                label: 'You Send',
-                currency: widget.fromCurrency,
-                balance: widget.fromBalance,
-                loading: widget.loadingBalances,
-                controller: widget.fromCtrl,
-                onCurrencyTap: widget.onFromCurrencyTap,
+              Column(
+                children: [
+                  Expanded(
+                    child: _ExchangePanel(
+                      label: 'Send',
+                      currency: widget.fromCurrency,
+                      balance: widget.fromBalance,
+                      loading: widget.loadingBalances,
+                      controller: widget.fromCtrl,
+                      onAssetTap: widget.onFromCurrencyTap,
+                      isTop: true,
+                    ),
+                  ),
+                  Expanded(
+                    child: _ExchangePanel(
+                      label: 'Get',
+                      currency: widget.toCurrency,
+                      balance: widget.toBalance,
+                      loading: widget.loadingBalances,
+                      displayAmount: _formatExchangeAmount(
+                        toAmount,
+                        widget.toCurrency,
+                      ),
+                      onAssetTap: widget.onToCurrencyTap,
+                      isTop: false,
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(height: 8),
-              Center(
-                child: IconButton(
-                  icon: Icon(Icons.swap_vert, color: primaryColor, size: 32),
-                  onPressed: widget.onSwapCurrencies,
-                  style: IconButton.styleFrom(
-                    backgroundColor: primaryColor.withValues(alpha: 0.15),
-                    shape: const CircleBorder(),
-                    padding: const EdgeInsets.all(12),
+              // Flip control sitting on the seam between panels.
+              Material(
+                color: colors.background,
+                shape: const CircleBorder(),
+                child: InkWell(
+                  customBorder: const CircleBorder(),
+                  onTap: widget.onSwapCurrencies,
+                  child: Container(
+                    width: 44,
+                    height: 44,
+                    decoration: BoxDecoration(
+                      color: isDark ? const Color(0xFF1A2332) : colors.surface,
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: isDark
+                            ? Colors.white.withValues(alpha: 0.08)
+                            : const Color(0xFFE5E7EB),
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.25),
+                          blurRadius: 10,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: Icon(
+                      Icons.swap_vert_rounded,
+                      color: colors.textPrimary,
+                      size: 22,
+                    ),
                   ),
                 ),
               ),
-              const SizedBox(height: 8),
-              _SwapCurrencyCard(
-                label: 'You Receive',
-                currency: widget.toCurrency,
-                balance: widget.toBalance,
-                loading: widget.loadingBalances,
-                amount: toAmount,
-                onCurrencyTap: widget.onToCurrencyTap,
-              ),
-              const SizedBox(height: 16),
-              // Exchange rate display
-              _ExchangeRateDisplay(
-                fromCurrency: widget.fromCurrency,
-                toCurrency: widget.toCurrency,
-                rate: widget.rate,
-              ),
-              const SizedBox(height: 24),
-              // Fees component
-              if (fromAmount > 0)
-                _FeesCard(
-                  fee: fee,
-                  totalAmount: totalFromAmount,
-                  currency: widget.fromCurrency,
-                ),
             ],
           ),
         ),
-        // Button at bottom
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: AppColors.getThemeColors(context).background,
-            boxShadow: Theme.of(context).brightness == Brightness.light
-                ? [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.04),
-                      blurRadius: 8,
-                      offset: const Offset(0, -2),
-                    ),
-                  ]
-                : null,
+        if (fromAmount > 0)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
+            child: Text(
+              widget.rate > 0
+                  ? '1 ${widget.fromCurrency} = ${widget.rate.toStringAsFixed(4)} ${widget.toCurrency}'
+                  : 'Loading rate...',
+              style: TextStyle(
+                color: colors.textSecondary,
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
           ),
-          child: SafeArea(
+        SafeArea(
+          top: false,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 14, 20, 16),
             child: SizedBox(
               width: double.infinity,
+              height: 54,
               child: ElevatedButton(
-                onPressed: fromAmount > 0 ? widget.onNext : null,
+                onPressed: canContinue ? widget.onNext : null,
                 style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  backgroundColor: fromAmount > 0 ? primaryColor : AppColors.getThemeColors(context).textTertiary,
-                  foregroundColor: Colors.white,
-                  disabledBackgroundColor: AppColors.getThemeColors(context).textTertiary,
+                  backgroundColor: continueBg,
+                  foregroundColor: continueFg,
+                  disabledBackgroundColor: continueBg,
+                  disabledForegroundColor: continueFg,
+                  elevation: 0,
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(28),
                   ),
                 ),
-                child: const Text(
-                  'Confirm and Swap',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                  ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      'Continue',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        color: continueFg,
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    Icon(Icons.chevron_right_rounded, size: 22, color: continueFg),
+                  ],
                 ),
               ),
             ),
@@ -598,143 +907,189 @@ class _SwapInputScreenState extends State<_SwapInputScreen> {
   }
 }
 
-class _SwapCurrencyCard extends StatelessWidget {
+class _ExchangePanel extends StatelessWidget {
+  const _ExchangePanel({
+    required this.label,
+    required this.currency,
+    required this.balance,
+    required this.onAssetTap,
+    required this.isTop,
+    this.loading = false,
+    this.controller,
+    this.displayAmount,
+  });
+
   final String label;
   final String currency;
   final double balance;
   final bool loading;
   final TextEditingController? controller;
-  final double? amount; // Used for the "You Receive" card
-  final VoidCallback onCurrencyTap;
+  final String? displayAmount;
+  final VoidCallback onAssetTap;
+  final bool isTop;
 
-  const _SwapCurrencyCard({
-    required this.label,
-    required this.currency,
-    required this.balance,
-    this.loading = false,
-    this.controller,
-    this.amount,
-    required this.onCurrencyTap,
-  });
+  static const _noBorder = OutlineInputBorder(
+    borderSide: BorderSide.none,
+    borderRadius: BorderRadius.zero,
+  );
 
   @override
   Widget build(BuildContext context) {
     final colors = AppColors.getThemeColors(context);
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    // Slightly different shades for Send vs Get, matching the reference stack.
+    final panelColor = isDark
+        ? (isTop ? const Color(0xFF151C2A) : const Color(0xFF0F1520))
+        : (isTop ? Colors.white : const Color(0xFFF8FAFC));
+
     return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: isDark 
-            ? colors.surface // Dark slate for dark mode
-            : Colors.white.withValues(alpha: 0.9), // Translucent white for light mode
-        borderRadius: BorderRadius.circular(16),
-        border: isDark 
-            ? null
-            : Border.all(
-                color: const Color(0xFFE5E7EB),
-                width: 1,
-              ),
-        boxShadow: isDark
-            ? null
-            : [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.04),
-                  blurRadius: 8,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-      ),
+      width: double.infinity,
+      padding: EdgeInsets.fromLTRB(20, isTop ? 12 : 28, 20, isTop ? 28 : 12),
+      color: panelColor,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(label, style: TextStyle(color: colors.textSecondary)),
-              if (loading)
-                SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: Theme.of(context).colorScheme.primary,
-                  ),
-                )
-              else
-                Text(
-                  'Balance: ${balance.toStringAsFixed(2)}',
-                  style: TextStyle(color: colors.textSecondary),
-                ),
-            ],
+          Text(
+            label,
+            style: TextStyle(
+              color: colors.textSecondary,
+              fontSize: 15,
+              fontWeight: FontWeight.w500,
+            ),
           ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              GestureDetector(
-                onTap: onCurrencyTap,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: isDark 
-                        ? colors.background 
-                        : Colors.white.withValues(alpha: 0.95),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(
-                      color: isDark ? colors.surfaceVariant : const Color(0xFFE5E7EB),
-                    ),
+          const SizedBox(height: 8),
+          if (controller != null)
+            // Borderless amount field — theme input borders are forced off.
+            Theme(
+              data: Theme.of(context).copyWith(
+                inputDecorationTheme: const InputDecorationTheme(
+                  border: _noBorder,
+                  enabledBorder: _noBorder,
+                  focusedBorder: _noBorder,
+                  disabledBorder: _noBorder,
+                  errorBorder: _noBorder,
+                  focusedErrorBorder: _noBorder,
+                  filled: false,
+                  isDense: true,
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ),
+              child: TextField(
+                controller: controller,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                cursorColor: Theme.of(context).colorScheme.primary,
+                style: TextStyle(
+                  fontSize: 40,
+                  fontWeight: FontWeight.w700,
+                  color: colors.textPrimary,
+                  height: 1.1,
+                ),
+                decoration: InputDecoration(
+                  border: InputBorder.none,
+                  enabledBorder: InputBorder.none,
+                  focusedBorder: InputBorder.none,
+                  disabledBorder: InputBorder.none,
+                  errorBorder: InputBorder.none,
+                  focusedErrorBorder: InputBorder.none,
+                  filled: false,
+                  isDense: true,
+                  contentPadding: EdgeInsets.zero,
+                  hintText: '0.00',
+                  hintStyle: TextStyle(
+                    color: colors.textTertiary.withValues(alpha: 0.7),
+                    fontSize: 40,
+                    fontWeight: FontWeight.w700,
+                    height: 1.1,
                   ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
+                ),
+              ),
+            )
+          else
+            Text(
+              displayAmount ?? '0.00',
+              style: TextStyle(
+                fontSize: 40,
+                fontWeight: FontWeight.w700,
+                color: colors.textPrimary,
+                height: 1.1,
+              ),
+            ),
+          const Spacer(),
+          Text(
+            'Asset',
+            style: TextStyle(
+              color: colors.textTertiary,
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const SizedBox(height: 8),
+          InkWell(
+            onTap: onAssetTap,
+            borderRadius: BorderRadius.circular(12),
+            child: Row(
+              children: [
+                CurrencyLogo(code: currency, size: 28),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      CurrencyLogo(code: currency, size: 20),
-                      const SizedBox(width: 6),
-                      Text(
-                        currency,
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
-                          color: colors.textPrimary,
-                        ),
+                      Row(
+                        children: [
+                          Text(
+                            currency,
+                            style: TextStyle(
+                              color: colors.textPrimary,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 15,
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: isDark
+                                  ? Colors.white.withValues(alpha: 0.08)
+                                  : const Color(0xFFF1F5F9),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              currency == 'USDT' || currency == 'USDC'
+                                  ? 'Crypto'
+                                  : 'Fiat',
+                              style: TextStyle(
+                                color: colors.textTertiary,
+                                fontSize: 10,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
-                      const SizedBox(width: 4),
-                      Icon(
-                        Icons.keyboard_arrow_down,
-                        size: 20,
-                        color: colors.textPrimary,
+                      const SizedBox(height: 2),
+                      Text(
+                        loading
+                            ? 'Loading…'
+                            : '${CurrencyLogo.displayNameFor(currency)} · Bal ${balance.toStringAsFixed(2)}',
+                        style: TextStyle(
+                          color: colors.textSecondary,
+                          fontSize: 12,
+                        ),
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ],
                   ),
                 ),
-              ),
-              const Spacer(),
-              if (controller != null)
-                Expanded(
-                  child: TextField(
-                    controller: controller,
-                    textAlign: TextAlign.end,
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    style: TextStyle(
-                      fontSize: 28,
-                      fontWeight: FontWeight.bold,
-                      color: colors.textPrimary,
-                    ),
-                    decoration: InputDecoration(
-                      border: InputBorder.none,
-                      hintText: '0.00',
-                      hintStyle: TextStyle(color: colors.textSecondary),
-                    ),
-                  ),
-                )
-              else
-                Text(
-                  amount?.toStringAsFixed(5) ?? '0.00',
-                  style: TextStyle(
-                    fontSize: 28,
-                    fontWeight: FontWeight.bold,
-                    color: colors.textPrimary,
-                  ),
+                Icon(
+                  Icons.keyboard_arrow_down_rounded,
+                  color: colors.textSecondary,
                 ),
-            ],
+              ],
+            ),
           ),
         ],
       ),
@@ -742,8 +1097,7 @@ class _SwapCurrencyCard extends StatelessWidget {
   }
 }
 
-
-class _SwapConfirmationScreen extends StatelessWidget {
+class _ExchangeConfirmationScreen extends StatelessWidget {
   final VoidCallback onNext;
   final double fromAmount;
   final String fromCurrency;
@@ -752,7 +1106,7 @@ class _SwapConfirmationScreen extends StatelessWidget {
   final double rate;
   final bool isSubmitting;
 
-  const _SwapConfirmationScreen({
+  const _ExchangeConfirmationScreen({
     required this.onNext,
     required this.fromAmount,
     required this.fromCurrency,
@@ -766,249 +1120,161 @@ class _SwapConfirmationScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = AppColors.getThemeColors(context);
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final primary = Theme.of(context).colorScheme.primary;
-    return Padding(
-      padding: const EdgeInsets.all(16.0),
-      child: Column(
-        children: [
-          Text(
-            'Swap Details',
-            style: TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-              color: colors.textPrimary,
-            ),
-          ),
-          const SizedBox(height: 24),
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: isDark 
-                  ? colors.surface 
-                  : Colors.white.withValues(alpha: 0.9),
-              borderRadius: BorderRadius.circular(16),
-              border: isDark 
-                  ? null
-                  : Border.all(color: const Color(0xFFE5E7EB)),
-              boxShadow: isDark
-                  ? null
-                  : [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.04),
-                        blurRadius: 8,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
-            ),
-            child: Column(
-              children: [
-                _DetailItem(label: 'From', amount: fromAmount, currency: fromCurrency),
-                Divider(
-                  height: 32,
-                  color: isDark ? colors.surfaceVariant : const Color(0xFFE5E7EB),
-                ),
-                _DetailItem(label: 'To', amount: toAmount, currency: toCurrency, isReceiving: true),
-              ],
-            ),
-          ),
-          const Spacer(),
-          ElevatedButton(
-            onPressed: isSubmitting ? null : onNext,
-            style: ElevatedButton.styleFrom(
-              padding: const EdgeInsets.symmetric(vertical: 16),
-              backgroundColor: primary,
-              foregroundColor: Colors.white,
-              disabledBackgroundColor: colors.textTertiary,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
+    final fee = fromAmount * 0.005;
+    final cardColor = isDark ? colors.surface : Colors.white.withValues(alpha: 0.95);
+
+    return Column(
+      children: [
+        Expanded(
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
+            children: [
+              _ConfirmLegCard(
+                label: 'Send',
+                amount: _formatExchangeAmount(fromAmount, fromCurrency),
+                currency: fromCurrency,
+                color: cardColor,
               ),
-              minimumSize: const Size(double.infinity, 50),
-            ),
-            child: isSubmitting
-                ? const SizedBox(
-                    height: 24,
-                    width: 24,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+              Center(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  child: Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: colors.surface,
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: colors.border.withValues(alpha: 0.5),
+                      ),
                     ),
-                  )
-                : const Text(
-                    'Confirm Swap',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
+                    child: Icon(
+                      Icons.arrow_downward_rounded,
+                      color: colors.textSecondary,
+                      size: 20,
                     ),
                   ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _FeesCard extends StatelessWidget {
-  final double fee;
-  final double totalAmount;
-  final String currency;
-
-  const _FeesCard({
-    required this.fee,
-    required this.totalAmount,
-    required this.currency,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = AppColors.getThemeColors(context);
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: isDark 
-            ? AppColors.surfaceDark 
-            : Colors.white.withValues(alpha: 0.9),
-        borderRadius: BorderRadius.circular(16),
-        border: isDark 
-            ? null
-            : Border.all(color: const Color(0xFFE5E7EB)),
-        boxShadow: isDark
-            ? null
-            : [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.04),
-                  blurRadius: 8,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-      ),
-      child: Column(
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                'Network Fee',
-                style: TextStyle(
-                  color: colors.textSecondary,
-                  fontSize: 14,
                 ),
               ),
-              Text(
-                '${fee.toStringAsFixed(5)} $currency',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
-                  color: colors.textPrimary,
-                ),
+              _ConfirmLegCard(
+                label: 'Get',
+                amount: _formatExchangeAmount(toAmount, toCurrency),
+                currency: toCurrency,
+                color: cardColor,
+              ),
+              const SizedBox(height: 28),
+              _ConfirmMetaRow(
+                label: 'Exchange rate',
+                value: rate > 0
+                    ? '1 $fromCurrency = ${rate.toStringAsFixed(4)} $toCurrency'
+                    : '—',
+              ),
+              const SizedBox(height: 14),
+              _ConfirmMetaRow(
+                label: 'Network fee',
+                value: '${_formatExchangeAmount(fee, fromCurrency)} $fromCurrency',
+              ),
+              const SizedBox(height: 14),
+              const _ConfirmMetaRow(
+                label: 'Estimated arrival',
+                value: 'Instant',
               ),
             ],
           ),
-          const SizedBox(height: 8),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                'Total',
-                style: TextStyle(
-                  color: colors.textSecondary,
-                  fontSize: 14,
-                ),
-              ),
-              Text(
-                '${totalAmount.toStringAsFixed(5)} $currency',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color: colors.textPrimary,
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ExchangeRateDisplay extends StatelessWidget {
-  final String fromCurrency;
-  final String toCurrency;
-  final double rate;
-
-  const _ExchangeRateDisplay({
-    required this.fromCurrency,
-    required this.toCurrency,
-    required this.rate,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = AppColors.getThemeColors(context);
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    // Handle invalid or zero rates
-    final isValidRate = rate > 0 && rate.isFinite;
-    final displayRate = isValidRate ? rate : 0.0;
-    
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: BoxDecoration(
-        color: isDark 
-            ? AppColors.surfaceDark 
-            : Colors.white.withValues(alpha: 0.9),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-                    color: isDark ? colors.surfaceVariant : const Color(0xFFE5E7EB),
-          width: 1,
         ),
-        boxShadow: isDark
-            ? null
-            : [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.04),
-                  blurRadius: 8,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            Icons.info_outline,
-            size: 16,
-            color: colors.textSecondary,
-          ),
-          const SizedBox(width: 8),
-          Text(
-            isValidRate 
-                ? '1 $fromCurrency = ${displayRate.toStringAsFixed(4)} $toCurrency'
-                : 'Loading rate...',
-            style: TextStyle(
-              fontSize: 14,
-              color: colors.textSecondary,
-              fontWeight: FontWeight.w500,
+        SafeArea(
+          top: false,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
+            child: SlideToConfirm(
+              enabled: fromAmount > 0 && !isSubmitting,
+              isLoading: isSubmitting,
+              onConfirmed: onNext,
             ),
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }
 
-class _DetailItem extends StatelessWidget {
-  final String label;
-  final double amount;
-  final String currency;
-  final bool isReceiving;
-
-  const _DetailItem({
+class _ConfirmLegCard extends StatelessWidget {
+  const _ConfirmLegCard({
     required this.label,
     required this.amount,
     required this.currency,
-    this.isReceiving = false,
+    required this.color,
   });
+
+  final String label;
+  final String amount;
+  final String currency;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = AppColors.getThemeColors(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: isDark
+              ? colors.border.withValues(alpha: 0.4)
+              : const Color(0xFFE5E7EB),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text(
+                label,
+                style: TextStyle(
+                  color: colors.textSecondary,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const Spacer(),
+              CurrencyLogo(code: currency, size: 20),
+              const SizedBox(width: 6),
+              Text(
+                currency,
+                style: TextStyle(
+                  color: colors.textPrimary,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 14,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text(
+            amount,
+            style: TextStyle(
+              color: colors.textPrimary,
+              fontSize: 32,
+              fontWeight: FontWeight.w700,
+              height: 1.1,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ConfirmMetaRow extends StatelessWidget {
+  const _ConfirmMetaRow({required this.label, required this.value});
+
+  final String label;
+  final String value;
 
   @override
   Widget build(BuildContext context) {
@@ -1019,27 +1285,19 @@ class _DetailItem extends StatelessWidget {
           label,
           style: TextStyle(
             color: colors.textSecondary,
-            fontSize: 16,
+            fontSize: 14,
           ),
         ),
-        const Spacer(),
-        Text(
-          '${isReceiving ? '' : '-'}${amount.toStringAsFixed(5)}',
-          style: TextStyle(
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
-            color: colors.textPrimary,
-          ),
-        ),
-        const SizedBox(width: 8),
-        CurrencyLogo(code: currency, size: 20),
-        const SizedBox(width: 4),
-        Text(
-          currency,
-          style: TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.w500,
-            color: colors.textPrimary,
+        const SizedBox(width: 16),
+        Expanded(
+          child: Text(
+            value,
+            textAlign: TextAlign.end,
+            style: TextStyle(
+              color: colors.textPrimary,
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+            ),
           ),
         ),
       ],

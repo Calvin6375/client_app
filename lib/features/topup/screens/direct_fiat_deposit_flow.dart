@@ -10,6 +10,7 @@ import 'package:pretium/features/topup/utils/receipt_image_export.dart';
 import 'package:pretium/features/topup/utils/receipt_save_helper.dart';
 import 'package:pretium/services/payment_service.dart';
 import 'package:pretium/utils/async_action_guard.dart';
+import 'package:pretium/widgets/app_shimmer.dart';
 
 /// Direct fiat deposit (top-up) or [DirectFiatFlowKind.withdraw] (Kenya KES payout wizard).
 enum DirectFiatFlowKind { deposit, withdraw }
@@ -1275,11 +1276,7 @@ class _DirectFiatDepositScreenState extends State<DirectFiatDepositScreen> {
             tooltip: 'Download receipt',
             onPressed: _savingReceiptImage ? null : _saveReceiptToGallery,
             icon: _savingReceiptImage
-                ? SizedBox(
-                    width: 22,
-                    height: 22,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: primary),
-                  )
+                ? const ShimmerBusyIndicator()
                 : Icon(Icons.download_rounded, color: colors.textPrimary),
           ),
         ],
@@ -1383,11 +1380,7 @@ class _DirectFiatDepositScreenState extends State<DirectFiatDepositScreen> {
               OutlinedButton.icon(
                 onPressed: _savingReceiptImage ? null : _saveReceiptToGallery,
                 icon: _savingReceiptImage
-                    ? SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2, color: primary),
-                      )
+                    ? const ShimmerBusyIndicator()
                     : Icon(Icons.download_rounded, color: primary),
                 label: Text(
                   _savingReceiptImage ? 'Saving…' : 'Download receipt',

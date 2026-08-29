@@ -57,10 +57,10 @@ class CurrencyPickerBottomSheet extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               child: Row(
                 children: [
-                  Icon(Icons.flag, color: primary),
+                  Icon(Icons.account_balance_wallet_outlined, color: primary),
                   const SizedBox(width: 8),
                   Text(
-                    'Select currency',
+                    'Select wallet',
                     style: TextStyle(
                       fontWeight: FontWeight.w700,
                       fontSize: 16,
@@ -81,23 +81,39 @@ class CurrencyPickerBottomSheet extends StatelessWidget {
                 itemBuilder: (context, i) {
                   final c = currencies[i];
                   final isSelected = c.code == selectedCode;
+                  final logoSize = CurrencyLogo.hasAssetLogo(c.code) ? 26.0 : 24.0;
                   return ListTile(
-                    leading: CircleAvatar(
-                      backgroundColor: isDark 
-                          ? colors.background 
-                          : Colors.white.withValues(alpha: 0.95),
+                    leading: Container(
+                      width: 40,
+                      height: 40,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: isDark
+                            ? colors.background
+                            : Colors.white.withValues(alpha: 0.95),
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: isDark
+                              ? colors.border.withValues(alpha: 0.45)
+                              : const Color(0xFFE5E7EB),
+                        ),
+                      ),
                       child: CurrencyLogo(
                         code: c.code,
-                        size: 22,
+                        size: logoSize,
+                        // Prefer catalog flags/logos; only use model emoji if real.
                         fallbackEmoji: c.flagEmoji,
                       ),
                     ),
                     title: Text(
                       c.code,
-                      style: TextStyle(color: colors.textPrimary),
+                      style: TextStyle(
+                        color: colors.textPrimary,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                     subtitle: Text(
-                      c.name,
+                      c.name.isNotEmpty ? c.name : CurrencyLogo.displayNameFor(c.code),
                       style: TextStyle(color: colors.textSecondary),
                     ),
                     trailing: isSelected

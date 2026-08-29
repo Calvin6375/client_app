@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:pretium/models/transaction_details_model.dart';
 import 'package:pretium/core/constants/app_colors.dart';
+import 'package:pretium/widgets/app_shimmer.dart';
 
 class ReviewDetailsScreen extends StatelessWidget {
   final VoidCallback onNext;
@@ -93,16 +94,7 @@ class ReviewDetailsScreen extends StatelessWidget {
               disabledBackgroundColor: colors.textTertiary,
             ),
             child: isSubmitting
-                ? SizedBox(
-                    height: 24,
-                    width: 24,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      valueColor: AlwaysStoppedAnimation<Color>(
-                        isDark ? colors.onPrimary : Colors.white,
-                      ),
-                    ),
-                  )
+                ? const ShimmerBusyIndicator(onPrimary: true)
                 : Text(
                     'Send',
                     style: TextStyle(

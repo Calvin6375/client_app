@@ -13,6 +13,7 @@ import 'package:pretium/core/constants/app_colors.dart';
 import 'package:pretium/services/dashboard_session_cache.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:pretium/utils/firebase_utils.dart';
+import 'package:pretium/widgets/app_shimmer.dart';
 
 class WalletCard extends StatefulWidget {
   final int selectedTab;
@@ -856,14 +857,7 @@ class _WalletCardWidgetState extends State<WalletCardWidget> {
                               ),
                               const SizedBox(height: 2),
                               if (widget.loading)
-                                SizedBox(
-                                  width: 20,
-                                  height: 20,
-                                  child: CircularProgressIndicator(
-                                    color: colors.textPrimary,
-                                    strokeWidth: 2,
-                                  ),
-                                )
+                                const ShimmerBusyIndicator(width: 72, height: 18)
                               else if (widget.error != null)
                                 Text(
                                   '—',

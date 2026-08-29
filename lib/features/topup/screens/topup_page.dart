@@ -16,6 +16,7 @@ import 'package:pretium/core/constants/app_colors.dart';
 import 'package:pretium/features/topup/models/topup_deposit_country.dart';
 import 'package:pretium/features/topup/screens/payment_checkout_webview_page.dart';
 import 'package:pretium/widgets/currency_logo.dart';
+import 'package:pretium/widgets/app_shimmer.dart';
 
 /// Fiat codes in the Set amount dropdown; includes every [TopupDepositCountry] code plus extras.
 List<String> _topupFiatCurrencyCodes({String? includeCode}) {
@@ -473,14 +474,7 @@ class _TopUpPageState extends State<TopUpPage> {
                   ),
                   const SizedBox(height: 8),
                   if (_isLoadingBalance && !_hasBalanceData)
-                    SizedBox(
-                      height: 16,
-                      width: 16,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: primary,
-                      ),
-                    )
+                    const ShimmerBusyIndicator(width: 96, height: 12)
                   else
                     Text(
                       availableLabel,
@@ -558,14 +552,7 @@ class _TopUpPageState extends State<TopUpPage> {
                       ? null
                       : _onNextPressed,
                   child: _isProcessingPayment
-                      ? SizedBox(
-                          height: 22,
-                          width: 22,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: isDark ? colors.onPrimary : Colors.white,
-                          ),
-                        )
+                      ? const ShimmerBusyIndicator(onPrimary: true)
                       : Text(
                           nextLabel,
                           style: const TextStyle(

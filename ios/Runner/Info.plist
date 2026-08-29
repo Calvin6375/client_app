@@ -53,6 +53,8 @@
 	<string>Upload a QR code image from your photo library to pay merchants.</string>
 	<key>NSFaceIDUsageDescription</key>
 	<string>Authenticate with Face ID to sign in quickly and securely.</string>
+	<key>NSContactsUsageDescription</key>
+	<string>Choose a recipient from your contacts when sending money.</string>
 	<key>LSApplicationQueriesSchemes</key>
 	<array>
 		<string>whatsapp</string>

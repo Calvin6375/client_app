@@ -12,6 +12,7 @@ import 'package:pretium/utils/logger.dart';
 import 'package:pretium/utils/async_action_guard.dart';
 import 'package:pretium/core/constants/app_colors.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:pretium/widgets/app_shimmer.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -320,14 +321,7 @@ class _LoginScreenState extends State<LoginPage> with WidgetsBindingObserver {
                         ),
                         onPressed: _isLoading ? null : _signInWithPassword,
                         child: _isLoading
-                            ? const SizedBox(
-                                height: 22,
-                                width: 22,
-                                child: CircularProgressIndicator(
-                                  color: Colors.white,
-                                  strokeWidth: 2,
-                                ),
-                              )
+                            ? const ShimmerBusyIndicator(onPrimary: true)
                             : const Text(
                                 'Login',
                                 style: TextStyle(fontSize: 18, color: Colors.white),

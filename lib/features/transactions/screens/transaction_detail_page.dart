@@ -13,6 +13,7 @@ import 'package:pretium/services/transactions_service.dart';
 import 'package:pretium/utils/async_action_guard.dart';
 import 'package:pretium/utils/logger.dart';
 import 'package:pretium/utils/provider_display_sanitizer.dart';
+import 'package:pretium/widgets/app_shimmer.dart';
 
 class TransactionDetailPage extends StatefulWidget {
   final Transaction transaction;
@@ -116,7 +117,7 @@ class _TransactionDetailPageState extends State<TransactionDetailPage> {
       ),
       body: SafeArea(
         child: _loadingDetails
-            ? const Center(child: CircularProgressIndicator())
+            ? const PageContentShimmer()
             : SingleChildScrollView(
           padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
           child: Column(
@@ -183,11 +184,7 @@ class _TransactionDetailPageState extends State<TransactionDetailPage> {
                 OutlinedButton.icon(
                   onPressed: _savingReceipt ? null : _downloadReceipt,
                   icon: _savingReceipt
-                      ? SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: primary),
-                        )
+                      ? const ShimmerBusyIndicator()
                       : Icon(Icons.download_rounded, color: primary),
                   label: Text(
                     _savingReceipt ? 'Saving…' : 'Download receipt',

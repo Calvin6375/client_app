@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:pretium/core/constants/app_colors.dart';
+import 'package:pretium/widgets/app_shimmer.dart';
 
 /// Live camera QR scanner with optional gallery upload.
 /// Pops with the scanned/selected code [String], or null if cancelled.
@@ -145,11 +146,7 @@ class _QrScanPageState extends State<QrScanPage> {
             tooltip: 'Upload from gallery',
             onPressed: _pickingGallery ? null : _pickFromGallery,
             icon: _pickingGallery
-                ? SizedBox(
-                    width: 22,
-                    height: 22,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: primary),
-                  )
+                ? const ShimmerBusyIndicator()
                 : Icon(Icons.photo_library_outlined, color: colors.textPrimary),
           ),
         ],

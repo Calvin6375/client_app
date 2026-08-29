@@ -5,6 +5,7 @@ import 'package:pretium/features/auth/widgets/wallet_icon_header.dart';
 import 'package:pretium/services/auth_service.dart';
 import 'package:pretium/utils/logger.dart';
 import 'package:pretium/utils/async_action_guard.dart';
+import 'package:pretium/widgets/app_shimmer.dart';
 
 /// Password reset via [AuthService.sendPasswordResetEmail] (Firebase Auth).
 class ForgotPasswordPage extends StatefulWidget {
@@ -146,14 +147,7 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
                     onPressed: _isLoading ? null : _submit,
                     child:
                         _isLoading
-                            ? const SizedBox(
-                              height: 24,
-                              width: 24,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.white,
-                              ),
-                            )
+                            ? const ShimmerBusyIndicator(onPrimary: true)
                             : const Text(
                               'Send reset link',
                               style: TextStyle(

@@ -8,6 +8,7 @@ import 'package:pretium/core/constants/app_colors.dart';
 import 'package:pretium/widgets/currency_logo.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:pretium/utils/firebase_utils.dart';
+import 'package:pretium/widgets/app_shimmer.dart';
 
 class SendAmountScreen extends StatefulWidget {
   final VoidCallback onNext;
@@ -464,14 +465,7 @@ class _SwapCurrencyCard extends StatelessWidget {
                 style: TextStyle(color: colors.textSecondary),
               ),
               if (loading)
-                SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: Theme.of(context).colorScheme.primary,
-                  ),
-                )
+                const ShimmerBusyIndicator(width: 64, height: 12)
               else
                 Text(
                   'Balance: ${balance.toStringAsFixed(2)}',

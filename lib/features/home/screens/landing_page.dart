@@ -5,6 +5,7 @@ import 'package:pretium/features/pay/screens/pay_page.dart';
 import 'package:pretium/core/constants/app_colors.dart';
 import 'package:pretium/app/route_names.dart';
 import 'package:pretium/services/app_access_guard.dart';
+import 'package:pretium/widgets/app_shimmer.dart';
 import '/widgets/header_widget.dart';
 import '/widgets/wallet_card.dart';
 import '/widgets/financial_service.dart';
@@ -102,7 +103,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     if (!_accessChecked) {
       return Scaffold(
         backgroundColor: AppColors.getThemeColors(context).background,
-        body: const Center(child: CircularProgressIndicator()),
+        body: const DashboardShimmer(),
       );
     }
 

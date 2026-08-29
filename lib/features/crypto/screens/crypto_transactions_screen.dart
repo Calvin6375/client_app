@@ -3,6 +3,7 @@ import 'package:pretium/core/constants/app_colors.dart';
 import 'package:pretium/features/crypto/models/crypto_transaction.dart';
 import 'package:pretium/features/crypto/services/crypto_api_service.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:pretium/widgets/app_shimmer.dart';
 
 class CryptoTransactionsScreen extends StatefulWidget {
   const CryptoTransactionsScreen({super.key});
@@ -77,9 +78,10 @@ class _CryptoTransactionsScreenState extends State<CryptoTransactionsScreen> {
         color: primary,
         child: _loading
             ? ListView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
                 children: const [
-                  SizedBox(height: 120),
-                  Center(child: CircularProgressIndicator()),
+                  TransactionListShimmer(),
                 ],
               )
             : _error != null

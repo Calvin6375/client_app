@@ -9,6 +9,7 @@ import 'package:pretium/services/transactions_service.dart';
 import 'package:pretium/features/transactions/screens/transaction_detail_page.dart';
 import 'package:pretium/features/transactions/widgets/transaction_list_tile.dart';
 import 'package:pretium/features/send_money/screens/send_money_page.dart';
+import 'package:pretium/widgets/app_shimmer.dart';
 import '/widgets/wallet_card.dart';
 
 class WalletPage extends StatefulWidget {
@@ -407,14 +408,11 @@ class _RecentTransactionsList extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = AppColors.getThemeColors(context);
-    final primary = Theme.of(context).colorScheme.primary;
 
     if (loading) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 24),
-          child: CircularProgressIndicator(color: primary),
-        ),
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 24),
+        child: TransactionListShimmer(itemCount: 4),
       );
     }
     if (error != null) {

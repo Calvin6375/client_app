@@ -10,6 +10,7 @@ import 'package:pretium/features/transactions/screens/transaction_detail_page.da
 import 'package:pretium/features/transactions/widgets/transaction_charts.dart';
 import 'package:pretium/features/transactions/widgets/transaction_list_tile.dart';
 import 'package:pretium/app/route_names.dart';
+import 'package:pretium/widgets/app_shimmer.dart';
 
 class TransactionsPage extends StatefulWidget {
   const TransactionsPage({super.key});
@@ -191,11 +192,7 @@ class _TransactionsPageState extends State<TransactionsPage> {
           child: OutlinedButton(
             onPressed: _loadingMore ? null : _loadMoreTransactions,
             child: _loadingMore
-                ? const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
+                ? const ShimmerBusyIndicator(onPrimary: false)
                 : const Text('Load more'),
           ),
         ),
@@ -384,8 +381,11 @@ class _TransactionsPageState extends State<TransactionsPage> {
             ),
             const SliverToBoxAdapter(child: SizedBox(height: 12)),
             if (_isLoading)
-              const SliverFillRemaining(
-                child: Center(child: CircularProgressIndicator()),
+              const SliverToBoxAdapter(
+                child: Padding(
+                  padding: EdgeInsets.fromLTRB(20, 8, 20, 24),
+                  child: TransactionListShimmer(itemCount: 8),
+                ),
               )
             else if (_error != null)
               SliverToBoxAdapter(
