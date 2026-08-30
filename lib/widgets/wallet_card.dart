@@ -1,16 +1,13 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:pretium/features/crypto/screens/usdc_receive_screen.dart';
-import 'package:pretium/features/crypto/services/crypto_api_service.dart';
 import 'package:pretium/features/pay/screens/pay_page.dart';
 import 'package:pretium/features/topup/models/topup_deposit_country.dart';
 import 'package:pretium/features/topup/screens/topup_page.dart';
-import 'package:pretium/features/withdraw/screens/withdraw_page.dart';
 import 'package:pretium/models/wallet_model.dart';
 import 'package:pretium/repositories/wallet_repository.dart';
 import 'package:pretium/core/constants/app_colors.dart';
 import 'package:pretium/services/dashboard_session_cache.dart';
+import 'package:pretium/services/wallet_balance_refresh.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:pretium/utils/firebase_utils.dart';
 import 'package:pretium/widgets/app_shimmer.dart';
@@ -25,7 +22,6 @@ class WalletCard extends StatefulWidget {
 
 class _WalletCardState extends State<WalletCard> {
   final WalletRepository _walletRepository = WalletRepository();
-  final CryptoApiService _cryptoApi = CryptoApiService();
   Wallet? _fiatWallet;
   bool _loading = false;
   String? _fiatError;
@@ -43,17 +39,17 @@ class _WalletCardState extends State<WalletCard> {
   final List<String> _availableCryptoCurrencies = ['USDT', 'USDC'];
   int _currentCryptoIndex = 0;
   final PageController _cryptoPageController = PageController();
-  StreamSubscription<Wallet?>? _usdcBalanceSubscription;
-  
+
   // Cache for balances to avoid unnecessary backend calls
   Wallet? _cachedFiatWallet;
   Wallet? _cachedCryptoWallet;
   DateTime? _cacheTimestamp;
   static const Duration _cacheValidityDuration = Duration(seconds: 30); // Cache valid for 30 seconds
-  
-  // Supported fiat currencies to check (KES first in carousel).
-  static const List<String> _supportedFiatCurrencies = ['KES', 'USD', 'NGN', 'GHS', 'UGX'];
+
   static const List<String> _supportedCryptoCurrencies = ['USDT', 'USDC'];
+  /// Always shown on home even at 0 balance; other currencies need balance > 0.
+  static const Set<String> _zeroBalanceAlwaysVisibleFiat = {'KES', 'USD'};
+  static const Set<String> _zeroBalanceAlwaysVisibleCrypto = {'USDT', 'USDC'};
   static const double _cardAspectRatio = 1.586; // ISO/IEC 7810 ID-1 card ratio
 
   /// Keeps KES as the first fiat wallet card whenever it is available.
@@ -63,6 +59,20 @@ class _WalletCardState extends State<WalletCard> {
       'KES',
       ...currencies.where((c) => c != 'KES'),
     ];
+  }
+
+  static bool _showFiatOnHome(String code, double balance) {
+    final upper = code.trim().toUpperCase();
+    if (upper.isEmpty) return false;
+    if (_zeroBalanceAlwaysVisibleFiat.contains(upper)) return true;
+    return balance > 0;
+  }
+
+  static bool _showCryptoOnHome(String code, double balance) {
+    final upper = code.trim().toUpperCase();
+    if (upper.isEmpty) return false;
+    if (_zeroBalanceAlwaysVisibleCrypto.contains(upper)) return true;
+    return balance > 0;
   }
 
   double _cardHeight(BuildContext context) {
@@ -106,8 +116,8 @@ class _WalletCardState extends State<WalletCard> {
   @override
   void initState() {
     super.initState();
+    WalletBalanceRefresh.revision.addListener(_onExternalBalanceRefresh);
     if (!isFirebaseInitialized()) return;
-    _subscribeUsdcBalance();
     // Stale-while-revalidate: paint last known balance immediately, then
     // refresh in the background without a loading spinner.
     final snap = DashboardSessionCache.instance.readWalletLastKnown();
@@ -128,19 +138,13 @@ class _WalletCardState extends State<WalletCard> {
     }
   }
 
-  void _subscribeUsdcBalance() {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return;
-
-    _usdcBalanceSubscription?.cancel();
-    _usdcBalanceSubscription = _walletRepository
-        .streamCryptoWalletBalance(user.uid, 'USDC')
-        .listen((wallet) {
-      if (!mounted || wallet == null) return;
-      setState(() {
-        _cryptoWallets['USDC'] = wallet;
-      });
-    });
+  void _onExternalBalanceRefresh() {
+    if (!mounted) return;
+    final snap = DashboardSessionCache.instance.readWalletLastKnown();
+    if (snap != null) {
+      setState(() => _hydrateFromSnapshotSync(snap));
+    }
+    _refreshBalance(silent: true, forceRefresh: true);
   }
 
   void _hydrateFromSnapshotSync(WalletSessionSnapshot snap) {
@@ -176,7 +180,7 @@ class _WalletCardState extends State<WalletCard> {
   
   @override
   void dispose() {
-    _usdcBalanceSubscription?.cancel();
+    WalletBalanceRefresh.revision.removeListener(_onExternalBalanceRefresh);
     _fiatPageController.dispose();
     _cryptoPageController.dispose();
     super.dispose();
@@ -211,94 +215,86 @@ class _WalletCardState extends State<WalletCard> {
       }
       
       if (!silent) {
-        setState(() { 
-          _loading = true; 
+        setState(() {
+          _loading = true;
           _fiatError = null;
           _cryptoError = null;
         });
       }
-      
-      // Load all available fiat currencies
-      final Map<String, Wallet> fiatWallets = {};
-      final List<String> availableCurrencies = [];
-      
-      // Try to load each supported fiat currency
-      for (final currency in _supportedFiatCurrencies) {
-        try {
-          final wallet = await _walletRepository.getWalletBalance(user.uid, currency: currency);
-          if (wallet != null && wallet.balance > 0) {
-            fiatWallets[currency] = wallet;
-            availableCurrencies.add(currency);
-          } else if (wallet != null) {
-            // Include wallets with 0 balance too, but prioritize non-zero
-            fiatWallets[currency] = wallet;
-            if (!availableCurrencies.contains(currency)) {
-              availableCurrencies.add(currency);
-            }
-          }
-        } catch (e) {
-          // Skip currencies that fail to load
-          continue;
-        }
-      }
-      
-      // Ensure at least USD is available (do not force it ahead of KES)
-      if (!fiatWallets.containsKey('USD')) {
-        final usdWallet = await _walletRepository.getWalletBalance(user.uid, currency: 'USD');
-        fiatWallets['USD'] = usdWallet ?? Wallet(currencyCode: 'USD', balance: 0.0);
-        if (!availableCurrencies.contains('USD')) {
-          availableCurrencies.add('USD');
-        }
-      }
 
-      final orderedFiatCurrencies = _withKesFirst(availableCurrencies);
-      
-      // Load crypto wallets (USDT from RTDB, USDC from RTDB + API for authoritative display)
-      final Map<String, Wallet> cryptoWallets = {};
-      for (final currency in _supportedCryptoCurrencies) {
-        try {
-          final wallet = await _walletRepository.getCryptoWalletBalance(user.uid, currency);
-          cryptoWallets[currency] = wallet ?? Wallet(currencyCode: currency, balance: 0.0);
-        } catch (_) {
-          cryptoWallets[currency] = Wallet(currencyCode: currency, balance: 0.0);
-        }
-      }
+      // Single GET /api/accounts — Firestore + USDC ledger (no RTDB wallet reads).
+      final accounts = await _walletRepository.fetchAccounts(
+        forceRefresh: forceRefresh,
+      );
 
-      // Refresh USDC available balance from Circle API (authoritative for send validation)
-      try {
-        final usdcBalance = await _cryptoApi.getBalance();
-        cryptoWallets['USDC'] = Wallet(
-          currencyCode: 'USDC',
-          balance: usdcBalance,
-          updatedAt: now,
+      final Map<String, Wallet> fiatWallets = Map<String, Wallet>.from(
+        accounts.fiatWallets,
+      );
+      for (final e in accounts.fiatBalances.entries) {
+        fiatWallets.putIfAbsent(
+          e.key,
+          () => Wallet(currencyCode: e.key, balance: e.value),
         );
-      } catch (_) {
-        // RTDB stream / repository value remains
       }
-      
+      // Always keep default fiat shells so KES/USD appear even at 0.
+      for (final code in _zeroBalanceAlwaysVisibleFiat) {
+        fiatWallets.putIfAbsent(
+          code,
+          () =>
+              accounts.fiatWallet(code) ?? Wallet(currencyCode: code, balance: 0),
+        );
+      }
+
+      // Home carousel: KES/USD always; other fiat only when balance > 0.
+      final availableCurrencies = fiatWallets.entries
+          .where((e) => _showFiatOnHome(e.key, e.value.balance))
+          .map((e) => e.key)
+          .toList();
+      final orderedFiatCurrencies = _withKesFirst(availableCurrencies);
+
+      final Map<String, Wallet> cryptoWallets = {
+        for (final code in _supportedCryptoCurrencies)
+          code: accounts.cryptoWallet(code) ??
+              Wallet(currencyCode: code, balance: 0),
+      };
+      for (final e in accounts.cryptoWallets.entries) {
+        cryptoWallets[e.key] = e.value;
+      }
+
+      // Home carousel: USDT/USDC always; other crypto only when balance > 0.
+      final cryptoCodes = cryptoWallets.entries
+          .where((e) => _showCryptoOnHome(e.key, e.value.balance))
+          .map((e) => e.key)
+          .toList();
+      if (!cryptoCodes.contains('USDT')) cryptoCodes.insert(0, 'USDT');
+      if (!cryptoCodes.contains('USDC')) cryptoCodes.add('USDC');
+
       if (!mounted) return;
-      
-      // Update cache
-      _cachedFiatWallet = fiatWallets[orderedFiatCurrencies.isNotEmpty ? orderedFiatCurrencies[0] : 'USD'] ?? Wallet(currencyCode: 'USD', balance: 0.0);
-      _cachedCryptoWallet = cryptoWallets['USDT'] ?? Wallet(currencyCode: 'USDT', balance: 0.0);
+
+      _cachedFiatWallet = fiatWallets[
+              orderedFiatCurrencies.isNotEmpty ? orderedFiatCurrencies[0] : 'USD'] ??
+          Wallet(currencyCode: 'USD', balance: 0.0);
+      _cachedCryptoWallet =
+          cryptoWallets['USDT'] ?? Wallet(currencyCode: 'USDT', balance: 0.0);
       _cacheTimestamp = now;
 
       DashboardSessionCache.instance.recordWalletSnapshot(
         fiatWallets: fiatWallets,
         availableFiatCurrencies: orderedFiatCurrencies,
         cryptoWallets: cryptoWallets,
-        availableCryptoCurrencies: List<String>.from(_supportedCryptoCurrencies),
+        availableCryptoCurrencies: cryptoCodes,
         cachedFiatWallet: _cachedFiatWallet,
         cachedCryptoWallet: _cachedCryptoWallet,
       );
 
       setState(() {
-        _fiatWallets.clear();
-        _fiatWallets.addAll(fiatWallets);
-        _availableFiatCurrencies.clear();
-        _availableFiatCurrencies.addAll(orderedFiatCurrencies);
-        
-        // Set current fiat wallet to first available (KES when present)
+        _fiatWallets
+          ..clear()
+          ..addAll(fiatWallets);
+        _availableFiatCurrencies
+          ..clear()
+          ..addAll(orderedFiatCurrencies);
+
         if (_availableFiatCurrencies.isNotEmpty) {
           _fiatWallet = _fiatWallets[_availableFiatCurrencies[0]];
           _currentFiatIndex = 0;
@@ -306,9 +302,13 @@ class _WalletCardState extends State<WalletCard> {
           _fiatWallet = Wallet(currencyCode: 'USD', balance: 0.0);
           _currentFiatIndex = 0;
         }
-        
-        _cryptoWallets.clear();
-        _cryptoWallets.addAll(cryptoWallets);
+
+        _cryptoWallets
+          ..clear()
+          ..addAll(cryptoWallets);
+        _availableCryptoCurrencies
+          ..clear()
+          ..addAll(cryptoCodes);
         _lastRefreshedAt = now;
         _fiatError = null;
         _cryptoError = null;
@@ -563,22 +563,6 @@ class _WalletCardState extends State<WalletCard> {
     await _openTopUpFlow();
   }
 
-  Future<void> _openCryptoWithdraw(String currency) async {
-    final balance = _cryptoWallets[currency]?.balance;
-    final refreshed = await Navigator.of(context).push<bool>(
-      MaterialPageRoute<bool>(
-        builder: (_) => WithdrawPage(
-          isCrypto: true,
-          currencyCode: currency,
-          availableBalance: balance,
-        ),
-      ),
-    );
-    if (mounted && refreshed == true) {
-      await _refreshBalance(forceRefresh: true);
-    }
-  }
-
   Future<void> _openTopUpFlow() async {
     final currencyCode = widget.selectedTab == 0 &&
             _availableFiatCurrencies.isNotEmpty
@@ -613,52 +597,6 @@ class _WalletCardState extends State<WalletCard> {
       ),
     );
     if (mounted) await _refreshBalance(forceRefresh: true);
-  }
-
-  /// Opens withdraw for the currently selected fiat/crypto wallet (used from Financial Services).
-  void openWithdraw() {
-    if (widget.selectedTab == 1) {
-      final currency = _availableCryptoCurrencies.isNotEmpty
-          ? _availableCryptoCurrencies[
-              _currentCryptoIndex.clamp(0, _availableCryptoCurrencies.length - 1)]
-          : 'USDT';
-      _openCryptoWithdraw(currency);
-      return;
-    }
-    _openFiatWithdraw(context);
-  }
-
-  void _openFiatWithdraw(BuildContext context) {
-    final currency = _availableFiatCurrencies.isNotEmpty
-        ? _availableFiatCurrencies[
-            _currentFiatIndex.clamp(0, _availableFiatCurrencies.length - 1)]
-        : (_fiatWallet?.currencyCode ?? 'KES');
-    // Fiat withdrawals are Kenya (KES) only — prefer KES balance when present.
-    final withdrawCurrency =
-        TopupDepositCountry.withdrawSupported.any((c) => c.code == currency)
-            ? currency
-            : 'KES';
-    final balance = _fiatWallets[withdrawCurrency]?.balance ??
-        _fiatWallets['KES']?.balance ??
-        0.0;
-
-    Navigator.of(context)
-        .push<bool>(
-          MaterialPageRoute<bool>(
-            builder: (_) => WithdrawPage(
-              isCrypto: false,
-              currencyCode: withdrawCurrency,
-              availableBalance: balance,
-            ),
-          ),
-        )
-        .then((refreshed) {
-          if (mounted && refreshed == true) {
-            _refreshBalance(forceRefresh: true);
-          } else if (mounted) {
-            _refreshBalance(forceRefresh: true);
-          }
-        });
   }
 }
 

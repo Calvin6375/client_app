@@ -7,8 +7,10 @@ import 'package:pretium/features/auth/widgets/phone_number_field.dart';
 import 'package:pretium/features/safari_tap/models/safari_tap_bank.dart';
 import 'package:pretium/features/safari_tap/services/safari_tap_pay_api_service.dart';
 import 'package:pretium/features/send_money/screens/payment_method_screen.dart';
+import 'package:pretium/features/swap/widgets/currency_picker_bottom_sheet.dart';
 import 'package:pretium/models/transaction_details_model.dart';
 import 'package:pretium/repositories/wallet_repository.dart';
+import 'package:pretium/services/dashboard_session_cache.dart';
 import 'package:pretium/utils/firebase_utils.dart';
 import 'package:pretium/widgets/app_shimmer.dart';
 import 'package:pretium/widgets/currency_logo.dart';
@@ -43,8 +45,11 @@ class _SendMoneyFormScreenState extends State<SendMoneyFormScreen> {
   final _walletRepository = WalletRepository();
 
   PaymentMethod _method = PaymentMethod.mobileMoney;
+  String _currency = 'KES';
   double _balance = 0;
   bool _loadingBalance = true;
+  final List<String> _ownedCurrencyCodes = [];
+  final Map<String, double> _ownedBalances = {};
   List<SafariTapBank> _banks = const [];
   bool _loadingBanks = false;
   String? _selectedBankCode;
@@ -67,6 +72,9 @@ class _SendMoneyFormScreenState extends State<SendMoneyFormScreen> {
   void initState() {
     super.initState();
     _method = widget.initialDetails.paymentMethod;
+    _currency = widget.initialDetails.fromCurrency.trim().isNotEmpty
+        ? widget.initialDetails.fromCurrency.trim().toUpperCase()
+        : 'KES';
 
     if (widget.initialDetails.amountToSend > 0) {
       _amountCtrl.text = _formatAmount(widget.initialDetails.amountToSend);
@@ -82,7 +90,7 @@ class _SendMoneyFormScreenState extends State<SendMoneyFormScreen> {
     _phoneCtrl.addListener(_emitUpdate);
     _accountNumberCtrl.addListener(_emitUpdate);
 
-    _loadBalance();
+    _loadOwnedWallets();
     if (_method == PaymentMethod.bank) _loadBanks();
   }
 
@@ -129,7 +137,9 @@ class _SendMoneyFormScreenState extends State<SendMoneyFormScreen> {
     return double.tryParse(raw) ?? 0;
   }
 
-  Future<void> _loadBalance() async {
+  /// Same wallet source as home / Exchange: session cache first, then
+  /// `GET /api/accounts` (`data.fiat`).
+  Future<void> _loadOwnedWallets() async {
     if (!isFirebaseInitialized()) {
       if (mounted) setState(() => _loadingBalance = false);
       return;
@@ -139,17 +149,145 @@ class _SendMoneyFormScreenState extends State<SendMoneyFormScreen> {
       if (mounted) setState(() => _loadingBalance = false);
       return;
     }
+
     try {
-      final wallet =
-          await _walletRepository.getWalletBalance(user.uid, currency: 'KES');
+      setState(() => _loadingBalance = true);
+
+      final codes = <String>{};
+      final balances = <String, double>{};
+
+      // Prefer the wallets already resolved for the home wallet carousel.
+      final snap = DashboardSessionCache.instance.readWalletLastKnown();
+      if (snap != null) {
+        for (final code in snap.availableFiatCurrencies) {
+          final upper = code.toUpperCase();
+          if (upper.isEmpty) continue;
+          final bal = snap.fiatWallets[upper]?.balance ??
+              snap.fiatWallets[code]?.balance ??
+              0;
+          if (bal <= 0) continue;
+          codes.add(upper);
+          balances[upper] = bal;
+        }
+      }
+
+      // Same as Exchange: owned fiat accounts from GET /api/accounts.
+      final fiat = await _walletRepository.listOwnedFiatWallets(user.uid);
+      for (final e in fiat.entries) {
+        final upper = e.key.toUpperCase();
+        if (upper.isEmpty || e.value.balance <= 0) continue;
+        codes.add(upper);
+        balances[upper] = e.value.balance;
+      }
+
+      // If still empty, probe known currencies (balance > 0 only).
+      if (codes.isEmpty) {
+        for (final currency in const ['KES', 'USD', 'NGN', 'GHS', 'UGX']) {
+          try {
+            final wallet = await _walletRepository.getWalletBalance(
+              user.uid,
+              currency: currency,
+            );
+            if (wallet != null && wallet.balance > 0) {
+              codes.add(currency);
+              balances[currency] = wallet.balance;
+            }
+          } catch (_) {}
+        }
+      }
+
       if (!mounted) return;
+
+      // Only wallets with money are selectable / shown in the picker.
+      final ordered = codes.where((c) => (balances[c] ?? 0) > 0).toList()
+        ..sort((a, b) {
+          if (a == 'KES') return -1;
+          if (b == 'KES') return 1;
+          return a.compareTo(b);
+        });
+
+      if (ordered.isEmpty) {
+        setState(() => _loadingBalance = false);
+        return;
+      }
+
+      if (!ordered.contains(_currency)) {
+        _currency = ordered.first;
+      }
+
       setState(() {
-        _balance = wallet?.balance ?? 0;
+        _ownedCurrencyCodes
+          ..clear()
+          ..addAll(ordered);
+        _ownedBalances
+          ..clear()
+          ..addAll(balances);
+        _balance = _ownedBalances[_currency] ?? 0;
         _loadingBalance = false;
       });
+      _emitUpdate();
     } catch (_) {
       if (mounted) setState(() => _loadingBalance = false);
     }
+  }
+
+  Future<void> _selectWallet(String code) async {
+    final upper = code.trim().toUpperCase();
+    if (upper.isEmpty || upper == _currency) return;
+    if (!_ownedCurrencyCodes.contains(upper)) return;
+
+    setState(() {
+      _currency = upper;
+      _balance = _ownedBalances[upper] ?? 0;
+      // Safari Card payouts (MM / Bank / Wallet) are KES-only.
+      if (upper != 'KES') {
+        // Keep method selection; continue will prompt to switch to KES.
+      } else if (_countryCode != '254' &&
+          (_method == PaymentMethod.mobileMoney ||
+              _method == PaymentMethod.truePay)) {
+        _countryCode = '254';
+      }
+    });
+    _emitUpdate();
+
+    if (!isFirebaseInitialized()) return;
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+    try {
+      final wallet =
+          await _walletRepository.getWalletBalance(user.uid, currency: upper);
+      if (!mounted || wallet == null) return;
+      setState(() {
+        _balance = wallet.balance;
+        _ownedBalances[upper] = _balance;
+      });
+    } catch (_) {}
+  }
+
+  /// Same picker sheet as Exchange (`CurrencyPickerBottomSheet`).
+  void _showWalletPicker() {
+    final currencies = [
+      for (final code in _ownedCurrencyCodes)
+        if (code.trim().isNotEmpty)
+          Currency(
+            code: code,
+            name: CurrencyLogo.displayNameFor(code),
+            flagEmoji: CurrencyLogo.emojiFor(code),
+          ),
+    ];
+    if (currencies.isEmpty) return;
+
+    showModalBottomSheet<void>(
+      context: context,
+      builder: (context) => CurrencyPickerBottomSheet(
+        currencies: currencies,
+        selectedCode: _currency,
+        onSelected: (currency) {
+          // Sheet already pops itself before calling onSelected.
+          _selectWallet(currency.code);
+        },
+      ),
+    );
   }
 
   Future<void> _loadBanks() async {
@@ -173,8 +311,17 @@ class _SendMoneyFormScreenState extends State<SendMoneyFormScreen> {
   }
 
   void _selectMethod(PaymentMethod method) {
-    if (_method == method) return;
-    setState(() => _method = method);
+    if (_method == method) {
+      if (method == PaymentMethod.truePay && _countryCode != '254') {
+        setState(() => _countryCode = '254');
+        _emitUpdate();
+      }
+      return;
+    }
+    setState(() {
+      _method = method;
+      if (method == PaymentMethod.truePay) _countryCode = '254';
+    });
     if (method == PaymentMethod.bank) _loadBanks();
     _emitUpdate();
   }
@@ -248,9 +395,9 @@ class _SendMoneyFormScreenState extends State<SendMoneyFormScreen> {
     widget.onUpdate(
       TransactionDetails(
         amountToSend: _amount,
-        fromCurrency: 'KES',
+        fromCurrency: _currency,
         amountToReceive: _amount,
-        toCurrency: 'KES',
+        toCurrency: _currency,
         paymentMethod: _method,
         recipientFullName: _fullNameCtrl.text,
         recipientPhoneNumber: fullPhone,
@@ -284,11 +431,33 @@ class _SendMoneyFormScreenState extends State<SendMoneyFormScreen> {
   void _onContinue() {
     if (!_formKey.currentState!.validate()) return;
     if (!_canContinue) return;
+    if (_currency != 'KES') {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Send Money payouts require a KES wallet. Switch to KES to continue.',
+          ),
+        ),
+      );
+      return;
+    }
+    if ((_method == PaymentMethod.mobileMoney ||
+            _method == PaymentMethod.truePay) &&
+        _countryCode != '254') {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Use a Kenyan (+254) phone number for Mobile Money or SafariTap wallet.',
+          ),
+        ),
+      );
+      return;
+    }
     if (_amount > _balance && _balance > 0) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'Insufficient balance. Available: KES ${_balance.toStringAsFixed(2)}',
+            'Insufficient balance. Available: $_currency ${_balance.toStringAsFixed(2)}',
           ),
         ),
       );
@@ -312,8 +481,13 @@ class _SendMoneyFormScreenState extends State<SendMoneyFormScreen> {
               padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
               children: [
                 _BalanceCard(
+                  currency: _currency,
                   balance: _balance,
                   loading: _loadingBalance,
+                  // Always show the wallet dropdown when any funded wallet exists.
+                  onWalletTap: _ownedCurrencyCodes.isNotEmpty
+                      ? _showWalletPicker
+                      : null,
                 ),
                 const SizedBox(height: 24),
                 Text(
@@ -345,9 +519,16 @@ class _SendMoneyFormScreenState extends State<SendMoneyFormScreen> {
                   selected: _method == PaymentMethod.bank,
                   onTap: () => _selectMethod(PaymentMethod.bank),
                 ),
+                if (_currency != 'KES') ...[
+                  const SizedBox(height: 10),
+                  Text(
+                    'Send Money requires a KES wallet for SafariTap wallet, Mobile Money, and Bank Transfer.',
+                    style: TextStyle(color: colors.error, fontSize: 12),
+                  ),
+                ],
                 const SizedBox(height: 24),
                 Text(
-                  'Amount (KES)',
+                  'Amount ($_currency)',
                   style: TextStyle(
                     color: colors.textPrimary,
                     fontSize: 14,
@@ -437,7 +618,8 @@ class _SendMoneyFormScreenState extends State<SendMoneyFormScreen> {
                   PhoneNumberField(
                     phoneController: _phoneCtrl,
                     initialCountryCode: _countryCode,
-                    lockCountryCode: false,
+                    // SafariTap wallet + Kenya MM resolve recipients as 254… numbers.
+                    lockCountryCode: _method == PaymentMethod.truePay,
                     onCountryCodeChanged: (code) {
                       if (_countryCode == code) return;
                       setState(() => _countryCode = code);
@@ -582,10 +764,17 @@ class _SendMoneyFormScreenState extends State<SendMoneyFormScreen> {
 }
 
 class _BalanceCard extends StatelessWidget {
-  const _BalanceCard({required this.balance, required this.loading});
+  const _BalanceCard({
+    required this.currency,
+    required this.balance,
+    required this.loading,
+    this.onWalletTap,
+  });
 
+  final String currency;
   final double balance;
   final bool loading;
+  final VoidCallback? onWalletTap;
 
   @override
   Widget build(BuildContext context) {
@@ -631,49 +820,79 @@ class _BalanceCard extends StatelessWidget {
             Row(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                Text(
-                  _formatKes(balance),
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 32,
-                    fontWeight: FontWeight.w800,
-                    height: 1,
+                Expanded(
+                  child: Text(
+                    _formatAmount(balance),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 32,
+                      fontWeight: FontWeight.w800,
+                      height: 1,
+                    ),
                   ),
                 ),
-                const SizedBox(width: 8),
-                const Padding(
-                  padding: EdgeInsets.only(bottom: 4),
-                  child: Text(
-                    'KES',
-                    style: TextStyle(
-                      color: Colors.white70,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
+                Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: onWalletTap,
+                    borderRadius: BorderRadius.circular(20),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 4,
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            currency,
+                            style: const TextStyle(
+                              color: Colors.white70,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          if (onWalletTap != null) ...[
+                            const SizedBox(width: 2),
+                            const Icon(
+                              Icons.keyboard_arrow_down_rounded,
+                              color: Colors.white70,
+                              size: 22,
+                            ),
+                          ],
+                        ],
+                      ),
                     ),
                   ),
                 ),
               ],
             ),
           const SizedBox(height: 14),
-          Row(
-            children: [
-              const CurrencyLogo(code: 'KES', size: 18),
-              const SizedBox(width: 8),
-              Text(
-                'Send from your KES wallet in Kenya',
-                style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.65),
-                  fontSize: 12,
+          InkWell(
+            onTap: onWalletTap,
+            borderRadius: BorderRadius.circular(8),
+            child: Row(
+              children: [
+                CurrencyLogo(code: currency, size: 18),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Send from your $currency wallet',
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.65),
+                      fontSize: 12,
+                    ),
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ],
       ),
     );
   }
 
-  static String _formatKes(double value) {
+  static String _formatAmount(double value) {
     final parts = value.toStringAsFixed(2).split('.');
     final whole = parts[0];
     final buf = StringBuffer();

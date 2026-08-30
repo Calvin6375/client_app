@@ -1,381 +1,121 @@
-import 'dart:convert';
-import 'package:firebase_database/firebase_database.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:pretium/models/user_accounts.dart';
 import 'package:pretium/models/wallet_model.dart';
+import 'package:pretium/services/accounts_api_service.dart';
 import 'package:pretium/utils/logger.dart';
-import 'package:pretium/firebase_options.dart';
 
-/// Repository for wallet operations in Realtime Database
-/// STRICT RULE: This repository is READ-ONLY
-/// Client code MUST NOT write to wallet nodes
-/// All wallet updates must be done via Cloud Functions
+/// Repository for customer wallet / account balances.
+///
+/// Balances come from `GET /api/accounts` (Firestore + USDC ledger on the
+/// server). The client must not read or write RTDB `wallet/{uid}/…` for the
+/// wallet list. Circle deposit address / QR still uses [CryptoApiService.getWallet].
+///
+/// [uid] arguments on methods are ignored for the network call (token subject);
+/// they remain for call-site compatibility and optional mismatch checks.
 class WalletRepository {
-  final FirebaseDatabase _database = FirebaseDatabase.instance;
+  WalletRepository({AccountsApiService? accountsApi})
+      : _accountsApi = accountsApi ?? AccountsApiService();
 
-  /// Stream wallet balance for a user
-  /// Path: wallet/{uid}/fiat/{currency}
-  Stream<Wallet?> streamWalletBalance(String uid, {String currency = 'USD'}) {
+  final AccountsApiService _accountsApi;
+
+  static UserAccounts? _cache;
+  static DateTime? _cacheAt;
+  static Future<UserAccounts>? _inFlight;
+  static const Duration _cacheTtl = Duration(seconds: 20);
+
+  /// Drops the shared in-memory accounts cache (call on sign-out).
+  static void clearCache() {
+    _cache = null;
+    _cacheAt = null;
+    _inFlight = null;
+  }
+
+  /// Single fetch of all fiat + crypto accounts for the signed-in user.
+  Future<UserAccounts> fetchAccounts({bool forceRefresh = false}) async {
+    final now = DateTime.now();
+    if (!forceRefresh &&
+        _cache != null &&
+        _cacheAt != null &&
+        now.difference(_cacheAt!) < _cacheTtl) {
+      return _cache!;
+    }
+
+    if (!forceRefresh && _inFlight != null) {
+      return _inFlight!;
+    }
+
+    final future = _accountsApi.fetchAccounts();
+    _inFlight = future;
     try {
-      Logger.debug('Streaming wallet balance for user: $uid, currency: $currency');
-      
-      final ref = _database.ref('wallet/$uid/fiat/$currency');
-      
-      return ref.onValue.map((event) {
-        if (event.snapshot.exists && event.snapshot.value != null) {
-          try {
-            Wallet wallet;
-            
-            // Handle case where response is just a number (balance only)
-            if (event.snapshot.value is num) {
-              final balance = (event.snapshot.value as num).toDouble();
-              wallet = Wallet(
-                currencyCode: currency,
-                balance: balance,
-              );
-            } else if (event.snapshot.value is Map) {
-              // Handle case where response is a full wallet object
-              final data = Map<String, dynamic>.from(
-                event.snapshot.value as Map,
-              );
-              wallet = Wallet.fromJson(data);
-            } else {
-              Logger.warning('Unexpected wallet data type in stream: ${event.snapshot.value.runtimeType}');
-              return null;
-            }
-            
-            Logger.debug('Wallet balance updated: ${wallet.balance} ${wallet.currencyCode}');
-            return wallet;
-          } catch (e) {
-            Logger.error('Failed to parse wallet data', e);
-            return null;
-          }
-        }
-        Logger.warning('Wallet balance not found for user: $uid, currency: $currency');
-        return null;
-      });
-    } catch (e) {
-      Logger.error('Failed to stream wallet balance', e);
-      rethrow;
+      final accounts = await future;
+      _cache = accounts;
+      _cacheAt = DateTime.now();
+      return accounts;
+    } finally {
+      if (identical(_inFlight, future)) {
+        _inFlight = null;
+      }
     }
   }
 
-  /// Get wallet balance once (non-streaming)
-  /// Use streamWalletBalance() for real-time updates
-  /// Path: wallet/{uid}/fiat/{currency}
+  void _warnIfUidMismatch(String uid) {
+    final current = FirebaseAuth.instance.currentUser?.uid;
+    if (current != null &&
+        uid.isNotEmpty &&
+        uid != current) {
+      Logger.warning(
+        'WalletRepository: ignoring mismatched uid=$uid (token uid=$current)',
+      );
+    }
+  }
+
+  /// Owned fiat accounts from `data.fiat` (falls back to `balances.fiat`).
+  Future<Map<String, Wallet>> listOwnedFiatWallets(String uid) async {
+    _warnIfUidMismatch(uid);
+    final accounts = await fetchAccounts();
+    return Map<String, Wallet>.from(accounts.fiatWallets);
+  }
+
+  /// Owned crypto accounts from `data.crypto` (falls back to `balances.crypto`).
+  Future<Map<String, Wallet>> listOwnedCryptoWallets(String uid) async {
+    _warnIfUidMismatch(uid);
+    final accounts = await fetchAccounts();
+    return Map<String, Wallet>.from(accounts.cryptoWallets);
+  }
+
+  /// Fiat balance for [currency] from the accounts payload.
   Future<Wallet?> getWalletBalance(String uid, {String currency = 'USD'}) async {
+    _warnIfUidMismatch(uid);
     try {
-      // New path: wallet/{userId}/fiat/{currency}
-      final dbPath = 'wallet/$uid/fiat/$currency';
-      final ref = _database.ref(dbPath);
-      
-      // Get database URL from Firebase options
-      final databaseUrl = DefaultFirebaseOptions.currentPlatform.databaseURL ?? 
-                         'https://truepay-72060-default-rtdb.firebaseio.com';
-      final fullEndpointUrl = '$databaseUrl/$dbPath.json';
-      
-      Logger.debug('Fetching wallet balance for user: $uid, currency: $currency');
-      Logger.debug('═══════════════════════════════════════════════════════════');
-      Logger.debug('📤 FULL RAW REQUEST:');
-      Logger.debug('  HTTP Method: GET');
-      Logger.debug('  Database URL: $databaseUrl');
-      Logger.debug('  Reference Path: $dbPath');
-      Logger.debug('  Full Reference Path: ${ref.path}');
-      Logger.debug('  Full Endpoint URL: $fullEndpointUrl');
-      Logger.debug('  Request Headers: {');
-      Logger.debug('    "Content-Type": "application/json",');
-      Logger.debug('    "Accept": "application/json"');
-      Logger.debug('  }');
-      Logger.debug('  Request Body: null (GET request)');
-      Logger.debug('  Query Parameters: {');
-      Logger.debug('    "auth": "[Firebase Auth Token]",');
-      Logger.debug('    "format": "export"');
-      Logger.debug('  }');
-      Logger.debug('  User ID: $uid');
-      Logger.debug('  Currency: $currency');
-      Logger.debug('═══════════════════════════════════════════════════════════');
-      
-      final startTime = DateTime.now();
-      final snapshot = await ref.get();
-      final endTime = DateTime.now();
-      final duration = endTime.difference(startTime);
-      
-      Logger.debug('📥 FULL RAW RESPONSE:');
-      Logger.debug('  Response Time: ${duration.inMilliseconds}ms');
-      Logger.debug('  Snapshot exists: ${snapshot.exists}');
-      Logger.debug('  Has value: ${snapshot.value != null}');
-      Logger.debug('  Snapshot key: ${snapshot.key}');
-      Logger.debug('  Snapshot priority: ${snapshot.priority}');
-      
-      if (snapshot.value != null) {
-        // Convert to JSON string for full raw response
-        final rawResponseJson = jsonEncode(snapshot.value);
-        Logger.debug('  Raw Response Body (JSON):');
-        Logger.debug('  $rawResponseJson');
-        Logger.debug('');
-        Logger.debug('  Raw Response Body (Formatted):');
-        Logger.debug('  ${snapshot.value}');
-      } else {
-        Logger.debug('  Raw Response Body: null');
-      }
-      
-      if (snapshot.exists && snapshot.value != null) {
-        Wallet wallet;
-        
-        // Handle case where response is just a number (balance only)
-        if (snapshot.value is num) {
-          final balance = (snapshot.value as num).toDouble();
-          Logger.debug('');
-          Logger.debug('  Parsed Response Data: Balance only (number) = $balance');
-          Logger.debug('');
-          wallet = Wallet(
-            currencyCode: currency,
-            balance: balance,
-          );
-        } else if (snapshot.value is Map) {
-          // Handle case where response is a full wallet object
-          final data = Map<String, dynamic>.from(snapshot.value as Map);
-          Logger.debug('');
-          Logger.debug('  Parsed Response Data:');
-          Logger.debug('  $data');
-          Logger.debug('');
-          wallet = Wallet.fromJson(data);
-        } else {
-          Logger.warning('Unexpected wallet data type: ${snapshot.value.runtimeType}');
-          return null;
-        }
-        
-        Logger.debug('✅ Wallet balance fetched: ${wallet.balance} ${wallet.currencyCode}');
-        Logger.debug('═══════════════════════════════════════════════════════════');
-        return wallet;
-      }
-      
-      Logger.warning('Wallet balance not found for user: $uid, currency: $currency');
-      Logger.debug('═══════════════════════════════════════════════════════════');
-      return null;
+      final accounts = await fetchAccounts();
+      return accounts.fiatWallet(currency);
     } catch (e) {
       Logger.error('Failed to get wallet balance', e);
       rethrow;
     }
   }
 
-  /// Get crypto wallet balance for a specific currency
-  /// Path: wallet/{uid}/crypto/{currencyCode}
+  /// Crypto balance for [currencyCode]. Returns a zero wallet when missing.
   Future<Wallet?> getCryptoWalletBalance(String uid, String currencyCode) async {
+    _warnIfUidMismatch(uid);
     try {
-      final dbPath = 'wallet/$uid/crypto/$currencyCode';
-      final ref = _database.ref(dbPath);
-      
-      // Get database URL from Firebase options
-      final databaseUrl = DefaultFirebaseOptions.currentPlatform.databaseURL ?? 
-                         'https://truepay-72060-default-rtdb.firebaseio.com';
-      final fullEndpointUrl = '$databaseUrl/$dbPath.json';
-      
-      Logger.debug('Fetching crypto wallet balance for user: $uid, currency: $currencyCode');
-      Logger.debug('═══════════════════════════════════════════════════════════');
-      Logger.debug('📤 FULL RAW REQUEST:');
-      Logger.debug('  HTTP Method: GET');
-      Logger.debug('  Database URL: $databaseUrl');
-      Logger.debug('  Reference Path: $dbPath');
-      Logger.debug('  Full Reference Path: ${ref.path}');
-      Logger.debug('  Full Endpoint URL: $fullEndpointUrl');
-      Logger.debug('  Request Headers: {');
-      Logger.debug('    "Content-Type": "application/json",');
-      Logger.debug('    "Accept": "application/json"');
-      Logger.debug('  }');
-      Logger.debug('  Request Body: null (GET request)');
-      Logger.debug('  Query Parameters: {');
-      Logger.debug('    "auth": "[Firebase Auth Token]",');
-      Logger.debug('    "format": "export"');
-      Logger.debug('  }');
-      Logger.debug('  User ID: $uid');
-      Logger.debug('  Currency Code: $currencyCode');
-      Logger.debug('═══════════════════════════════════════════════════════════');
-      
-      final startTime = DateTime.now();
-      final snapshot = await ref.get();
-      final endTime = DateTime.now();
-      final duration = endTime.difference(startTime);
-      
-      Logger.debug('📥 FULL RAW RESPONSE:');
-      Logger.debug('  Response Time: ${duration.inMilliseconds}ms');
-      Logger.debug('  Snapshot exists: ${snapshot.exists}');
-      Logger.debug('  Has value: ${snapshot.value != null}');
-      Logger.debug('  Snapshot key: ${snapshot.key}');
-      Logger.debug('  Snapshot priority: ${snapshot.priority}');
-      
-      if (snapshot.value != null) {
-        // Convert to JSON string for full raw response
-        final rawResponseJson = jsonEncode(snapshot.value);
-        Logger.debug('  Raw Response Body (JSON):');
-        Logger.debug('  $rawResponseJson');
-        Logger.debug('');
-        Logger.debug('  Raw Response Body (Formatted):');
-        Logger.debug('  ${snapshot.value}');
-      } else {
-        Logger.debug('  Raw Response Body: null');
-      }
-      
-      if (snapshot.exists && snapshot.value != null) {
-        Wallet wallet;
-        
-        // Handle case where response is just a number (balance only)
-        if (snapshot.value is num) {
-          final balance = (snapshot.value as num).toDouble();
-          Logger.debug('');
-          Logger.debug('  Parsed Response Data: Balance only (number) = $balance');
-          Logger.debug('');
-          wallet = Wallet(
-            currencyCode: currencyCode,
-            balance: balance,
-          );
-        } else if (snapshot.value is Map) {
-          // Handle case where response is a full wallet object
-          final data = Map<String, dynamic>.from(snapshot.value as Map);
-          Logger.debug('');
-          Logger.debug('  Parsed Response Data:');
-          Logger.debug('  $data');
-          Logger.debug('');
-          wallet = Wallet.fromJson(data);
-        } else {
-          Logger.warning('Unexpected crypto wallet data type: ${snapshot.value.runtimeType}');
-          return Wallet(currencyCode: currencyCode, balance: 0.0);
-        }
-        
-        Logger.debug('✅ Crypto wallet balance fetched: ${wallet.balance} ${wallet.currencyCode}');
-        Logger.debug('═══════════════════════════════════════════════════════════');
-        return wallet;
-      }
-      
-      Logger.warning('Crypto wallet balance not found for user: $uid, currency: $currencyCode');
-      Logger.debug('═══════════════════════════════════════════════════════════');
-      // Return default wallet with 0 balance if not found
-      return Wallet(currencyCode: currencyCode, balance: 0.0);
+      final accounts = await fetchAccounts();
+      return accounts.cryptoWallet(currencyCode) ??
+          Wallet(currencyCode: currencyCode.toUpperCase(), balance: 0);
     } catch (e) {
       Logger.error('Failed to get crypto wallet balance', e);
-      // Return default wallet with 0 balance on error
-      return Wallet(currencyCode: currencyCode, balance: 0.0);
+      return Wallet(currencyCode: currencyCode.toUpperCase(), balance: 0);
     }
   }
 
-  /// Stream crypto wallet balance for a specific currency
-  /// Path: wallet/{uid}/crypto/{currencyCode}
+  /// One-shot stream of fiat balance (no RTDB). Prefer [getWalletBalance].
+  Stream<Wallet?> streamWalletBalance(String uid, {String currency = 'USD'}) {
+    return Stream.fromFuture(getWalletBalance(uid, currency: currency));
+  }
+
+  /// One-shot stream of crypto balance (no RTDB). Prefer [getCryptoWalletBalance]
+  /// or pull-to-refresh via [fetchAccounts].
   Stream<Wallet?> streamCryptoWalletBalance(String uid, String currencyCode) {
-    try {
-      Logger.debug('Streaming crypto wallet balance for user: $uid, currency: $currencyCode');
-      
-      final ref = _database.ref('wallet/$uid/crypto/$currencyCode');
-      
-      return ref.onValue.map((event) {
-        if (event.snapshot.exists && event.snapshot.value != null) {
-          try {
-            Wallet wallet;
-            
-            // Handle case where response is just a number (balance only)
-            if (event.snapshot.value is num) {
-              final balance = (event.snapshot.value as num).toDouble();
-              wallet = Wallet(
-                currencyCode: currencyCode,
-                balance: balance,
-              );
-            } else if (event.snapshot.value is Map) {
-              // Handle case where response is a full wallet object
-              final data = Map<String, dynamic>.from(
-                event.snapshot.value as Map,
-              );
-              wallet = Wallet.fromJson(data);
-            } else {
-              Logger.warning('Unexpected crypto wallet data type in stream: ${event.snapshot.value.runtimeType}');
-              return Wallet(currencyCode: currencyCode, balance: 0.0);
-            }
-            
-            Logger.debug('Crypto wallet balance updated: ${wallet.balance} ${wallet.currencyCode}');
-            return wallet;
-          } catch (e) {
-            Logger.error('Failed to parse crypto wallet data', e);
-            return Wallet(currencyCode: currencyCode, balance: 0.0);
-          }
-        }
-        Logger.warning('Crypto wallet balance not found for user: $uid, currency: $currencyCode');
-        return Wallet(currencyCode: currencyCode, balance: 0.0);
-      });
-    } catch (e) {
-      Logger.error('Failed to stream crypto wallet balance', e);
-      return Stream.value(Wallet(currencyCode: currencyCode, balance: 0.0));
-    }
+    return Stream.fromFuture(getCryptoWalletBalance(uid, currencyCode));
   }
-
-  /// Lists fiat wallet currencies that exist under `wallet/{uid}/fiat`.
-  /// Only keys present in RTDB are returned (balance may be 0).
-  Future<Map<String, Wallet>> listOwnedFiatWallets(String uid) async {
-    return _listOwnedWalletsAt('wallet/$uid/fiat', isCrypto: false);
-  }
-
-  /// Lists crypto wallet currencies that exist under `wallet/{uid}/crypto`.
-  /// Only keys present in RTDB are returned (balance may be 0).
-  Future<Map<String, Wallet>> listOwnedCryptoWallets(String uid) async {
-    return _listOwnedWalletsAt('wallet/$uid/crypto', isCrypto: true);
-  }
-
-  Future<Map<String, Wallet>> _listOwnedWalletsAt(
-    String path, {
-    required bool isCrypto,
-  }) async {
-    try {
-      final snapshot = await _database.ref(path).get();
-      if (!snapshot.exists || snapshot.value == null) {
-        return {};
-      }
-      if (snapshot.value is! Map) {
-        Logger.warning('Unexpected wallet list type at $path: ${snapshot.value.runtimeType}');
-        return {};
-      }
-
-      final raw = Map<Object?, Object?>.from(snapshot.value as Map);
-      final result = <String, Wallet>{};
-
-      for (final entry in raw.entries) {
-        final code = entry.key?.toString().toUpperCase();
-        if (code == null || code.isEmpty) continue;
-
-        final value = entry.value;
-        if (value is num) {
-          result[code] = Wallet(currencyCode: code, balance: value.toDouble());
-          continue;
-        }
-        if (value is Map) {
-          try {
-            final data = Map<String, dynamic>.from(value);
-            final wallet = Wallet.fromJson(data);
-            result[code] = Wallet(
-              currencyCode: code,
-              balance: wallet.balance,
-              updatedAt: wallet.updatedAt,
-            );
-          } catch (e) {
-            Logger.error('Failed to parse owned wallet $code at $path', e);
-            result[code] = Wallet(currencyCode: code, balance: 0);
-          }
-          continue;
-        }
-        // Node exists but shape is unknown — still treat as an owned wallet.
-        result[code] = Wallet(currencyCode: code, balance: 0);
-      }
-
-      Logger.debug(
-        'Owned ${isCrypto ? 'crypto' : 'fiat'} wallets at $path: ${result.keys.join(', ')}',
-      );
-      return result;
-    } catch (e) {
-      Logger.error('Failed to list owned wallets at $path', e);
-      rethrow;
-    }
-  }
-
-  /// NOTE: This method is intentionally not implemented
-  /// Wallet updates MUST be done via Cloud Functions only
-  /// 
-  /// To update wallet balance, call the Cloud Function:
-  /// PaymentService.updateWalletAfterPayment()
-  ///
-  /// DO NOT implement updateWallet() here - it's a security risk
 }
-

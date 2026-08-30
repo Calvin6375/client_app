@@ -78,11 +78,12 @@ class _SendMoneyPageState extends State<SendMoneyPage> {
           },
         };
       case PaymentMethod.truePay:
-        // Wallet-to-wallet payout is not exposed on the Kenya SafariTap API yet.
         return {
           'type': 'SAFARITAP_WALLET',
           'recipient': {
-            'phoneNumber': _transactionDetails.recipientPhoneNumber.replaceAll(RegExp(r'[^\d]'), ''),
+            'phoneNumber': normalizeKenyaPhone(
+              _transactionDetails.recipientPhoneNumber,
+            ),
             'name': name,
           },
         };
@@ -94,16 +95,17 @@ class _SendMoneyPageState extends State<SendMoneyPage> {
     final name = _transactionDetails.recipientFullName.trim();
     final verifiedName = _transactionDetails.verifiedBeneficiaryName.trim();
     final displayName = verifiedName.isNotEmpty ? verifiedName : name;
+    final phone = normalizeKenyaPhone(_transactionDetails.recipientPhoneNumber);
 
     switch (_transactionDetails.paymentMethod) {
       case PaymentMethod.mobileMoney:
         return {
           'type': 'MPESA_B2C',
           'amount': amount,
-          'currency': 'KES',
+          'currency': _transactionDetails.fromCurrency.toUpperCase(),
           'clientRequestId': clientRequestId,
           'recipient': {
-            'phoneNumber': normalizeKenyaPhone(_transactionDetails.recipientPhoneNumber),
+            'phoneNumber': phone,
             'name': displayName,
           },
           'narrative': 'SafariTap transfer',
@@ -112,7 +114,7 @@ class _SendMoneyPageState extends State<SendMoneyPage> {
         return {
           'type': 'BANK',
           'amount': amount,
-          'currency': 'KES',
+          'currency': _transactionDetails.fromCurrency.toUpperCase(),
           'clientRequestId': clientRequestId,
           'recipient': {
             'bankCode': _transactionDetails.recipientBankCode,
@@ -122,33 +124,43 @@ class _SendMoneyPageState extends State<SendMoneyPage> {
           'narrative': 'SafariTap bank transfer',
         };
       case PaymentMethod.truePay:
-        throw StateError('SafariTap wallet payout is not available yet');
+        return {
+          'type': 'SAFARITAP_WALLET',
+          'amount': amount,
+          'currency': 'KES',
+          'clientRequestId': clientRequestId,
+          'recipient': {
+            'phoneNumber': phone,
+            'name': displayName,
+          },
+          'narrative': 'SafariTap wallet transfer',
+        };
     }
   }
 
   Future<bool> _validateBeneficiary() async {
-    if (_transactionDetails.paymentMethod == PaymentMethod.truePay) {
-      // No validate-beneficiary endpoint for SafariTap wallet yet.
-      setState(() {
-        _transactionDetails.verifiedBeneficiaryName =
-            _transactionDetails.recipientFullName.trim();
-      });
-      return true;
-    }
-
     try {
       final result = await _payApi.validateBeneficiary(_buildValidateBody());
-      if (!result.hasDisplayName) {
+      if (!result.valid) {
         if (!mounted) return false;
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not verify recipient. Check the details.')),
+          const SnackBar(
+            content: Text('Could not verify recipient. Check the details.'),
+          ),
         );
         return false;
       }
+      // Wallet validate may return a name; MM/Bank IntaSend usually does.
+      final resolvedName = result.beneficiaryName.trim();
       setState(() {
-        _transactionDetails.verifiedBeneficiaryName = result.beneficiaryName;
-        if (_transactionDetails.recipientFullName.trim().isEmpty) {
-          _transactionDetails.recipientFullName = result.beneficiaryName;
+        if (resolvedName.isNotEmpty) {
+          _transactionDetails.verifiedBeneficiaryName = resolvedName;
+          if (_transactionDetails.recipientFullName.trim().isEmpty) {
+            _transactionDetails.recipientFullName = resolvedName;
+          }
+        } else {
+          _transactionDetails.verifiedBeneficiaryName =
+              _transactionDetails.recipientFullName.trim();
         }
       });
       return true;
@@ -192,12 +204,11 @@ class _SendMoneyPageState extends State<SendMoneyPage> {
         final amount = _transactionDetails.amountToSend;
         if (amount <= 0) return;
 
-        if (_transactionDetails.paymentMethod == PaymentMethod.truePay) {
+        if (_transactionDetails.paymentMethod == PaymentMethod.truePay &&
+            _transactionDetails.fromCurrency.toUpperCase() != 'KES') {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text(
-                'SafariTap wallet transfers are coming soon. Use Mobile Money or Bank Transfer.',
-              ),
+              content: Text('SafariTap wallet transfers require a KES wallet.'),
             ),
           );
           return;
@@ -206,16 +217,22 @@ class _SendMoneyPageState extends State<SendMoneyPage> {
         if (_transactionDetails.paymentMethod == PaymentMethod.bank &&
             (amount < 100 || amount > 999999)) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Bank transfers must be between KES 100 and 999,999')),
+            const SnackBar(
+              content: Text(
+                'Bank transfers must be between KES 100 and 999,999',
+              ),
+            ),
           );
           return;
         }
 
         final clientRequestId = const Uuid().v4();
+        final isWallet =
+            _transactionDetails.paymentMethod == PaymentMethod.truePay;
         final ok = await runSafariTapPayoutFlow(
           context: context,
           payoutBody: _buildPayoutBody(clientRequestId),
-          flowLabel: 'Send money',
+          flowLabel: isWallet ? 'SafariTap wallet' : 'Send money',
           clientRequestId: clientRequestId,
           api: _payApi,
         );

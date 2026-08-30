@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:confetti/confetti.dart';
 import 'package:cloud_functions/cloud_functions.dart';
+import 'package:pretium/features/swap/services/exchange_quote.dart';
 import 'package:pretium/features/swap/services/rates_service.dart';
 import 'package:pretium/features/swap/services/swap_order_service.dart';
 import 'package:pretium/features/swap/widgets/currency_picker_bottom_sheet.dart';
@@ -14,6 +16,7 @@ import 'package:pretium/utils/firebase_utils.dart';
 import 'package:pretium/widgets/app_shimmer.dart';
 import 'package:pretium/widgets/slide_to_confirm.dart';
 import 'package:pretium/services/dashboard_session_cache.dart';
+import 'package:pretium/services/wallet_balance_refresh.dart';
 
 class SwapPage extends StatefulWidget {
   final String? initialFromCurrency;
@@ -40,11 +43,26 @@ class _SwapPageState extends State<SwapPage> {
   double _toBalance = 0.0;
   bool _loadingBalances = true;
   bool _loadingWallets = true;
-  late double _rate;
+  bool _loadingRate = false;
+
+  /// `data.rate` from `GET /customer-rates?send=&get=` (0 until a quote loads).
+  double _rate = 0;
+
+  /// Prefer `data.display` from the quote response.
+  String? _rateDisplay;
+
+  /// Full `data` object stored in state for the current Send/Get pair.
+  Map<String, dynamic>? _ratesResponse;
+
+  String? _rateError;
+  int _rateRequestId = 0;
 
   /// Currencies the user actually owns (fiat + crypto wallet nodes).
   final List<String> _ownedCurrencyCodes = [];
   final Map<String, double> _ownedBalances = {};
+
+  bool get _hasValidQuote =>
+      _rate > 0 && _rateError == null && !_loadingRate && _ratesResponse != null;
 
   void _swapCurrencies() {
     if (_ownedCurrencyCodes.length < 2) return;
@@ -58,10 +76,12 @@ class _SwapPageState extends State<SwapPage> {
       _toBalance = tempBalance;
 
       _fromCtrl.clear();
-
-      _rate = _rates.getRate(_fromCurrency, _toCurrency);
-      _loadRate();
+      _rate = 0;
+      _rateDisplay = null;
+      _ratesResponse = null;
+      _rateError = null;
     });
+    _loadRate();
   }
 
   void _nextStep() async {
@@ -70,6 +90,16 @@ class _SwapPageState extends State<SwapPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Choose two different wallets to exchange.'),
+          ),
+        );
+        return;
+      }
+      if (!_hasValidQuote) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              _rateError ?? 'Wait for a valid exchange rate before continuing.',
+            ),
           ),
         );
         return;
@@ -92,10 +122,11 @@ class _SwapPageState extends State<SwapPage> {
           }
 
           final fromAmount = double.tryParse(_fromCtrl.text) ?? 0;
-          if (fromAmount <= 0) return;
+          if (fromAmount <= 0 || !_hasValidQuote) return;
 
           try {
             final fee = fromAmount * 0.005;
+            // Same mapping as the quote: send → from, get → to, rate → exchangeRate.
             final toAmount = fromAmount * _rate;
 
             final result = await createSwapOrder(
@@ -120,6 +151,9 @@ class _SwapPageState extends State<SwapPage> {
             } else {
               await _loadBalances();
             }
+
+            await WalletBalanceRefresh.afterSuccessfulTransaction();
+            if (!mounted) return;
 
             setState(() => _step = _SwapStep.success);
             _showSuccessDialog();
@@ -165,19 +199,7 @@ class _SwapPageState extends State<SwapPage> {
     _confettiController = ConfettiController(duration: const Duration(seconds: 1));
 
     _hydrateOwnedWalletsFromCache();
-    _rate = _rates.getRate(_fromCurrency, _toCurrency);
     _loadOwnedWallets();
-
-    // Listen to live rate updates
-    _rates.ratesStream.listen((map) {
-      if (mounted) {
-        final newRate = _rates.getRate(_fromCurrency, _toCurrency);
-        Logger.debug('📊 Rate stream update: $_fromCurrency/$_toCurrency = $newRate');
-        setState(() {
-          _rate = newRate;
-        });
-      }
-    });
   }
 
   bool _isCryptoCurrency(String code) {
@@ -282,8 +304,7 @@ class _SwapPageState extends State<SwapPage> {
         ...crypto.keys.map((c) => c.toUpperCase()),
       };
 
-      // If RTDB parent listing is empty, fall back to probing known currencies
-      // the same way the home wallet card does (existence = non-null fiat node).
+      // If accounts list is empty, fall back to probing known currencies.
       if (codes.isEmpty) {
         for (final currency in const ['KES', 'USD', 'NGN', 'GHS', 'UGX']) {
           try {
@@ -335,7 +356,6 @@ class _SwapPageState extends State<SwapPage> {
         _loadingBalances = false;
       });
 
-      _rate = _rates.getRate(_fromCurrency, _toCurrency);
       await _loadRate();
     } catch (e, st) {
       Logger.error('Failed to load owned wallets for exchange', e, st);
@@ -348,14 +368,52 @@ class _SwapPageState extends State<SwapPage> {
   }
   
   Future<void> _loadRate() async {
-    // Explicitly fetch the rate to ensure it's loaded
-    Logger.debug('🔄 Loading rate for $_fromCurrency/$_toCurrency');
-    await _rates.refreshRate(_fromCurrency, _toCurrency);
-    if (mounted) {
-      final newRate = _rates.getRate(_fromCurrency, _toCurrency);
-      Logger.debug('✅ Rate loaded: $_fromCurrency/$_toCurrency = $newRate');
+    final send = _fromCurrency;
+    final get = _toCurrency;
+    final requestId = ++_rateRequestId;
+
+    Logger.debug('🔄 Loading exchange quote send=$send get=$get');
+    setState(() {
+      _loadingRate = true;
+      _rateError = null;
+      _rate = 0;
+      _rateDisplay = null;
+      _ratesResponse = null;
+    });
+
+    try {
+      final quote = await _rates.fetchExchangeQuote(send: send, get: get);
+      if (!mounted || requestId != _rateRequestId) return;
+
+      Logger.debug(
+        '✅ Quote stored in state: rate=${quote.rate} display=${quote.display} raw=${quote.raw}',
+      );
       setState(() {
-        _rate = newRate;
+        _rate = quote.rate;
+        _rateDisplay = quote.display;
+        _ratesResponse = Map<String, dynamic>.from(quote.raw);
+        _rateError = null;
+        _loadingRate = false;
+      });
+    } on ExchangeQuoteException catch (e) {
+      Logger.warning('Exchange quote failed: $e');
+      if (!mounted || requestId != _rateRequestId) return;
+      setState(() {
+        _rate = 0;
+        _rateDisplay = null;
+        _ratesResponse = null;
+        _rateError = e.message;
+        _loadingRate = false;
+      });
+    } catch (e, st) {
+      Logger.error('Unexpected exchange quote error', e, st);
+      if (!mounted || requestId != _rateRequestId) return;
+      setState(() {
+        _rate = 0;
+        _rateDisplay = null;
+        _ratesResponse = null;
+        _rateError = 'Could not load exchange rate.';
+        _loadingRate = false;
       });
     }
   }
@@ -559,16 +617,14 @@ class _SwapPageState extends State<SwapPage> {
               }
             }
             _fromCtrl.clear();
+            _rate = 0;
+            _rateDisplay = null;
+            _ratesResponse = null;
+            _rateError = null;
           });
 
           await _loadBalances();
           await _loadRate();
-
-          if (mounted) {
-            setState(() {
-              _rate = _rates.getRate(_fromCurrency, _toCurrency);
-            });
-          }
         },
       ),
     );
@@ -618,6 +674,9 @@ class _SwapPageState extends State<SwapPage> {
                       fromBalance: _fromBalance,
                       toBalance: _toBalance,
                       rate: _rate,
+                      rateDisplay: _rateDisplay,
+                      rateError: _rateError,
+                      loadingRate: _loadingRate,
                       loadingBalances: _loadingBalances,
                       onSwapCurrencies: _swapCurrencies,
                       onNext: _nextStep,
@@ -630,6 +689,7 @@ class _SwapPageState extends State<SwapPage> {
                       toAmount: (double.tryParse(_fromCtrl.text) ?? 0) * _rate,
                       toCurrency: _toCurrency,
                       rate: _rate,
+                      rateDisplay: _rateDisplay,
                       onNext: _nextStep,
                       isSubmitting: _isSubmittingSwap,
                     ),
@@ -713,6 +773,9 @@ class _ExchangeInputScreen extends StatefulWidget {
   final double fromBalance;
   final double toBalance;
   final double rate;
+  final String? rateDisplay;
+  final String? rateError;
+  final bool loadingRate;
   final bool loadingBalances;
   final VoidCallback onSwapCurrencies;
   final VoidCallback onFromCurrencyTap;
@@ -726,6 +789,9 @@ class _ExchangeInputScreen extends StatefulWidget {
     required this.fromBalance,
     required this.toBalance,
     required this.rate,
+    required this.rateDisplay,
+    required this.rateError,
+    required this.loadingRate,
     required this.loadingBalances,
     required this.onSwapCurrencies,
     required this.onFromCurrencyTap,
@@ -747,6 +813,9 @@ class _ExchangeInputScreenState extends State<_ExchangeInputScreen> {
   void didUpdateWidget(_ExchangeInputScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.rate != widget.rate ||
+        oldWidget.rateDisplay != widget.rateDisplay ||
+        oldWidget.rateError != widget.rateError ||
+        oldWidget.loadingRate != widget.loadingRate ||
         oldWidget.fromCurrency != widget.fromCurrency ||
         oldWidget.toCurrency != widget.toCurrency) {
       _onAmountChanged();
@@ -769,14 +838,25 @@ class _ExchangeInputScreenState extends State<_ExchangeInputScreen> {
     final primary = Theme.of(context).colorScheme.primary;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final fromAmount = double.tryParse(widget.fromCtrl.text) ?? 0;
-    final toAmount = fromAmount * widget.rate;
-    final canContinue = fromAmount > 0 && widget.rate > 0;
+    final toAmount = widget.rate > 0 ? fromAmount * widget.rate : 0.0;
+    final canContinue = fromAmount > 0 &&
+        widget.rate > 0 &&
+        !widget.loadingRate &&
+        widget.rateError == null;
 
     // Soft filled CTA like the reference (light primary when enabled).
     final continueBg = canContinue
         ? (isDark ? primary.withValues(alpha: 0.85) : primary)
         : colors.surfaceVariant.withValues(alpha: isDark ? 0.55 : 0.9);
     final continueFg = canContinue ? Colors.white : colors.textTertiary;
+
+    final rateLabel = widget.loadingRate
+        ? 'Loading rate...'
+        : (widget.rateError ??
+            widget.rateDisplay ??
+            (widget.rate > 0
+                ? '1 ${widget.fromCurrency} = ${widget.rate.toStringAsFixed(4)} ${widget.toCurrency}'
+                : null));
 
     return Column(
       children: [
@@ -850,15 +930,16 @@ class _ExchangeInputScreenState extends State<_ExchangeInputScreen> {
             ],
           ),
         ),
-        if (fromAmount > 0)
+        if (rateLabel != null)
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
             child: Text(
-              widget.rate > 0
-                  ? '1 ${widget.fromCurrency} = ${widget.rate.toStringAsFixed(4)} ${widget.toCurrency}'
-                  : 'Loading rate...',
+              rateLabel,
+              textAlign: TextAlign.center,
               style: TextStyle(
-                color: colors.textSecondary,
+                color: widget.rateError != null
+                    ? colors.error
+                    : colors.textSecondary,
                 fontSize: 13,
                 fontWeight: FontWeight.w500,
               ),
@@ -977,6 +1058,15 @@ class _ExchangePanel extends StatelessWidget {
               child: TextField(
                 controller: controller,
                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                inputFormatters: [
+                  FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+                  TextInputFormatter.withFunction((oldValue, newValue) {
+                    final text = newValue.text;
+                    if (text.isEmpty) return newValue;
+                    if ('.'.allMatches(text).length > 1) return oldValue;
+                    return newValue;
+                  }),
+                ],
                 cursorColor: Theme.of(context).colorScheme.primary,
                 style: TextStyle(
                   fontSize: 40,
@@ -1104,6 +1194,7 @@ class _ExchangeConfirmationScreen extends StatelessWidget {
   final double toAmount;
   final String toCurrency;
   final double rate;
+  final String? rateDisplay;
   final bool isSubmitting;
 
   const _ExchangeConfirmationScreen({
@@ -1113,6 +1204,7 @@ class _ExchangeConfirmationScreen extends StatelessWidget {
     required this.toAmount,
     required this.toCurrency,
     required this.rate,
+    this.rateDisplay,
     this.isSubmitting = false,
   });
 
@@ -1165,9 +1257,10 @@ class _ExchangeConfirmationScreen extends StatelessWidget {
               const SizedBox(height: 28),
               _ConfirmMetaRow(
                 label: 'Exchange rate',
-                value: rate > 0
-                    ? '1 $fromCurrency = ${rate.toStringAsFixed(4)} $toCurrency'
-                    : '—',
+                value: rateDisplay ??
+                    (rate > 0
+                        ? '1 $fromCurrency = ${rate.toStringAsFixed(4)} $toCurrency'
+                        : '—'),
               ),
               const SizedBox(height: 14),
               _ConfirmMetaRow(

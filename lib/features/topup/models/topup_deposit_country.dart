@@ -1,5 +1,4 @@
 /// Supported fiat top-up / direct-deposit countries.
-/// Kept in one place so deposit/withdraw flows stay aligned.
 ///
 /// The backend `/api/countries` may return ISO 3166-1 alpha-2 codes and/or
 /// ISO 4217 currency codes; [fromIsoAlpha2] and [forDepositCode] map them.
@@ -151,10 +150,6 @@ class TopupDepositCountry {
   /// African currencies → Paystack; USD, GBP, EUR, and other non-African → Transak.
   static String cardMobileMoneyProviderFor(String currencyCode) =>
       isAfricanCurrency(currencyCode) ? 'paystack' : 'transak';
-
-  /// Withdrawal wizard is Kenya-only.
-  static const List<TopupDepositCountry> withdrawSupported =
-      <TopupDepositCountry>[kenya];
 
   /// Maps API [isoAlpha2] (e.g. `KE`, `NG`) to a catalog entry. Add cases when backend enables new countries.
   static TopupDepositCountry? fromIsoAlpha2(String isoAlpha2) {

@@ -15,6 +15,13 @@ final class CloudFunctionsApiConfig {
 
   static Uri countriesUri() => Uri.parse('$baseApiUrl/countries');
 
+  /// Customer wallet/account balances (`GET …/api/accounts`).
+  /// Alias: [walletsUri] (`GET …/api/wallets`) — same body.
+  static Uri accountsUri() => Uri.parse('$baseApiUrl/accounts');
+
+  /// Alias of [accountsUri] — same response body.
+  static Uri walletsUri() => Uri.parse('$baseApiUrl/wallets');
+
   /// Customer self-registration (`POST …/api/register`).
   /// Path must match the deployed HTTP handler; adjust if the backend uses a different route.
   static Uri registerUri() => Uri.parse('$baseApiUrl/register');
@@ -42,8 +49,6 @@ final class CloudFunctionsApiConfig {
 
   static Uri cryptoTransactionsUri({int limit = 50}) =>
       Uri.parse('$baseCryptoApiUrl/crypto/transactions?limit=$limit');
-
-  static Uri cryptoSendUri() => Uri.parse('$baseCryptoApiUrl/crypto/send');
 
   /// SafariTap pay / send HTTP API (`safariCardApi` Cloud Function).
   static String get baseSafariTapApiUrl {

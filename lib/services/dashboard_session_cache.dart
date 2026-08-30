@@ -1,5 +1,6 @@
 import 'package:pretium/models/transaction_model.dart';
 import 'package:pretium/models/wallet_model.dart';
+import 'package:pretium/repositories/wallet_repository.dart';
 
 /// Snapshot of wallet lists for restoring [WalletCard] without a network round-trip.
 class WalletSessionSnapshot {
@@ -114,6 +115,12 @@ class DashboardSessionCache {
     );
   }
 
+  /// Drops the recent-transactions TTL so the next home load refetches.
+  void invalidateTransactions() {
+    _transactionsAt = null;
+    _recentTransactions = null;
+  }
+
   void clear() {
     _walletAt = null;
     _fiatWallets = {};
@@ -124,5 +131,6 @@ class DashboardSessionCache {
     _cachedCryptoWallet = null;
     _transactionsAt = null;
     _recentTransactions = null;
+    WalletRepository.clearCache();
   }
 }

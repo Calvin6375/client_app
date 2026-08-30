@@ -3,19 +3,27 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:pretium/features/send_money/screens/send_money_page.dart';
 import 'package:pretium/features/swap/screens/swap_page.dart';
 import 'package:pretium/core/constants/app_colors.dart';
+import 'package:pretium/services/wallet_balance_refresh.dart';
 
 class FinancialServices extends StatelessWidget {
   /// Initial "from" currency for [SwapPage] when opened from this row (e.g. USD for fiat, USDT for crypto tab).
   final String swapInitialCurrency;
 
-  /// Opens withdraw for the currently selected wallet (moved from the card action row).
-  final VoidCallback? onWithdraw;
-
   const FinancialServices({
     super.key,
     this.swapInitialCurrency = 'USD',
-    this.onWithdraw,
   });
+
+  Future<void> _openAndRefresh(
+    BuildContext context,
+    Widget page,
+  ) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(builder: (_) => page),
+    );
+    // Success paths also refresh immediately; this covers mid-flow pops / home return.
+    await WalletBalanceRefresh.afterSuccessfulTransaction();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -46,11 +54,7 @@ class FinancialServices extends StatelessWidget {
               FontAwesomeIcons.paperPlane,
               "Send Money",
               true,
-              () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(builder: (context) => const SendMoneyPage()),
-                );
-              },
+              () => _openAndRefresh(context, const SendMoneyPage()),
             ),
             const SizedBox(width: 12),
             _buildServiceButton(
@@ -58,21 +62,10 @@ class FinancialServices extends StatelessWidget {
               FontAwesomeIcons.arrowRightArrowLeft,
               "Exchange",
               true,
-              () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (context) => SwapPage(initialFromCurrency: swapInitialCurrency),
-                  ),
-                );
-              },
-            ),
-            const SizedBox(width: 12),
-            _buildServiceButton(
-              context,
-              FontAwesomeIcons.arrowDown,
-              "Withdraw",
-              true,
-              onWithdraw ?? () => _showComingSoonDialog(context),
+              () => _openAndRefresh(
+                context,
+                SwapPage(initialFromCurrency: swapInitialCurrency),
+              ),
             ),
             const SizedBox(width: 12),
             _buildServiceButton(

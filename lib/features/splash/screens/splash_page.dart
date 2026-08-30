@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'dart:async';
 import 'package:pretium/core/constants/app_colors.dart';
 import 'package:pretium/features/auth/utils/app_startup_router.dart';
+import 'package:pretium/features/force_update/screens/force_update_screen.dart';
+import 'package:pretium/services/force_update_service.dart';
 
 class SplashPage extends StatefulWidget {
   const SplashPage({super.key});
@@ -69,9 +71,22 @@ class _SplashPageState extends State<SplashPage>
   }
 
   Future<void> _routeAfterSplash() async {
-    // Brief branding moment, then route by session (login vs home).
+    // Brief branding moment, then force-update gate, then session routing.
     await Future<void>.delayed(const Duration(milliseconds: 1200));
     if (!mounted) return;
+
+    final updateCheck = await ForceUpdateService().check();
+    if (!mounted) return;
+
+    if (updateCheck.updateRequired) {
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute<void>(
+          builder: (_) => ForceUpdateScreen(result: updateCheck),
+        ),
+      );
+      return;
+    }
+
     await AppStartupRouter.navigateFromSplash(context);
   }
 

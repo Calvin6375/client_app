@@ -6,6 +6,7 @@ import 'package:pretium/core/constants/app_colors.dart';
 import 'package:pretium/features/safari_tap/models/safari_tap_payout.dart';
 import 'package:pretium/features/safari_tap/services/safari_tap_pay_api_service.dart';
 import 'package:pretium/features/safari_tap/utils/payout_error_messages.dart';
+import 'package:pretium/services/wallet_balance_refresh.dart';
 import 'package:pretium/widgets/app_shimmer.dart';
 
 class SafariTapPayoutSummary {
@@ -42,7 +43,9 @@ class SafariTapPayoutSummary {
       accountLabel = 'PayBill number';
       accountValue = r['account']?.toString();
     } else if (r['phoneNumber'] != null) {
-      accountLabel = 'Phone number';
+      accountLabel = body['type']?.toString() == 'SAFARITAP_WALLET'
+          ? 'SafariTap phone'
+          : 'Phone number';
       accountValue = r['phoneNumber']?.toString();
     } else if (r['accountNumber'] != null) {
       accountLabel = 'Account number';
@@ -96,6 +99,7 @@ class _SafariTapPayoutProcessingPageState extends State<SafariTapPayoutProcessin
   Timer? _pollTimer;
   int _pollStep = 0;
   bool _autoPollFinished = false;
+  bool _didRefreshBalances = false;
 
   SafariTapPayout get _current => _payout ?? widget.initialPayout;
 
@@ -127,9 +131,18 @@ class _SafariTapPayoutProcessingPageState extends State<SafariTapPayoutProcessin
     super.initState();
     _api = widget.api ?? SafariTapPayApiService();
     _payout = widget.initialPayout.isTerminal ? widget.initialPayout : null;
+    if (widget.initialPayout.isSuccess) {
+      _didRefreshBalances = true;
+    }
     if (!_isTerminal) {
       _startAutoPoll();
     }
+  }
+
+  void _maybeRefreshBalancesOnSuccess() {
+    if (_didRefreshBalances || !_isSuccess) return;
+    _didRefreshBalances = true;
+    unawaited(WalletBalanceRefresh.afterSuccessfulTransaction());
   }
 
   @override
@@ -181,6 +194,7 @@ class _SafariTapPayoutProcessingPageState extends State<SafariTapPayoutProcessin
         _refreshing = false;
       });
       if (payout.isTerminal) _stopAutoPoll();
+      if (payout.isSuccess) _maybeRefreshBalancesOnSuccess();
     } on SafariTapPayApiException catch (e) {
       if (!mounted) return;
       if (e.statusCode == 404) {
@@ -219,14 +233,19 @@ class _SafariTapPayoutProcessingPageState extends State<SafariTapPayoutProcessin
             ? 'Payment ${_current.status.toLowerCase()}'
             : 'Processing payment…';
 
+    final isWalletTransfer = _current.type == 'SAFARITAP_WALLET';
     final statusSubtitle = _isSuccess
-        ? 'Transaction successful · ${widget.summary.currency}'
+        ? (isWalletTransfer
+            ? 'Wallet transfer complete · ${widget.summary.currency}'
+            : 'Transaction successful · ${widget.summary.currency}')
         : _isTerminal
             ? (_current.failureReason?.trim().isNotEmpty == true
                 ? _current.failureReason!
                 : 'Your payment could not be completed.')
             : _autoPollFinished
-                ? 'Still confirming with M-Pesa. Pull down to refresh.'
+                ? (isWalletTransfer
+                    ? 'Still confirming transfer. Pull down to refresh.'
+                    : 'Still confirming with M-Pesa. Pull down to refresh.')
                 : 'This usually takes a few seconds. Pull down to refresh.';
 
     return Scaffold(

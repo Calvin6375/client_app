@@ -1,12 +1,12 @@
 class RouteNames {
   static const splash = '/';
   static const splashPage1 = '/splash_page_1';
+  static const forceUpdate = '/force_update';
   static const login = '/login';
   static const register = '/register';
   static const home = '/home';
   static const topup = '/topup';
   static const swap = '/swap';
-  static const withdraw = '/withdraw';
   static const pay = '/pay';
   static const walletVerification = '/wallet_verification';
   static const notifications = '/notifications';

@@ -13,6 +13,9 @@ String safariTapPayoutErrorMessage(SafariTapPayApiException error) {
     'INSUFFICIENT_BALANCE' =>
       'Insufficient KES balance. Reduce the amount or top up your wallet.',
     'INVALID_PHONE_NUMBER' => 'Enter a valid M-Pesa phone number (07… or 2547…).',
+    'RECIPIENT_NOT_FOUND' =>
+      'No SafariTap user found for that phone number. Ask them to sign up first.',
+    'SELF_TRANSFER' => 'You can’t send money to your own SafariTap wallet.',
     'INVALID_PAYBILL_REFERENCE' =>
       'Enter a valid PayBill account reference (1–20 characters).',
     'INVALID_BANK_ACCOUNT' => 'Check the bank account details and try again.',

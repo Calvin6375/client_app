@@ -4,7 +4,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:http/http.dart' as http;
 import 'package:pretium/core/constants/cloud_functions_api_config.dart';
 import 'package:pretium/core/http/c2b_http_codec.dart';
-import 'package:pretium/features/crypto/models/crypto_send_result.dart';
 import 'package:pretium/features/crypto/models/crypto_transaction.dart';
 import 'package:pretium/features/crypto/models/crypto_wallet_info.dart';
 import 'package:pretium/services/auth_claims_service.dart';
@@ -112,24 +111,5 @@ final class CryptoApiService {
     return list
         .map((e) => CryptoTransaction.fromJson(Map<String, dynamic>.from(e as Map)))
         .toList();
-  }
-
-  Future<CryptoSendResult> sendUsdc({
-    required String toAddress,
-    required double amount,
-    required String idempotencyKey,
-  }) async {
-    Logger.info('CryptoApiService POST /crypto/send amount=$amount');
-    final response = await _http.post(
-      CloudFunctionsApiConfig.cryptoSendUri(),
-      headers: await _headers(idempotencyKey: idempotencyKey),
-      body: await _codec.encodeJsonBody(
-        jsonEncode({'toAddress': toAddress, 'amount': amount}),
-      ),
-    );
-    final body = await _decodeResponse(response);
-    return CryptoSendResult.fromJson(
-      Map<String, dynamic>.from(body['data'] as Map),
-    );
   }
 }

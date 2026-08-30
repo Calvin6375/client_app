@@ -73,11 +73,15 @@ class BeneficiaryValidation {
     required this.valid,
     required this.beneficiaryName,
     this.account,
+    this.recipientUserId,
+    this.provider,
   });
 
   final bool valid;
   final String beneficiaryName;
   final String? account;
+  final String? recipientUserId;
+  final String? provider;
 
   bool get hasDisplayName => valid && beneficiaryName.trim().isNotEmpty;
 
@@ -86,6 +90,8 @@ class BeneficiaryValidation {
       valid: json['valid'] == true,
       beneficiaryName: json['beneficiaryName']?.toString() ?? '',
       account: json['account']?.toString(),
+      recipientUserId: json['recipientUserId']?.toString(),
+      provider: json['provider']?.toString(),
     );
   }
 }

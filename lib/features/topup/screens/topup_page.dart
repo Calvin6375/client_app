@@ -5,11 +5,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_database/firebase_database.dart';
 import 'package:pretium/repositories/wallet_repository.dart';
 import 'package:pretium/repositories/user_repository.dart';
 import 'package:pretium/services/payment_service.dart';
 import 'package:pretium/services/dashboard_session_cache.dart';
+import 'package:pretium/services/wallet_balance_refresh.dart';
 import 'package:pretium/models/wallet_model.dart';
 import 'package:pretium/utils/firebase_utils.dart';
 import 'package:pretium/core/constants/app_colors.dart';
@@ -70,16 +70,6 @@ class _TopUpPageState extends State<TopUpPage> {
   bool _isLoadingBalance = false;
   bool _hasBalanceData = false;
   _TopUpPaymentMethod _selectedMethod = _TopUpPaymentMethod.directFiatDeposit;
-
-  static const List<String> _supportedFiatCurrencies = [
-    'USD',
-    'KES',
-    'NGN',
-    'GHS',
-    'UGX',
-    'GBP',
-    'EUR',
-  ];
 
   /// Minimum Set amount for Fiat Option actions when currency is KES.
   static const double _kesFiatOptionMinimumAmount = 150;
@@ -149,61 +139,35 @@ class _TopUpPageState extends State<TopUpPage> {
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) return;
 
-      final fiatWallets = <String, Wallet>{};
-      final availableCurrencies = <String>[];
-
-      for (final currency in _supportedFiatCurrencies) {
-        try {
-          final wallet =
-              await _walletRepository.getWalletBalance(user.uid, currency: currency);
-          if (wallet != null) {
-            fiatWallets[currency] = wallet;
-            availableCurrencies.add(currency);
-          }
-        } catch (_) {
-          continue;
-        }
-      }
-
+      final accounts = await _walletRepository.fetchAccounts(forceRefresh: true);
+      final fiatWallets = <String, Wallet>{
+        ...accounts.fiatWallets,
+        for (final e in accounts.fiatBalances.entries)
+          if (!accounts.fiatWallets.containsKey(e.key))
+            e.key: Wallet(currencyCode: e.key, balance: e.value),
+      };
       // Ensure USD is present so the dropdown always has a balance entry.
-      if (!fiatWallets.containsKey('USD')) {
-        final usd =
-            await _walletRepository.getWalletBalance(user.uid, currency: 'USD');
-        fiatWallets['USD'] =
-            usd ?? Wallet(currencyCode: 'USD', balance: 0.0);
-        if (!availableCurrencies.contains('USD')) {
-          availableCurrencies.insert(0, 'USD');
-        }
+      fiatWallets.putIfAbsent(
+        'USD',
+        () => accounts.fiatWallet('USD') ?? Wallet(currencyCode: 'USD', balance: 0),
+      );
+
+      final availableCurrencies = accounts.fiatWallets.keys.toList();
+      if (availableCurrencies.isEmpty) {
+        availableCurrencies.addAll(fiatWallets.keys);
+      }
+      if (!availableCurrencies.contains('USD')) {
+        availableCurrencies.insert(0, 'USD');
       }
 
-      var cryptoWallet =
-          await _walletRepository.getCryptoWalletBalance(user.uid, 'USDT');
-
-      // Create default USDT wallet if it doesn't exist (as a holding place)
-      final cryptoWalletRef =
-          FirebaseDatabase.instance.ref('wallet/${user.uid}/crypto/USDT');
-      final cryptoSnapshot = await cryptoWalletRef.get();
-
-      if (!cryptoSnapshot.exists) {
-        try {
-          final timestamp = DateTime.now().toIso8601String();
-          await cryptoWalletRef.set({
-            'balance': 0,
-            'currency': 'USDT',
-            'updatedAt': timestamp,
-            'createdAt': timestamp,
-          });
-          cryptoWallet =
-              await _walletRepository.getCryptoWalletBalance(user.uid, 'USDT');
-        } catch (e) {
-          debugPrint('TopUpPage - Failed to create default USDT wallet: $e');
-        }
-      }
+      final cryptoWallet = accounts.cryptoWallet('USDT') ??
+          Wallet(currencyCode: 'USDT', balance: 0);
 
       final existing = DashboardSessionCache.instance.readWalletLastKnown();
       final cryptoWallets = <String, Wallet>{
         ...?existing?.cryptoWallets,
-        'USDT': cryptoWallet ?? Wallet(currencyCode: 'USDT', balance: 0.0),
+        ...accounts.cryptoWallets,
+        'USDT': cryptoWallet,
       };
 
       DashboardSessionCache.instance.recordWalletSnapshot(
@@ -361,6 +325,9 @@ class _TopUpPageState extends State<TopUpPage> {
           ),
         ),
       );
+      // Checkout may have settled while the WebView was open — refresh ledger.
+      await WalletBalanceRefresh.afterSuccessfulTransaction();
+      if (mounted) await _loadWalletBalance(silent: true);
     } catch (e) {
       _showError('Error processing payment: $e');
     } finally {

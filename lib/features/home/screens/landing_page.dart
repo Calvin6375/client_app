@@ -5,6 +5,7 @@ import 'package:pretium/features/pay/screens/pay_page.dart';
 import 'package:pretium/core/constants/app_colors.dart';
 import 'package:pretium/app/route_names.dart';
 import 'package:pretium/services/app_access_guard.dart';
+import 'package:pretium/services/wallet_balance_refresh.dart';
 import 'package:pretium/widgets/app_shimmer.dart';
 import '/widgets/header_widget.dart';
 import '/widgets/wallet_card.dart';
@@ -38,8 +39,24 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   @override
   void initState() {
+    WalletBalanceRefresh.revision.addListener(_onBalancesRefreshed);
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) => _verifyCustomerAccess());
+  }
+
+  @override
+  void dispose() {
+    WalletBalanceRefresh.revision.removeListener(_onBalancesRefreshed);
+    super.dispose();
+  }
+
+  void _onBalancesRefreshed() {
+    if (!mounted) return;
+    final txState = _transactionsKey.currentState;
+    if (txState == null) return;
+    try {
+      (txState as dynamic).refreshTransactions();
+    } catch (_) {}
   }
 
   Future<void> _verifyCustomerAccess() async {
@@ -174,13 +191,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 // Financial Services grid
                 FinancialServices(
                   swapInitialCurrency: _selectedTab == 0 ? 'USD' : 'USDT',
-                  onWithdraw: () {
-                    final walletCardState = _walletCardKey.currentState;
-                    if (walletCardState == null) return;
-                    try {
-                      (walletCardState as dynamic).openWithdraw();
-                    } catch (_) {}
-                  },
                 ),
                 const SizedBox(height: 40),
                 // Recent Transactions
