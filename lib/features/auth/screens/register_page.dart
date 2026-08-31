@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:pretium/services/auth_service.dart';
 import 'package:pretium/services/notification_service.dart';
-import 'package:pretium/repositories/user_repository.dart';
 import 'package:pretium/utils/logger.dart';
 import 'package:pretium/utils/async_action_guard.dart';
 import 'package:pretium/core/constants/app_colors.dart';
@@ -12,7 +11,9 @@ import '../widgets/phone_number_field.dart';
 import '../data/nationalities.dart';
 import '../widgets/register_header.dart';
 import '../widgets/terms_checkbox.dart';
+import 'package:pretium/features/auth/screens/legal_document_webview_page.dart';
 import 'package:pretium/features/auth/services/registration_api_service.dart';
+import 'package:pretium/features/auth/utils/phone_local_digits.dart';
 import 'package:pretium/features/auth/utils/post_auth_routing.dart';
 import 'package:pretium/services/auth_claims_service.dart';
 import 'package:pretium/core/constants/auth_config.dart';
@@ -58,12 +59,14 @@ class _RegisterPageState extends State<RegisterPage> {
   final TextEditingController _phoneController = TextEditingController();
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
   bool _termsAccepted = false;
+  bool _privacyAccepted = false;
+  bool _hasReadTerms = false;
+  bool _hasReadPrivacy = false;
   bool _isSubmitting = false;
   String _selectedCountryCode = '254'; // Default to Kenya
   NationalityOption? _selectedNationality = nationalityByIsoCode('KE');
 
   final AuthService _authService = AuthService();
-  final UserRepository _userRepository = UserRepository();
   final RegistrationApiService _registrationApiService = RegistrationApiService();
   final AuthClaimsService _authClaimsService = AuthClaimsService();
 
@@ -87,14 +90,43 @@ class _RegisterPageState extends State<RegisterPage> {
     final lastName = _lastNameController.text.trim();
     final email = _emailController.text.trim();
     final password = _passwordController.text;
-    final phoneDigits = _phoneController.text.trim().replaceAll(RegExp(r'[^\d]'), '');
+    final phoneDigits = _normalizedLocalPhoneDigits();
+    final phoneOk = _selectedCountryCode == '254'
+        ? kenyaMobileLocalRegex.hasMatch(phoneDigits)
+        : phoneDigits.length >= 7 && phoneDigits.length <= 15;
     return firstName.isNotEmpty &&
         lastName.isNotEmpty &&
         email.isNotEmpty &&
         password.isNotEmpty &&
-        phoneDigits.length >= 7 &&
+        phoneOk &&
         _selectedNationality != null &&
-        _termsAccepted;
+        _termsAccepted &&
+        _privacyAccepted;
+  }
+
+  String _normalizedLocalPhoneDigits() {
+    final raw = _phoneController.text.trim().replaceAll(RegExp(r'[^\d]'), '');
+    if (_selectedCountryCode == '254') {
+      return stripKenyaLocalDigits(raw);
+    }
+    return raw;
+  }
+
+  Future<void> _openLegalDocument({
+    required String title,
+    required String url,
+    required VoidCallback onRead,
+  }) async {
+    final read = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => LegalDocumentWebViewPage(
+          title: title,
+          url: url,
+        ),
+      ),
+    );
+    if (!mounted) return;
+    if (read == true) onRead();
   }
 
   Future<void> _register() async {
@@ -102,10 +134,27 @@ class _RegisterPageState extends State<RegisterPage> {
       return;
     }
 
-    if (!_termsAccepted) {
+    if (!_hasReadTerms || !_termsAccepted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please accept the terms and conditions.'),
+        SnackBar(
+          content: Text(
+            !_hasReadTerms
+                ? 'Open and scroll to the bottom of the Terms and Conditions first.'
+                : 'Please accept the Terms and Conditions.',
+          ),
+        ),
+      );
+      return;
+    }
+
+    if (!_hasReadPrivacy || !_privacyAccepted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            !_hasReadPrivacy
+                ? 'Open and scroll to the bottom of the Privacy Policy first.'
+                : 'Please accept the Privacy Policy.',
+          ),
         ),
       );
       return;
@@ -116,9 +165,8 @@ class _RegisterPageState extends State<RegisterPage> {
     final email = _emailController.text.trim();
     final password = _passwordController.text;
     
-    // Get formatted phone number (country code + number, e.g., '254742844875')
-    final phoneDigits = _phoneController.text.trim().replaceAll(RegExp(r'[^\d]'), '');
-    final phoneNumber = phoneDigits.isNotEmpty ? '$_selectedCountryCode$phoneDigits' : '';
+    // Local digits + dial code → E.164 (e.g. '+254742844875')
+    final phoneDigits = _normalizedLocalPhoneDigits();
     final phoneNumberE164 =
         phoneDigits.isNotEmpty ? '+$_selectedCountryCode$phoneDigits' : '';
 
@@ -168,7 +216,7 @@ class _RegisterPageState extends State<RegisterPage> {
       Logger.info('📋 Registration Data: $registrationRequest');
       Logger.info('=====================================');
 
-      // 0) Backend customer registration (body includes Institution + Channel)
+      // 0) Backend creates Auth + profile (`POST /api/register` → 201).
       Logger.info('📤 Step 0: Registering customer with backend API...');
       await _registrationApiService.registerCustomer(
         firstName: firstName,
@@ -179,63 +227,48 @@ class _RegisterPageState extends State<RegisterPage> {
         country: nationality.isoCode,
       );
       Logger.success('✅ Backend registration completed');
-      
-      // 1) Create user in Firebase Auth
-      Logger.info('📤 Step 1: Creating user in Firebase Auth...');
-      final credential = await _authService.signUp(
+
+      // 1) Sign in with the account the backend just created — do not createUser again.
+      Logger.info('📤 Step 1: Signing in with Firebase Auth...');
+      final credential = await _authService.signIn(
         email: email,
         password: password,
       );
 
-      // 2) Wait for auth token to be ready (especially important on physical devices)
       final uid = credential.user!.uid;
       Logger.info('⏳ Waiting for auth token to be ready...');
       try {
-        // Force a token refresh to ensure it's available
         await credential.user!.getIdToken(true);
-        final userType = await _authClaimsService.userTypeClaim(forceRefresh: true);
-        Logger.info('✅ Auth token is ready (userType: ${userType ?? "(missing)"})');
+        final userType =
+            await _authClaimsService.userTypeClaim(forceRefresh: true);
+        Logger.info(
+          '✅ Auth token is ready (userType: ${userType ?? "(missing)"})',
+        );
         if (userType != AuthConfig.expectedCustomerClaim) {
           Logger.warning(
             'Expected userType "${AuthConfig.expectedCustomerClaim}" after registration, got: $userType',
           );
         }
-
-        // Small delay to ensure auth state propagates to Firestore
-        // This is especially important on physical devices with network latency
         await Future.delayed(const Duration(milliseconds: 500));
-        Logger.info('✅ Auth state propagation delay completed');
       } catch (e) {
         Logger.warning('⚠️ Token refresh warning: $e (continuing anyway)');
       }
 
-      // 3) Create user profile in Firestore
-      Logger.info('📤 Step 2: Creating user profile in Firestore...');
-      await _userRepository.createUserProfile(
-        uid: uid,
-        firstName: firstName,
-        lastName: lastName,
-        email: email,
-        phoneNumber: phoneNumber.isNotEmpty ? phoneNumber : null,
-        country: nationality.isoCode,
-      );
-      
-      // 4) Setup notifications (save FCM token)
-      Logger.info('📤 Step 3: Setting up notifications...');
+      // 2) Setup notifications (profile already created by backend).
+      Logger.info('📤 Step 2: Setting up notifications...');
       try {
         await NotificationService().setupNotifications(uid);
         Logger.success('✅ Notifications setup completed');
       } catch (e) {
         Logger.warning('⚠️ Failed to setup notifications: $e');
-        // Don't block registration if notification setup fails
       }
-      
+
       Logger.success('✅ ===== CREATE USER SUCCESS =====');
       Logger.success('   User ID: $uid');
       Logger.success('   Email: $email');
       Logger.success('==================================');
 
-      // 5) Route by userType claim (customer stays in app; partner/admin → web dashboard)
+      // 3) Route by userType claim (customer stays in app; partner/admin → web dashboard)
       if (!mounted) return;
       await completeAuthAndRoute(context);
         } on RegistrationApiException catch (e) {
@@ -352,15 +385,6 @@ class _RegisterPageState extends State<RegisterPage> {
                       _selectedCountryCode = countryCode;
                     });
                   },
-                  validator: (value) {
-                    if (value == null || value.trim().isEmpty) {
-                      return 'Please enter your phone number';
-                    }
-                    if (value.trim().length < 7) {
-                      return 'Please enter a valid phone number';
-                    }
-                    return null;
-                  },
                 ),
                 const SizedBox(height: 24),
 
@@ -391,13 +415,35 @@ class _RegisterPageState extends State<RegisterPage> {
                 ),
 
                 const SizedBox(height: 16),
-                // Terms and conditions checkbox
+                // Separate Terms / Privacy boxes — each enabled after that doc is scrolled.
                 TermsCheckbox(
-                  value: _termsAccepted,
-                  onChanged: (value) {
-                    setState(() {
-                      _termsAccepted = value!;
-                    });
+                  termsAccepted: _termsAccepted,
+                  privacyAccepted: _privacyAccepted,
+                  canAcceptTerms: _hasReadTerms,
+                  canAcceptPrivacy: _hasReadPrivacy,
+                  onTermsTap: () => _openLegalDocument(
+                    title: 'Terms of Service',
+                    url: LegalDocumentWebViewPage.termsOfServiceUrl,
+                    onRead: () => setState(() {
+                      _hasReadTerms = true;
+                      _termsAccepted = true;
+                    }),
+                  ),
+                  onPrivacyTap: () => _openLegalDocument(
+                    title: 'Privacy Policy',
+                    url: LegalDocumentWebViewPage.privacyPolicyUrl,
+                    onRead: () => setState(() {
+                      _hasReadPrivacy = true;
+                      _privacyAccepted = true;
+                    }),
+                  ),
+                  onTermsChanged: (value) {
+                    if (!_hasReadTerms) return;
+                    setState(() => _termsAccepted = value ?? false);
+                  },
+                  onPrivacyChanged: (value) {
+                    if (!_hasReadPrivacy) return;
+                    setState(() => _privacyAccepted = value ?? false);
                   },
                   color: Theme.of(context).colorScheme.primary,
                 ),

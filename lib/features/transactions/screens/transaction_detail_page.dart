@@ -367,12 +367,12 @@ class _TransactionDetailPageState extends State<TransactionDetailPage> {
 
     // Prefer friendly labels for known metadata / extra keys.
     const orderedLabels = <String, String>{
-      'fundingOrderId': 'Funding order ID',
-      'funding_order_id': 'Funding order ID',
       'orderId': 'Order ID',
       'order_id': 'Order ID',
-      'correlationId': 'Correlation ID',
-      'correlation_id': 'Correlation ID',
+      'correlationId': 'Transaction ID',
+      'correlation_id': 'Transaction ID',
+      'transactionId': 'Transaction ID',
+      'transaction_id': 'Transaction ID',
       'flow': 'Flow',
       'orderType': 'Order type',
       'bankName': 'Bank name',
@@ -386,6 +386,10 @@ class _TransactionDetailPageState extends State<TransactionDetailPage> {
     };
 
     final flat = _flattenedApiFields();
+    // Hide funding order IDs from the details view.
+    for (final k in ['fundingOrderId', 'funding_order_id']) {
+      consumed.add(k);
+    }
     for (final entry in orderedLabels.entries) {
       if (consumed.contains(entry.key) || !flat.containsKey(entry.key)) continue;
       final value = _stringifyValue(flat[entry.key]);
@@ -393,7 +397,7 @@ class _TransactionDetailPageState extends State<TransactionDetailPage> {
       addRow(
         entry.value,
         value,
-        copyable: entry.value == 'Funding order ID',
+        copyable: entry.value == 'Transaction ID',
       );
       consumed.add(entry.key);
     }

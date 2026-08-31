@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:pretium/features/auth/utils/phone_local_digits.dart';
 
 /// Country code data model
 class CountryCode {
@@ -14,6 +15,35 @@ class CountryCode {
     required this.dialCode,
     required this.flag,
   });
+}
+
+/// Keeps only digits and, for Kenya (+254), strips leading `0` / `254` / `2540`.
+class _PhoneLocalDigitsFormatter extends TextInputFormatter {
+  _PhoneLocalDigitsFormatter({required this.dialCode});
+
+  final String dialCode;
+
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    var digits = newValue.text.replaceAll(RegExp(r'[^\d]'), '');
+    if (dialCode == '254') {
+      // Prefer stripping front codes / keeping trailing mobile (never cut the end first).
+      digits = stripKenyaLocalDigits(digits);
+      if (digits.length > 9) {
+        digits = digits.substring(digits.length - 9);
+      }
+    } else if (digits.length > 15) {
+      digits = digits.substring(0, 15);
+    }
+
+    return TextEditingValue(
+      text: digits,
+      selection: TextSelection.collapsed(offset: digits.length),
+    );
+  }
 }
 
 /// Phone number field with country code selector
@@ -49,11 +79,26 @@ class _PhoneNumberFieldState extends State<PhoneNumberField> {
   String? getFormattedPhoneNumber() {
     final phoneNumber = widget.phoneController.text.trim();
     if (phoneNumber.isEmpty) return null;
-    // Remove any non-digit characters
-    final digitsOnly = phoneNumber.replaceAll(RegExp(r'[^\d]'), '');
+    var digitsOnly = phoneNumber.replaceAll(RegExp(r'[^\d]'), '');
+    if (_selectedCountry.dialCode == '254') {
+      digitsOnly = stripKenyaLocalDigits(digitsOnly);
+    }
     if (digitsOnly.isEmpty) return null;
-    // Combine country code and phone number
     return '${_selectedCountry.dialCode}$digitsOnly';
+  }
+
+  void _normalizeControllerForCountry() {
+    final current = widget.phoneController.text;
+    if (current.isEmpty) return;
+    final formatted = _PhoneLocalDigitsFormatter(
+      dialCode: _selectedCountry.dialCode,
+    ).formatEditUpdate(
+      TextEditingValue.empty,
+      TextEditingValue(text: current),
+    );
+    if (formatted.text != current) {
+      widget.phoneController.value = formatted;
+    }
   }
   
   // Common country codes (you can expand this list)
@@ -76,6 +121,8 @@ class _PhoneNumberFieldState extends State<PhoneNumberField> {
     _applyInitialCountryCode();
     // Notify parent of initial country code (editable flows only; locked code is fixed in parent)
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _normalizeControllerForCountry();
       if (!widget.lockCountryCode) {
         widget.onCountryCodeChanged?.call(_selectedCountry.dialCode);
       }
@@ -206,6 +253,7 @@ class _PhoneNumberFieldState extends State<PhoneNumberField> {
                                   onTap: () {
                                     setState(() {
                                       _selectedCountry = country;
+                                      _normalizeControllerForCountry();
                                     });
                                     // Close first, then notify parent so a parent
                                     // rebuild cannot dispose this sheet mid-frame.
@@ -282,11 +330,18 @@ class _PhoneNumberFieldState extends State<PhoneNumberField> {
       controller: widget.phoneController,
       keyboardType: TextInputType.phone,
       inputFormatters: [
-        FilteringTextInputFormatter.digitsOnly,
+        _PhoneLocalDigitsFormatter(dialCode: _selectedCountry.dialCode),
       ],
       cursorColor: widget.primaryColor,
       style: TextStyle(color: isDark ? Colors.white : Colors.black87),
-      validator: widget.validator,
+      validator: (value) {
+        final countryError = validatePhoneLocalDigits(
+          value: value,
+          dialCode: _selectedCountry.dialCode,
+        );
+        if (countryError != null) return countryError;
+        return widget.validator?.call(value);
+      },
       decoration: InputDecoration(
         prefixIcon: countryPrefix(interactive: !widget.lockCountryCode),
         labelText: 'Phone Number',

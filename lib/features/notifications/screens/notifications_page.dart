@@ -626,8 +626,8 @@ class _NotificationDetailSheet extends StatelessWidget {
     const keys = {
       'correlationId',
       'correlation_id',
-      'fundingOrderId',
-      'funding_order_id',
+      'transactionId',
+      'transaction_id',
     };
     return keys.contains(key);
   }
@@ -679,13 +679,17 @@ class _NotificationDetailSheet extends StatelessWidget {
       out.add((label: 'Reference', value: refVal.toString(), copyable: false));
     }
 
+    // Hide funding order IDs from the details sheet.
+    for (final k in ['fundingOrderId', 'funding_order_id']) {
+      if (flat.containsKey(k)) consumed.add(k);
+    }
+
     const orderedPairs = <(String, String)>[
-      ('correlationId', 'Correlation ID'),
-      ('correlation_id', 'Correlation ID'),
-      ('fundingOrderId', 'Funding order ID'),
-      ('funding_order_id', 'Funding order ID'),
-      ('orderId', 'Order ID'),
+      ('correlationId', 'Transaction ID'),
+      ('correlation_id', 'Transaction ID'),
       ('transactionId', 'Transaction ID'),
+      ('transaction_id', 'Transaction ID'),
+      ('orderId', 'Order ID'),
       ('currency', 'Currency'),
       ('newBalance', 'New balance'),
       ('orderType', 'Order type'),

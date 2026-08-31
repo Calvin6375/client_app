@@ -10,6 +10,7 @@ import 'package:pretium/repositories/user_repository.dart';
 import 'package:pretium/services/payment_service.dart';
 import 'package:pretium/services/dashboard_session_cache.dart';
 import 'package:pretium/services/wallet_balance_refresh.dart';
+import 'package:pretium/services/countries_api_service.dart';
 import 'package:pretium/models/wallet_model.dart';
 import 'package:pretium/utils/firebase_utils.dart';
 import 'package:pretium/core/constants/app_colors.dart';
@@ -18,16 +19,33 @@ import 'package:pretium/features/topup/screens/payment_checkout_webview_page.dar
 import 'package:pretium/widgets/currency_logo.dart';
 import 'package:pretium/widgets/app_shimmer.dart';
 
-/// Fiat codes in the Set amount dropdown; includes every [TopupDepositCountry] code plus extras.
-List<String> _topupFiatCurrencyCodes({String? includeCode}) {
+/// Fiat codes for the Deposit currency picker.
+/// Prefers [apiCodes] from `GET /api/countries`; falls back to the static catalog.
+/// When [excludeAfrican] is true (International Topup), African fiat is omitted.
+List<String> _topupFiatCurrencyCodes({
+  List<String>? apiCodes,
+  String? includeCode,
+  bool excludeAfrican = false,
+}) {
   final codes = <String>{
-    ...TopupDepositCountry.depositCurrencyCodes,
-    'EUR',
-    'GBP',
-    if (includeCode != null && includeCode.trim().isNotEmpty)
+    if (apiCodes != null && apiCodes.isNotEmpty)
+      ...apiCodes
+    else ...[
+      ...TopupDepositCountry.depositCurrencyCodes,
+      'EUR',
+      'GBP',
+    ],
+    if (includeCode != null &&
+        includeCode.trim().isNotEmpty &&
+        !(excludeAfrican &&
+            TopupDepositCountry.isAfricanCurrency(includeCode)))
       includeCode.trim().toUpperCase(),
   };
-  return codes.toList()..sort();
+  final list = codes.toList()..sort();
+  if (!excludeAfrican) return list;
+  return list
+      .where((c) => !TopupDepositCountry.isAfricanCurrency(c))
+      .toList();
 }
 
 String _coerceTopupFiatCurrency(String? code) {
@@ -61,6 +79,7 @@ class _TopUpPageState extends State<TopUpPage> {
 
   final WalletRepository _walletRepository = WalletRepository();
   final UserRepository _userRepository = UserRepository();
+  final CountriesApiService _countriesApi = CountriesApiService();
 
   bool _hideBalance = false;
   /// Per-currency fiat balances so Available matches the selected currency.
@@ -69,6 +88,8 @@ class _TopUpPageState extends State<TopUpPage> {
   bool _isProcessingPayment = false;
   bool _isLoadingBalance = false;
   bool _hasBalanceData = false;
+  bool _loadingCountries = true;
+  List<String> _apiFiatCurrencies = const [];
   _TopUpPaymentMethod _selectedMethod = _TopUpPaymentMethod.directFiatDeposit;
 
   /// Minimum Set amount for Fiat Option actions when currency is KES.
@@ -76,6 +97,31 @@ class _TopUpPageState extends State<TopUpPage> {
 
   double get _availableBalanceForSelected =>
       _fiatBalances[_selectedCurrency] ?? 0.0;
+
+  bool get _isInternationalTopup =>
+      _selectedMethod == _TopUpPaymentMethod.cardMobileMoney;
+
+  List<String> get _depositPickerCurrencies => _topupFiatCurrencyCodes(
+        apiCodes: _apiFiatCurrencies,
+        includeCode: _selectedCurrency,
+        excludeAfrican: _isInternationalTopup,
+      );
+
+  void _selectPaymentMethod(_TopUpPaymentMethod method) {
+    setState(() {
+      _selectedMethod = method;
+      if (method == _TopUpPaymentMethod.cardMobileMoney &&
+          TopupDepositCountry.isAfricanCurrency(_selectedCurrency)) {
+        final international = _topupFiatCurrencyCodes(
+          apiCodes: _apiFiatCurrencies,
+          excludeAfrican: true,
+        );
+        _selectedCurrency = international.contains('USD')
+            ? 'USD'
+            : (international.isNotEmpty ? international.first : 'USD');
+      }
+    });
+  }
 
   @override
   void initState() {
@@ -87,6 +133,38 @@ class _TopUpPageState extends State<TopUpPage> {
     _hydrateBalancesFromCache();
     _loadWalletBalance(silent: _hasBalanceData);
     _loadUserProfile();
+    _loadDepositCurrencies();
+  }
+
+  Future<void> _loadDepositCurrencies() async {
+    final cached = CountriesApiService.cached;
+    if (cached != null && cached.fiatCodes.isNotEmpty) {
+      _applyDepositCurrencies(cached.fiatCodes);
+    }
+
+    try {
+      final catalog = await _countriesApi.fetchCountries();
+      if (!mounted) return;
+      _applyDepositCurrencies(catalog.fiatCodes);
+    } catch (e) {
+      debugPrint('TopUpPage - Failed to load /api/countries: $e');
+      if (!mounted) return;
+      setState(() => _loadingCountries = false);
+    }
+  }
+
+  void _applyDepositCurrencies(List<String> fiatCodes) {
+    setState(() {
+      _apiFiatCurrencies = List<String>.from(fiatCodes);
+      _loadingCountries = false;
+      final allowed = _topupFiatCurrencyCodes(
+        apiCodes: _apiFiatCurrencies,
+        includeCode: _selectedCurrency,
+      );
+      if (!allowed.contains(_selectedCurrency) && allowed.isNotEmpty) {
+        _selectedCurrency = allowed.first;
+      }
+    });
   }
 
   void _hydrateBalancesFromCache() {
@@ -435,6 +513,8 @@ class _TopUpPageState extends State<TopUpPage> {
                   _DepositAmountField(
                     controller: _amountCtrl,
                     selectedCurrency: _selectedCurrency,
+                    currencies: _depositPickerCurrencies,
+                    loadingCurrencies: _loadingCountries,
                     onCurrencyChanged: (currency) {
                       setState(() => _selectedCurrency = currency);
                     },
@@ -465,9 +545,8 @@ class _TopUpPageState extends State<TopUpPage> {
                     subtitle: 'Local bank or card or mobile money',
                     brandIcon: Icons.account_balance_outlined,
                     selected: _selectedMethod == _TopUpPaymentMethod.directFiatDeposit,
-                    onTap: () => setState(
-                      () => _selectedMethod = _TopUpPaymentMethod.directFiatDeposit,
-                    ),
+                    onTap: () =>
+                        _selectPaymentMethod(_TopUpPaymentMethod.directFiatDeposit),
                   ),
                   const SizedBox(height: 12),
                   _PaymentMethodTile(
@@ -476,9 +555,8 @@ class _TopUpPageState extends State<TopUpPage> {
                         'International bank or card, Apple Pay or Google Pay.',
                     brandIcon: Icons.payment,
                     selected: _selectedMethod == _TopUpPaymentMethod.cardMobileMoney,
-                    onTap: () => setState(
-                      () => _selectedMethod = _TopUpPaymentMethod.cardMobileMoney,
-                    ),
+                    onTap: () =>
+                        _selectPaymentMethod(_TopUpPaymentMethod.cardMobileMoney),
                   ),
                   const SizedBox(height: 12),
                   _PaymentMethodTile(
@@ -486,9 +564,8 @@ class _TopUpPageState extends State<TopUpPage> {
                     subtitle: 'Send any crypto or stablecoin from any network to a wallet address',
                     brandIcon: Icons.currency_bitcoin,
                     selected: _selectedMethod == _TopUpPaymentMethod.cryptoDeposit,
-                    onTap: () => setState(
-                      () => _selectedMethod = _TopUpPaymentMethod.cryptoDeposit,
-                    ),
+                    onTap: () =>
+                        _selectPaymentMethod(_TopUpPaymentMethod.cryptoDeposit),
                   ),
                   if (_selectedMethod == _TopUpPaymentMethod.cryptoDeposit) ...[
                     const SizedBox(height: 16),
@@ -542,16 +619,20 @@ class _DepositAmountField extends StatelessWidget {
   const _DepositAmountField({
     required this.controller,
     required this.selectedCurrency,
+    required this.currencies,
     required this.onCurrencyChanged,
+    this.loadingCurrencies = false,
   });
 
   final TextEditingController controller;
   final String selectedCurrency;
+  final List<String> currencies;
   final ValueChanged<String> onCurrencyChanged;
+  final bool loadingCurrencies;
 
   Future<void> _openCurrencyPicker(BuildContext context) async {
+    if (loadingCurrencies && currencies.isEmpty) return;
     final colors = AppColors.getThemeColors(context);
-    final currencies = _topupFiatCurrencyCodes(includeCode: selectedCurrency);
 
     final picked = await showModalBottomSheet<String>(
       context: context,

@@ -195,6 +195,14 @@ class TopupDepositCountry {
     final trimmed = code.trim().toUpperCase();
     if (trimmed == 'EUR') return euro;
     if (trimmed == 'GBP') return unitedKingdom;
+    if (trimmed == 'CAD') {
+      return const TopupDepositCountry(
+        name: 'Canada',
+        currencyName: 'Canadian Dollar',
+        code: 'CAD',
+        flagEmoji: '🇨🇦',
+      );
+    }
     return fromIsoAlpha2(trimmed) ??
         forDepositCode(trimmed) ??
         TopupDepositCountry(
