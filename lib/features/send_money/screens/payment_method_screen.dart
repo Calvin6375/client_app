@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:pretium/core/constants/app_colors.dart';
+import 'package:pretium/widgets/bottom_safe_action_bar.dart';
 
 enum PaymentMethod { truePay, mobileMoney, bank }
 
@@ -73,28 +74,27 @@ class _PaymentMethodScreenState extends State<PaymentMethodScreen> {
             ],
           ),
         ),
-        Padding(
-          padding: const EdgeInsets.all(16.0),
-            child: ElevatedButton(
-              onPressed: () => widget.onNext(_selectedMethod),
-              style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                backgroundColor: Theme.of(context).colorScheme.primary,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                minimumSize: const Size(double.infinity, 50),
+        BottomSafeActionBar(
+          child: ElevatedButton(
+            onPressed: () => widget.onNext(_selectedMethod),
+            style: ElevatedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              backgroundColor: Theme.of(context).colorScheme.primary,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
               ),
-              child: const Text(
-                'Continue',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
-                ),
+              minimumSize: const Size(double.infinity, 50),
+            ),
+            child: const Text(
+              'Continue',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
               ),
             ),
+          ),
         ),
       ],
     );

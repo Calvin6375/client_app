@@ -94,7 +94,12 @@ class _UsdcReceiveScreenState extends State<UsdcReceiveScreen> {
         color: primary,
         child: ListView(
           physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.all(20),
+          padding: EdgeInsets.fromLTRB(
+            20,
+            20,
+            20,
+            20 + MediaQuery.paddingOf(context).bottom,
+          ),
           children: [
             if (_loading)
               const Padding(

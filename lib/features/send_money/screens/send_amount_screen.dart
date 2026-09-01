@@ -9,6 +9,7 @@ import 'package:pretium/widgets/currency_logo.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:pretium/utils/firebase_utils.dart';
 import 'package:pretium/widgets/app_shimmer.dart';
+import 'package:pretium/widgets/bottom_safe_action_bar.dart';
 
 class SendAmountScreen extends StatefulWidget {
   final VoidCallback onNext;
@@ -255,11 +256,11 @@ class _SendAmountScreenState extends State<SendAmountScreen> {
     final amountToSend = double.tryParse(_fromCtrl.text.trim()) ?? 0;
     final canContinue = amountToSend > 0;
 
-    return Padding(
-      padding: const EdgeInsets.all(16.0),
-      child: Column(
-        children: [
-          Expanded(
+    return Column(
+      children: [
+        Expanded(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
             child: ListView(
               children: [
                 if (widget.kenyaOnly) ...[
@@ -315,8 +316,9 @@ class _SendAmountScreenState extends State<SendAmountScreen> {
               ],
             ),
           ),
-          const SizedBox(height: 16),
-          ElevatedButton(
+        ),
+        BottomSafeActionBar(
+          child: ElevatedButton(
             onPressed: canContinue ? widget.onNext : null,
             style: ElevatedButton.styleFrom(
               padding: const EdgeInsets.symmetric(vertical: 16),
@@ -337,8 +339,8 @@ class _SendAmountScreenState extends State<SendAmountScreen> {
               ),
             ),
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }

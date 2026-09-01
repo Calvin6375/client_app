@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:pretium/models/transaction_details_model.dart';
 import 'package:pretium/core/constants/app_colors.dart';
 import 'package:pretium/widgets/app_shimmer.dart';
+import 'package:pretium/widgets/bottom_safe_action_bar.dart';
 
 class ReviewDetailsScreen extends StatelessWidget {
   final VoidCallback onNext;
@@ -23,71 +24,96 @@ class ReviewDetailsScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = AppColors.getThemeColors(context);
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    return Padding(
-      padding: const EdgeInsets.all(16.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Review your detail transfer',
-            style: TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-              color: colors.textPrimary, // Theme-aware text
-            ),
-          ),
-          const SizedBox(height: 24),
-          Expanded(
-            child: ListView(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _buildDetailsCard(
-                  context,
-                  title: 'Transfer details',
-                  onEdit: onEditTransferDetails,
-                  children: [
-                    _DetailRow(label: 'You send', value: '${details.amountToSend.toStringAsFixed(2)} ${details.fromCurrency}'),
-                    const _DetailRow(label: 'Arto+ fees', value: 'Free'),
-                    const _DetailRow(label: 'Payment method fees', value: 'Free'),
-                    _DetailRow(label: 'You will pay', value: '${details.amountToSend.toStringAsFixed(2)} ${details.fromCurrency}', isBold: true),
-                  ],
+                Text(
+                  'Review your detail transfer',
+                  style: TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                    color: colors.textPrimary,
+                  ),
                 ),
                 const SizedBox(height: 24),
-                _buildDetailsCard(
-                  context,
-                  title: 'Recipient details',
-                  onEdit: onEditRecipientDetails,
-                  children: [
-                    _buildRecipientTile(
-                      context,
-                      details.recipientFullName,
-                      details.recipientPhoneNumber,
-                      '${details.amountToReceive.toStringAsFixed(2)} ${details.toCurrency}',
-                    ),
-                    if (details.verifiedBeneficiaryName.trim().isNotEmpty) ...[
-                      const SizedBox(height: 12),
-                      _DetailRow(
-                        label: 'Verified name',
-                        value: details.verifiedBeneficiaryName.trim(),
+                Expanded(
+                  child: ListView(
+                    children: [
+                      _buildDetailsCard(
+                        context,
+                        title: 'Transfer details',
+                        onEdit: onEditTransferDetails,
+                        children: [
+                          _DetailRow(
+                            label: 'You send',
+                            value:
+                                '${details.amountToSend.toStringAsFixed(2)} ${details.fromCurrency}',
+                          ),
+                          const _DetailRow(label: 'Arto+ fees', value: 'Free'),
+                          const _DetailRow(
+                            label: 'Payment method fees',
+                            value: 'Free',
+                          ),
+                          _DetailRow(
+                            label: 'You will pay',
+                            value:
+                                '${details.amountToSend.toStringAsFixed(2)} ${details.fromCurrency}',
+                            isBold: true,
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 24),
+                      _buildDetailsCard(
+                        context,
+                        title: 'Recipient details',
+                        onEdit: onEditRecipientDetails,
+                        children: [
+                          _buildRecipientTile(
+                            context,
+                            details.recipientFullName,
+                            details.recipientPhoneNumber,
+                            '${details.amountToReceive.toStringAsFixed(2)} ${details.toCurrency}',
+                          ),
+                          if (details.verifiedBeneficiaryName
+                              .trim()
+                              .isNotEmpty) ...[
+                            const SizedBox(height: 12),
+                            _DetailRow(
+                              label: 'Verified name',
+                              value: details.verifiedBeneficiaryName.trim(),
+                            ),
+                          ],
+                          if (details.recipientBankName?.trim().isNotEmpty ==
+                              true) ...[
+                            const SizedBox(height: 12),
+                            _DetailRow(
+                              label: 'Bank',
+                              value: details.recipientBankName!.trim(),
+                            ),
+                          ],
+                        ],
                       ),
                     ],
-                    if (details.recipientBankName?.trim().isNotEmpty == true) ...[
-                      const SizedBox(height: 12),
-                      _DetailRow(
-                        label: 'Bank',
-                        value: details.recipientBankName!.trim(),
-                      ),
-                    ],
-                  ],
+                  ),
                 ),
               ],
             ),
           ),
-          const SizedBox(height: 24),
-          ElevatedButton(
+        ),
+        BottomSafeActionBar(
+          child: ElevatedButton(
             onPressed: isSubmitting ? null : onNext,
             style: ElevatedButton.styleFrom(
               padding: const EdgeInsets.symmetric(vertical: 16),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
               minimumSize: const Size(double.infinity, 50),
               backgroundColor: Theme.of(context).colorScheme.primary,
               foregroundColor: isDark ? colors.onPrimary : Colors.white,
@@ -104,8 +130,8 @@ class ReviewDetailsScreen extends StatelessWidget {
                     ),
                   ),
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 

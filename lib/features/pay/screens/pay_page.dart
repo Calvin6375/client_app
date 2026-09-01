@@ -217,7 +217,7 @@ class _PayHub extends StatelessWidget {
         _PayOptionCard(
           icon: Icons.receipt_long_rounded,
           title: 'Pay to Pay Bill',
-          subtitle: 'Enter PayBill number, account reference, and amount',
+          subtitle: 'Enter PayBill number, account number, and amount',
           onTap: () => onSelect(_PayOption.payBill),
         ),
         const SizedBox(height: 12),

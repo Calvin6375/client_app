@@ -13,6 +13,7 @@ import 'package:pretium/repositories/wallet_repository.dart';
 import 'package:pretium/services/dashboard_session_cache.dart';
 import 'package:pretium/utils/firebase_utils.dart';
 import 'package:pretium/widgets/app_shimmer.dart';
+import 'package:pretium/widgets/bottom_safe_action_bar.dart';
 import 'package:pretium/widgets/currency_logo.dart';
 
 /// Single Send Money form: balance card, method, amount chips, recipient fields.
@@ -687,40 +688,37 @@ class _SendMoneyFormScreenState extends State<SendMoneyFormScreen> {
             ),
           ),
         ),
-        SafeArea(
-          top: false,
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
-            child: SizedBox(
-              width: double.infinity,
-              height: 54,
-              child: ElevatedButton(
-                onPressed:
-                    (_canContinue && !widget.isValidating) ? _onContinue : null,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: primary,
-                  foregroundColor: Colors.white,
-                  disabledBackgroundColor: primary.withValues(alpha: 0.35),
-                  disabledForegroundColor: Colors.white70,
-                  elevation: 0,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(28),
-                  ),
+        BottomSafeActionBar(
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
+          child: SizedBox(
+            width: double.infinity,
+            height: 54,
+            child: ElevatedButton(
+              onPressed:
+                  (_canContinue && !widget.isValidating) ? _onContinue : null,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: primary,
+                foregroundColor: Colors.white,
+                disabledBackgroundColor: primary.withValues(alpha: 0.35),
+                disabledForegroundColor: Colors.white70,
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(28),
                 ),
-                child: widget.isValidating
-                    ? const ShimmerBusyIndicator(
-                        width: 96,
-                        height: 14,
-                        onPrimary: true,
-                      )
-                    : const Text(
-                        'Continue',
-                        style: TextStyle(
-                          fontSize: 17,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
               ),
+              child: widget.isValidating
+                  ? const ShimmerBusyIndicator(
+                      width: 96,
+                      height: 14,
+                      onPrimary: true,
+                    )
+                  : const Text(
+                      'Continue',
+                      style: TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
             ),
           ),
         ),

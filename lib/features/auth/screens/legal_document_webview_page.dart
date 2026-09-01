@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:pretium/core/constants/app_colors.dart';
 import 'package:pretium/widgets/app_shimmer.dart';
+import 'package:pretium/widgets/bottom_safe_action_bar.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
 /// In-app legal document viewer. Pops `true` only after the user scrolls to the
@@ -144,45 +145,42 @@ class _LegalDocumentWebViewPageState extends State<LegalDocumentWebViewPage> {
       body: Column(
         children: [
           Expanded(child: WebViewWidget(controller: _controller)),
-          SafeArea(
-            top: false,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Text(
-                    _reachedBottom
-                        ? 'You\'ve reached the end of this document.'
-                        : 'Scroll to the bottom to continue.',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      color: colors.textSecondary,
-                      fontSize: 13,
-                    ),
+          BottomSafeActionBar(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  _reachedBottom
+                      ? 'You\'ve reached the end of this document.'
+                      : 'Scroll to the bottom to continue.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: colors.textSecondary,
+                    fontSize: 13,
                   ),
-                  const SizedBox(height: 10),
-                  SizedBox(
-                    height: 48,
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor:
-                            _reachedBottom ? primary : Colors.grey.shade400,
-                        foregroundColor: Colors.white,
-                        disabledBackgroundColor: Colors.grey.shade400,
-                        disabledForegroundColor: Colors.white70,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
+                ),
+                const SizedBox(height: 10),
+                SizedBox(
+                  height: 48,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor:
+                          _reachedBottom ? primary : Colors.grey.shade400,
+                      foregroundColor: Colors.white,
+                      disabledBackgroundColor: Colors.grey.shade400,
+                      disabledForegroundColor: Colors.white70,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
                       ),
-                      onPressed: _reachedBottom
-                          ? () => Navigator.of(context).pop(true)
-                          : null,
-                      child: const Text('I have read this'),
                     ),
+                    onPressed: _reachedBottom
+                        ? () => Navigator.of(context).pop(true)
+                        : null,
+                    child: const Text('I have read this'),
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
         ],

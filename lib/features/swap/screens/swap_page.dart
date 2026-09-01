@@ -14,6 +14,7 @@ import 'package:pretium/widgets/currency_logo.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:pretium/utils/firebase_utils.dart';
 import 'package:pretium/widgets/app_shimmer.dart';
+import 'package:pretium/widgets/bottom_safe_action_bar.dart';
 import 'package:pretium/widgets/slide_to_confirm.dart';
 import 'package:pretium/services/dashboard_session_cache.dart';
 import 'package:pretium/services/wallet_balance_refresh.dart';
@@ -945,40 +946,37 @@ class _ExchangeInputScreenState extends State<_ExchangeInputScreen> {
               ),
             ),
           ),
-        SafeArea(
-          top: false,
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(20, 14, 20, 16),
-            child: SizedBox(
-              width: double.infinity,
-              height: 54,
-              child: ElevatedButton(
-                onPressed: canContinue ? widget.onNext : null,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: continueBg,
-                  foregroundColor: continueFg,
-                  disabledBackgroundColor: continueBg,
-                  disabledForegroundColor: continueFg,
-                  elevation: 0,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(28),
-                  ),
+        BottomSafeActionBar(
+          padding: const EdgeInsets.fromLTRB(20, 14, 20, 16),
+          child: SizedBox(
+            width: double.infinity,
+            height: 54,
+            child: ElevatedButton(
+              onPressed: canContinue ? widget.onNext : null,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: continueBg,
+                foregroundColor: continueFg,
+                disabledBackgroundColor: continueBg,
+                disabledForegroundColor: continueFg,
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(28),
                 ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      'Continue',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w700,
-                        color: continueFg,
-                      ),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    'Continue',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                      color: continueFg,
                     ),
-                    const SizedBox(width: 4),
-                    Icon(Icons.chevron_right_rounded, size: 22, color: continueFg),
-                  ],
-                ),
+                  ),
+                  const SizedBox(width: 4),
+                  Icon(Icons.chevron_right_rounded, size: 22, color: continueFg),
+                ],
               ),
             ),
           ),
@@ -1275,15 +1273,12 @@ class _ExchangeConfirmationScreen extends StatelessWidget {
             ],
           ),
         ),
-        SafeArea(
-          top: false,
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
-            child: SlideToConfirm(
-              enabled: fromAmount > 0 && !isSubmitting,
-              isLoading: isSubmitting,
-              onConfirmed: onNext,
-            ),
+        BottomSafeActionBar(
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
+          child: SlideToConfirm(
+            enabled: fromAmount > 0 && !isSubmitting,
+            isLoading: isSubmitting,
+            onConfirmed: onNext,
           ),
         ),
       ],

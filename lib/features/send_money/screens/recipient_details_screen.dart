@@ -6,6 +6,7 @@ import 'package:pretium/features/auth/widgets/phone_number_field.dart';
 import 'package:pretium/features/safari_tap/models/safari_tap_bank.dart';
 import 'package:pretium/features/safari_tap/services/safari_tap_pay_api_service.dart';
 import 'package:pretium/widgets/app_shimmer.dart';
+import 'package:pretium/widgets/bottom_safe_action_bar.dart';
 
 /// Mobile network options for the recipient currency (mobile money).
 List<String> _mobileNetworksForCurrency(String currency) {
@@ -218,67 +219,86 @@ class _RecipientDetailsScreenState extends State<RecipientDetailsScreen> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final primary = Theme.of(context).colorScheme.primary;
     final canContinue = _isFormComplete();
-    return Padding(
-      padding: const EdgeInsets.all(16.0),
-      child: Form(
-        key: _formKey,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Recipient Details',
-              style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-                color: colors.textPrimary, // Theme-aware text
-              ),
-            ),
-            const SizedBox(height: 24),
-            Expanded(
-              child: ListView(
+    return Form(
+      key: _formKey,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _buildTextField(label: 'Full Name', controller: _fullNameCtrl),
-                  if (!(widget.kenyaOnly && widget.paymentMethod == PaymentMethod.bank)) ...[
-                    const SizedBox(height: 24),
-                    PhoneNumberField(
-                    key: ValueKey(widget.initialDetails.toCurrency),
-                    phoneController: _phoneCtrl,
-                    initialCountryCode: _selectedCountryCode,
-                    lockCountryCode: true,
-                    primaryColor: Theme.of(context).colorScheme.primary,
-                    labelColor: Theme.of(context).colorScheme.primary,
-                    validator: (value) {
-                      if (value == null || value.trim().isEmpty) {
-                        return 'Phone number is required';
-                      }
-                      if (value.trim().length < 7) {
-                        return 'Enter a valid phone number';
-                      }
-                      return null;
-                    },
-                  ),
-                  ],
-                  if (widget.paymentMethod == PaymentMethod.mobileMoney) ...[
-                    const SizedBox(height: 24),
-                    if (!widget.kenyaOnly) _buildMobileNetworkDropdown(context),
-                  ],
-                  if (widget.paymentMethod == PaymentMethod.bank) ...[
-                    const SizedBox(height: 24),
-                    if (widget.kenyaOnly)
-                      _buildBankDropdown(context)
-                    else ...[
-                      _buildTextField(label: 'Bank Name', controller: _bankNameCtrl),
-                    ],
-                    const SizedBox(height: 24),
-                    _buildTextField(
-                      label: 'Account Number',
-                      controller: _accountNumberCtrl,
+                  Text(
+                    'Recipient Details',
+                    style: TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                      color: colors.textPrimary,
                     ),
-                  ],
+                  ),
+                  const SizedBox(height: 24),
+                  Expanded(
+                    child: ListView(
+                      children: [
+                        _buildTextField(
+                          label: 'Full Name',
+                          controller: _fullNameCtrl,
+                        ),
+                        if (!(widget.kenyaOnly &&
+                            widget.paymentMethod == PaymentMethod.bank)) ...[
+                          const SizedBox(height: 24),
+                          PhoneNumberField(
+                            key: ValueKey(widget.initialDetails.toCurrency),
+                            phoneController: _phoneCtrl,
+                            initialCountryCode: _selectedCountryCode,
+                            lockCountryCode: true,
+                            primaryColor:
+                                Theme.of(context).colorScheme.primary,
+                            labelColor: Theme.of(context).colorScheme.primary,
+                            validator: (value) {
+                              if (value == null || value.trim().isEmpty) {
+                                return 'Phone number is required';
+                              }
+                              if (value.trim().length < 7) {
+                                return 'Enter a valid phone number';
+                              }
+                              return null;
+                            },
+                          ),
+                        ],
+                        if (widget.paymentMethod ==
+                            PaymentMethod.mobileMoney) ...[
+                          const SizedBox(height: 24),
+                          if (!widget.kenyaOnly)
+                            _buildMobileNetworkDropdown(context),
+                        ],
+                        if (widget.paymentMethod == PaymentMethod.bank) ...[
+                          const SizedBox(height: 24),
+                          if (widget.kenyaOnly)
+                            _buildBankDropdown(context)
+                          else ...[
+                            _buildTextField(
+                              label: 'Bank Name',
+                              controller: _bankNameCtrl,
+                            ),
+                          ],
+                          const SizedBox(height: 24),
+                          _buildTextField(
+                            label: 'Account Number',
+                            controller: _accountNumberCtrl,
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
                 ],
               ),
             ),
-            ElevatedButton(
+          ),
+          BottomSafeActionBar(
+            child: ElevatedButton(
               onPressed: canContinue ? _onContinue : null,
               style: ElevatedButton.styleFrom(
                 minimumSize: const Size(double.infinity, 50),
@@ -300,8 +320,8 @@ class _RecipientDetailsScreenState extends State<RecipientDetailsScreen> {
                 ),
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

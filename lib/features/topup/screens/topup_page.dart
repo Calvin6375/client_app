@@ -18,6 +18,7 @@ import 'package:pretium/features/topup/models/topup_deposit_country.dart';
 import 'package:pretium/features/topup/screens/payment_checkout_webview_page.dart';
 import 'package:pretium/widgets/currency_logo.dart';
 import 'package:pretium/widgets/app_shimmer.dart';
+import 'package:pretium/widgets/bottom_safe_action_bar.dart';
 
 /// Fiat codes for the Deposit currency picker.
 /// Prefers [apiCodes] from `GET /api/countries`; falls back to the static catalog.
@@ -575,36 +576,31 @@ class _TopUpPageState extends State<TopUpPage> {
               ),
             ),
           ),
-          SafeArea(
-            top: false,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(24, 8, 24, 16),
-              child: SizedBox(
-                height: 52,
-                width: double.infinity,
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: primary,
-                    foregroundColor: isDark ? colors.onPrimary : Colors.white,
-                    disabledBackgroundColor: colors.surfaceVariant,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    elevation: 0,
+          BottomSafeActionBar(
+            padding: const EdgeInsets.fromLTRB(24, 8, 24, 16),
+            child: SizedBox(
+              height: 52,
+              width: double.infinity,
+              child: ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: primary,
+                  foregroundColor: isDark ? colors.onPrimary : Colors.white,
+                  disabledBackgroundColor: colors.surfaceVariant,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
                   ),
-                  onPressed: _isProcessingPayment
-                      ? null
-                      : _onNextPressed,
-                  child: _isProcessingPayment
-                      ? const ShimmerBusyIndicator(onPrimary: true)
-                      : Text(
-                          nextLabel,
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
+                  elevation: 0,
                 ),
+                onPressed: _isProcessingPayment ? null : _onNextPressed,
+                child: _isProcessingPayment
+                    ? const ShimmerBusyIndicator(onPrimary: true)
+                    : Text(
+                        nextLabel,
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
               ),
             ),
           ),

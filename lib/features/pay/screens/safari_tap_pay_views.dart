@@ -10,6 +10,7 @@ import 'package:pretium/utils/async_action_guard.dart';
 import 'package:pretium/widgets/currency_logo.dart';
 import 'package:uuid/uuid.dart';
 import 'package:pretium/widgets/app_shimmer.dart';
+import 'package:pretium/widgets/bottom_safe_action_bar.dart';
 
 const String kSafariTapPayCurrency = 'KES';
 
@@ -167,6 +168,9 @@ class SafariTapPayBillViewState extends State<SafariTapPayBillView>
     super.dispose();
   }
 
+  bool get _isValidated =>
+      beneficiaryName != null && beneficiaryName!.trim().isNotEmpty;
+
   Map<String, dynamic> _validateBody() {
     return {
       'type': 'MPESA_B2B',
@@ -179,16 +183,37 @@ class SafariTapPayBillViewState extends State<SafariTapPayBillView>
     };
   }
 
-  Future<void> _pay() async {
+  void _clearValidation() {
+    setState(() {
+      beneficiaryName = null;
+      validationError = null;
+    });
+  }
+
+  Future<void> _validateRecipient() async {
     final business = _businessCtrl.text.trim();
     final account = _accountCtrl.text.trim();
-    final amount = double.tryParse(_amountCtrl.text.trim()) ?? 0;
-    if (business.isEmpty || account.isEmpty || amount <= 0) {
-      _snack('Enter business number, account reference, and amount');
+    if (business.isEmpty || account.isEmpty) {
+      _snack('Enter business number and account number');
       return;
     }
     if (account.length > 20) {
-      _snack('Account reference must be 1–20 characters');
+      _snack('Account number must be 1–20 characters');
+      return;
+    }
+    await validateBeneficiary(_validateBody());
+  }
+
+  Future<void> _pay() async {
+    if (!_isValidated) {
+      _snack('Validate the merchant first');
+      return;
+    }
+    final business = _businessCtrl.text.trim();
+    final account = _accountCtrl.text.trim();
+    final amount = double.tryParse(_amountCtrl.text.trim()) ?? 0;
+    if (amount <= 0) {
+      _snack('Enter an amount to pay');
       return;
     }
     if (amount > widget.kesBalance) {
@@ -201,9 +226,6 @@ class SafariTapPayBillViewState extends State<SafariTapPayBillView>
       isSubmitting: () => _submitting,
       setSubmitting: (v) => setState(() => _submitting = v),
       action: () async {
-        final valid = beneficiaryName != null || await validateBeneficiary(_validateBody());
-        if (!valid || !mounted) return;
-
         final clientRequestId = const Uuid().v4();
         await submitPayout(
           context: context,
@@ -247,20 +269,14 @@ class SafariTapPayBillViewState extends State<SafariTapPayBillView>
                 label: 'PayBill number',
                 hint: 'e.g. 888880',
                 keyboardType: TextInputType.number,
-                onChanged: (_) => setState(() {
-                  beneficiaryName = null;
-                  validationError = null;
-                }),
+                onChanged: (_) => _clearValidation(),
               ),
               const SizedBox(height: 12),
               SafariTapPayField(
                 controller: _accountCtrl,
-                label: 'Account reference',
-                hint: 'Invoice / account reference',
-                onChanged: (_) => setState(() {
-                  beneficiaryName = null;
-                  validationError = null;
-                }),
+                label: 'Account Number',
+                hint: 'Account number',
+                onChanged: (_) => _clearValidation(),
               ),
               const SizedBox(height: 12),
               SafariTapPayAmountField(controller: _amountCtrl),
@@ -279,9 +295,9 @@ class SafariTapPayBillViewState extends State<SafariTapPayBillView>
           ),
         ),
         SafariTapPayBottomButton(
-          label: 'Confirm Payment',
-          loading: _submitting,
-          onPressed: _pay,
+          label: _isValidated ? 'Pay' : 'Validate merchant',
+          loading: _isValidated ? _submitting : validationLoading,
+          onPressed: _isValidated ? _pay : _validateRecipient,
         ),
       ],
     );
@@ -324,11 +340,41 @@ class SafariTapBuyGoodsViewState extends State<SafariTapBuyGoodsView>
     super.dispose();
   }
 
+  bool get _isValidated =>
+      beneficiaryName != null && beneficiaryName!.trim().isNotEmpty;
+
+  void _clearValidation() {
+    setState(() {
+      beneficiaryName = null;
+      validationError = null;
+    });
+  }
+
+  Future<void> _validateRecipient() async {
+    final till = _tillCtrl.text.trim();
+    if (till.isEmpty) {
+      _snack('Enter till number');
+      return;
+    }
+    await validateBeneficiary({
+      'type': 'MPESA_B2B',
+      'accountType': 'TillNumber',
+      'recipient': {
+        'account': till,
+        'name': beneficiaryName ?? 'Till',
+      },
+    });
+  }
+
   Future<void> _pay() async {
+    if (!_isValidated) {
+      _snack('Validate the merchant first');
+      return;
+    }
     final till = _tillCtrl.text.trim();
     final amount = double.tryParse(_amountCtrl.text.trim()) ?? 0;
-    if (till.isEmpty || amount <= 0) {
-      _snack('Enter till number and amount');
+    if (amount <= 0) {
+      _snack('Enter an amount to pay');
       return;
     }
     if (amount > widget.kesBalance) {
@@ -341,17 +387,6 @@ class SafariTapBuyGoodsViewState extends State<SafariTapBuyGoodsView>
       isSubmitting: () => _submitting,
       setSubmitting: (v) => setState(() => _submitting = v),
       action: () async {
-        final valid = beneficiaryName != null ||
-            await validateBeneficiary({
-              'type': 'MPESA_B2B',
-              'accountType': 'TillNumber',
-              'recipient': {
-                'account': till,
-                'name': beneficiaryName ?? 'Till',
-              },
-            });
-        if (!valid || !mounted) return;
-
         final clientRequestId = const Uuid().v4();
         await submitPayout(
           context: context,
@@ -394,10 +429,7 @@ class SafariTapBuyGoodsViewState extends State<SafariTapBuyGoodsView>
                 label: 'Till number',
                 hint: 'Lipa Na M-Pesa till',
                 keyboardType: TextInputType.number,
-                onChanged: (_) => setState(() {
-                  beneficiaryName = null;
-                  validationError = null;
-                }),
+                onChanged: (_) => _clearValidation(),
               ),
               const SizedBox(height: 12),
               SafariTapPayAmountField(controller: _amountCtrl),
@@ -415,9 +447,9 @@ class SafariTapBuyGoodsViewState extends State<SafariTapBuyGoodsView>
           ),
         ),
         SafariTapPayBottomButton(
-          label: 'Confirm Payment',
-          loading: _submitting,
-          onPressed: _pay,
+          label: _isValidated ? 'Pay' : 'Validate merchant',
+          loading: _isValidated ? _submitting : validationLoading,
+          onPressed: _isValidated ? _pay : _validateRecipient,
         ),
       ],
     );
@@ -625,24 +657,29 @@ class SafariTapPayBottomButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final primary = Theme.of(context).colorScheme.primary;
-    return SafeArea(
-      top: false,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
-        child: SizedBox(
-          width: double.infinity,
-          height: 52,
-          child: ElevatedButton(
-            onPressed: loading ? null : onPressed,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: primary,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+    return BottomSafeActionBar(
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
+      child: SizedBox(
+        width: double.infinity,
+        height: 52,
+        child: ElevatedButton(
+          onPressed: loading ? null : onPressed,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: primary,
+            foregroundColor: Colors.white,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
             ),
-            child: loading
-                ? const ShimmerBusyIndicator(onPrimary: true)
-                : Text(label, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
           ),
+          child: loading
+              ? const ShimmerBusyIndicator(onPrimary: true)
+              : Text(
+                  label,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 16,
+                  ),
+                ),
         ),
       ),
     );
