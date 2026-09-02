@@ -134,7 +134,7 @@ class _SupportOptionTile extends StatelessWidget {
   }) : assert(icon != null || faIcon != null);
 
   final IconData? icon;
-  final IconData? faIcon;
+  final FaIconData? faIcon;
   final String title;
   final String subtitle;
   final Color primary;

@@ -15,6 +15,37 @@ rootProject.buildDir = "../build"
 subprojects {
     project.buildDir = "${rootProject.buildDir}/${project.name}"
 }
+
+// AGP 9 requires library modules to compile against the same/higher SDK as consumers.
+// Older FlutterFire / plugin AARs still declare compileSdk 33; align them with the app.
+subprojects { subproject ->
+    def configureAndroid = {
+        if (subproject.hasProperty("android")) {
+            subproject.android {
+                if (namespace == null) {
+                    namespace subproject.group
+                }
+                compileSdkVersion 36
+                compileOptions {
+                    sourceCompatibility JavaVersion.VERSION_17
+                    targetCompatibility JavaVersion.VERSION_17
+                }
+            }
+        }
+        subproject.tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
+            kotlinOptions {
+                jvmTarget = JavaVersion.VERSION_17.toString()
+            }
+        }
+    }
+
+    if (subproject.state.executed) {
+        configureAndroid()
+    } else {
+        subproject.afterEvaluate { configureAndroid() }
+    }
+}
+
 subprojects {
     project.evaluationDependsOn(":app")
 }

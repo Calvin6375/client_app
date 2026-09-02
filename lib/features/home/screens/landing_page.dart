@@ -126,85 +126,105 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     final colors = AppColors.getThemeColors(context);
     final primary = Theme.of(context).colorScheme.primary;
+    final bottomInset = MediaQuery.of(context).padding.bottom;
+    // Room for the floating dock so list content can scroll clear of it.
+    const floatingNavClearance = 108.0;
+
     return Scaffold(
       backgroundColor: colors.background,
-      body: Column(
+      // Let body paint under the dock so the nav truly floats over content.
+      extendBody: true,
+      body: Stack(
         children: [
-          Container(
-            padding: EdgeInsets.only(
-              top: MediaQuery.of(context).padding.top,
-              left: 16,
-              right: 16,
-              bottom: 12,
-            ),
-            color: Colors.transparent, // Transparent for professional dark look
-            child: const HeaderWidget(),
-          ),
-          Expanded(
-            child: RefreshIndicator(
-              onRefresh: _handleRefresh,
-              color: primary,
-              child: ListView(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                children: [
-                  const SizedBox(height: 16),
-                  // Segmented control style - wallet toggle with glassmorphism container
-                  Container(
-                    padding: const EdgeInsets.all(4),
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).brightness == Brightness.dark
-                          ? AppColors.surfaceDark // Dark slate #1E293B for dark mode
-                          : Colors.white.withValues(alpha: 0.9), // Light background for toggle container
-                      borderRadius: BorderRadius.circular(16),
-                      border: Theme.of(context).brightness == Brightness.light
-                          ? Border.all(
-                              color: const Color(0xFFE5E7EB), // Soft gray border
-                              width: 1,
-                            )
-                          : null,
-                      boxShadow: Theme.of(context).brightness == Brightness.light
-                          ? [
-                              BoxShadow(
-                                color: Colors.black.withValues(alpha: 0.04),
-                                blurRadius: 8,
-                                offset: const Offset(0, 2),
-                              ),
-                            ]
-                          : null,
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        _buildPillTab('Fiat Wallet', 0),
-                        const SizedBox(width: 4),
-                        _buildPillTab('Crypto Wallet', 1),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  // Credit-card style wallet display
-                  WalletCard(
-                    key: _walletCardKey,
-                    selectedTab: _selectedTab,
-                  ),
-                const SizedBox(height: 12),
-                // Financial Services grid
-                FinancialServices(
-                  swapInitialCurrency: _selectedTab == 0 ? 'USD' : 'USDT',
+          Column(
+            children: [
+              Container(
+                padding: EdgeInsets.only(
+                  top: MediaQuery.of(context).padding.top,
+                  left: 16,
+                  right: 16,
+                  bottom: 12,
                 ),
-                const SizedBox(height: 40),
-                // Recent Transactions
-                const RecentTransactionsHeader(),
-                const SizedBox(height: 16),
-                PlaceholderTransactions(key: _transactionsKey),
-                const SizedBox(height: 24),
-              ],
-            ),
-            ),
+                color: Colors.transparent,
+                child: const HeaderWidget(),
+              ),
+              Expanded(
+                child: RefreshIndicator(
+                  onRefresh: _handleRefresh,
+                  color: primary,
+                  child: ListView(
+                    padding: EdgeInsets.fromLTRB(
+                      20,
+                      0,
+                      20,
+                      floatingNavClearance + bottomInset,
+                    ),
+                    children: [
+                      const SizedBox(height: 16),
+                      // Segmented control style - wallet toggle with glassmorphism container
+                      Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).brightness == Brightness.dark
+                              ? AppColors.surfaceDark
+                              : Colors.white.withValues(alpha: 0.9),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Theme.of(context).brightness == Brightness.light
+                              ? Border.all(
+                                  color: const Color(0xFFE5E7EB),
+                                  width: 1,
+                                )
+                              : null,
+                          boxShadow:
+                              Theme.of(context).brightness == Brightness.light
+                                  ? [
+                                      BoxShadow(
+                                        color: Colors.black
+                                            .withValues(alpha: 0.04),
+                                        blurRadius: 8,
+                                        offset: const Offset(0, 2),
+                                      ),
+                                    ]
+                                  : null,
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            _buildPillTab('Fiat Wallet', 0),
+                            const SizedBox(width: 4),
+                            _buildPillTab('Crypto Wallet', 1),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      WalletCard(
+                        key: _walletCardKey,
+                        selectedTab: _selectedTab,
+                      ),
+                      const SizedBox(height: 12),
+                      FinancialServices(
+                        swapInitialCurrency:
+                            _selectedTab == 0 ? 'USD' : 'USDT',
+                      ),
+                      const SizedBox(height: 40),
+                      const RecentTransactionsHeader(),
+                      const SizedBox(height: 16),
+                      PlaceholderTransactions(key: _transactionsKey),
+                      const SizedBox(height: 24),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: _buildFloatingBottomNav(context, colors, primary),
           ),
         ],
       ),
-      bottomNavigationBar: _buildFloatingBottomNav(context, colors, primary),
     );
   }
 
@@ -215,8 +235,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
   ) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final barColor = isDark
-        ? AppColors.surfaceDark.withValues(alpha: 0.92)
-        : Colors.white.withValues(alpha: 0.92);
+        ? AppColors.surfaceDark.withValues(alpha: 0.72)
+        : Colors.white.withValues(alpha: 0.72);
 
     void openPay() {
       _onItemTapped(1);
@@ -231,91 +251,108 @@ class _DashboardScreenState extends State<DashboardScreen> {
       );
     }
 
-    return SafeArea(
-      top: false,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
-        child: SizedBox(
-          height: 88,
-          child: Stack(
-            clipBehavior: Clip.none,
-            alignment: Alignment.bottomCenter,
-            children: [
-              Positioned(
-                left: 0,
-                right: 0,
-                bottom: 0,
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(36),
-                  child: BackdropFilter(
-                    filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
-                    child: Container(
-                      height: 62,
-                      decoration: BoxDecoration(
-                        color: barColor,
-                        borderRadius: BorderRadius.circular(36),
-                        border: Border.all(
-                          color: isDark
-                              ? Colors.white.withValues(alpha: 0.08)
-                              : Colors.white.withValues(alpha: 0.6),
+    // Transparent Material avoids Scaffold painting a solid bottom "card" band.
+    return Material(
+      type: MaterialType.transparency,
+      child: SafeArea(
+        top: false,
+        minimum: const EdgeInsets.only(bottom: 10),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(28, 0, 28, 6),
+          child: SizedBox(
+            height: 88,
+            child: Stack(
+              clipBehavior: Clip.none,
+              alignment: Alignment.bottomCenter,
+              children: [
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(36),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black
+                              .withValues(alpha: isDark ? 0.4 : 0.12),
+                          blurRadius: 28,
+                          spreadRadius: 0,
+                          offset: const Offset(0, 10),
                         ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black
-                                .withValues(alpha: isDark ? 0.35 : 0.1),
-                            blurRadius: 24,
-                            offset: const Offset(0, 4),
-                          ),
-                        ],
-                      ),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: _FloatingNavItem(
-                              icon: Icons.account_balance_wallet_outlined,
-                              isSelected: _selectedIndex == 0,
-                              primary: primary,
-                              inactiveColor: colors.textTertiary,
-                              onTap: () {
-                                _onItemTapped(0);
-                                _openAndRefreshOnReturn(
-                                  () => Navigator.of(context)
-                                      .pushNamed(RouteNames.wallet),
-                                );
-                              },
+                        BoxShadow(
+                          color: Colors.black
+                              .withValues(alpha: isDark ? 0.18 : 0.04),
+                          blurRadius: 8,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(36),
+                      child: BackdropFilter(
+                        filter: ImageFilter.blur(sigmaX: 22, sigmaY: 22),
+                        child: Container(
+                          height: 58,
+                          decoration: BoxDecoration(
+                            color: barColor,
+                            borderRadius: BorderRadius.circular(36),
+                            border: Border.all(
+                              color: isDark
+                                  ? Colors.white.withValues(alpha: 0.1)
+                                  : Colors.white.withValues(alpha: 0.55),
                             ),
                           ),
-                          const SizedBox(width: 72),
-                          Expanded(
-                            child: _FloatingNavItem(
-                              icon: Icons.history_outlined,
-                              isSelected: _selectedIndex == 2,
-                              primary: primary,
-                              inactiveColor: colors.textTertiary,
-                              onTap: () {
-                                _onItemTapped(2);
-                                _openAndRefreshOnReturn(
-                                  () => Navigator.of(context)
-                                      .pushNamed(RouteNames.transactions),
-                                );
-                              },
-                            ),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: _FloatingNavItem(
+                                  icon: Icons.account_balance_wallet_outlined,
+                                  isSelected: _selectedIndex == 0,
+                                  primary: primary,
+                                  inactiveColor: colors.textTertiary,
+                                  onTap: () {
+                                    _onItemTapped(0);
+                                    _openAndRefreshOnReturn(
+                                      () => Navigator.of(context)
+                                          .pushNamed(RouteNames.wallet),
+                                    );
+                                  },
+                                ),
+                              ),
+                              const SizedBox(width: 72),
+                              Expanded(
+                                child: _FloatingNavItem(
+                                  icon: Icons.history_outlined,
+                                  isSelected: _selectedIndex == 2,
+                                  primary: primary,
+                                  inactiveColor: colors.textTertiary,
+                                  onTap: () {
+                                    _onItemTapped(2);
+                                    _openAndRefreshOnReturn(
+                                      () => Navigator.of(context)
+                                          .pushNamed(RouteNames.transactions),
+                                    );
+                                  },
+                                ),
+                              ),
+                            ],
                           ),
-                        ],
+                        ),
                       ),
                     ),
                   ),
                 ),
-              ),
-              Positioned(
-                top: 0,
-                child: _ElevatedPayNavButton(
-                  primary: primary,
-                  background: colors.background,
-                  onTap: openPay,
+                Positioned(
+                  top: 0,
+                  child: _ElevatedPayNavButton(
+                    primary: primary,
+                    background: colors.background,
+                    onTap: openPay,
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -435,12 +472,12 @@ class _FloatingNavItem extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(24),
         child: SizedBox(
-          height: 62,
+          height: 58,
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Icon(icon, size: 24, color: color),
-              const SizedBox(height: 6),
+              const SizedBox(height: 5),
               AnimatedContainer(
                 duration: const Duration(milliseconds: 200),
                 width: isSelected ? 5 : 0,

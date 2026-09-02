@@ -26,6 +26,10 @@ final class CloudFunctionsApiConfig {
   /// Path must match the deployed HTTP handler; adjust if the backend uses a different route.
   static Uri registerUri() => Uri.parse('$baseApiUrl/register');
 
+  /// Fiat top-up quote only (`POST …/api/funding/topup/quote`). Does not create a payment.
+  static Uri fundingTopupQuoteUri() =>
+      Uri.parse('$baseApiUrl/funding/topup/quote');
+
   /// Transactions feed HTTP API (`transactionsApi` Cloud Function).
   static String get baseTransactionsApiUrl {
     final projectId = DefaultFirebaseOptions.currentPlatform.projectId;

@@ -15,7 +15,10 @@ import 'package:pretium/models/wallet_model.dart';
 import 'package:pretium/utils/firebase_utils.dart';
 import 'package:pretium/core/constants/app_colors.dart';
 import 'package:pretium/features/topup/models/topup_deposit_country.dart';
+import 'package:pretium/features/topup/models/topup_quote.dart';
+import 'package:pretium/features/topup/screens/deposit_review_screen.dart';
 import 'package:pretium/features/topup/screens/payment_checkout_webview_page.dart';
+import 'package:pretium/features/topup/services/topup_quote_api_service.dart';
 import 'package:pretium/widgets/currency_logo.dart';
 import 'package:pretium/widgets/app_shimmer.dart';
 import 'package:pretium/widgets/bottom_safe_action_bar.dart';
@@ -61,6 +64,8 @@ enum _TopUpPaymentMethod {
   cryptoDeposit,
 }
 
+enum _TopUpStep { form, review }
+
 // Top Up main screen composed of smaller widgets
 class TopUpPage extends StatefulWidget {
   const TopUpPage({super.key, this.initialDepositCountry});
@@ -81,6 +86,7 @@ class _TopUpPageState extends State<TopUpPage> {
   final WalletRepository _walletRepository = WalletRepository();
   final UserRepository _userRepository = UserRepository();
   final CountriesApiService _countriesApi = CountriesApiService();
+  final TopupQuoteApiService _quoteApi = TopupQuoteApiService();
 
   bool _hideBalance = false;
   /// Per-currency fiat balances so Available matches the selected currency.
@@ -92,6 +98,12 @@ class _TopUpPageState extends State<TopUpPage> {
   bool _loadingCountries = true;
   List<String> _apiFiatCurrencies = const [];
   _TopUpPaymentMethod _selectedMethod = _TopUpPaymentMethod.directFiatDeposit;
+  _TopUpStep _step = _TopUpStep.form;
+
+  TopupQuote? _quote;
+  bool _isLoadingQuote = false;
+  String? _quoteError;
+  int _quoteRequestId = 0;
 
   /// Minimum Set amount for Fiat Option actions when currency is KES.
   static const double _kesFiatOptionMinimumAmount = 150;
@@ -320,23 +332,56 @@ class _TopUpPageState extends State<TopUpPage> {
   String get _cardMobileMoneyProvider =>
       TopupDepositCountry.cardMobileMoneyProviderFor(_selectedCurrency);
 
-  /// Card checkout: createPayment (Cloud Function) → open hosted checkout in-app.
-  Future<void> _processFiatTopUp() async {
+  String get _providerDisplayLabel {
+    switch (_cardMobileMoneyProvider) {
+      case 'paystack':
+        return 'Paystack';
+      case 'transak':
+        return 'Transak';
+      default:
+        return _cardMobileMoneyProvider;
+    }
+  }
+
+  String get _paymentMethodTitle {
+    switch (_selectedMethod) {
+      case _TopUpPaymentMethod.directFiatDeposit:
+        return 'Local Topup';
+      case _TopUpPaymentMethod.cardMobileMoney:
+        return 'International Topup';
+      case _TopUpPaymentMethod.cryptoDeposit:
+        return 'Crypto Deposit';
+    }
+  }
+
+  String get _paymentMethodSubtitle {
+    switch (_selectedMethod) {
+      case _TopUpPaymentMethod.directFiatDeposit:
+        return 'Local bank or card or mobile money';
+      case _TopUpPaymentMethod.cardMobileMoney:
+        return 'International bank or card, Apple Pay or Google Pay';
+      case _TopUpPaymentMethod.cryptoDeposit:
+        return 'Crypto or stablecoin to a wallet address';
+    }
+  }
+
+  /// Returns false (and shows an error) when the form is not ready for review/checkout.
+  bool _validateFiatDepositForm() {
     if (_amountCtrl.text.isEmpty) {
       _showError('Please enter an amount');
-      return;
+      return false;
     }
 
     final amount = _parsedSetAmount();
     if (amount <= 0) {
       _showError('Please enter a valid amount');
-      return;
+      return false;
     }
     if (!_meetsKesFiatOptionMinimum()) {
       _showError(
         'For KES, the minimum amount for fiat top-up options is KSh ${_kesFiatOptionMinimumAmount.toStringAsFixed(0)}.',
       );
-      return;
+      return false;
     }
 
     final user = FirebaseAuth.instance.currentUser;
@@ -345,10 +390,89 @@ class _TopUpPageState extends State<TopUpPage> {
         : user?.email;
     if (email == null || email.isEmpty) {
       _showError('An email address is required for payment.');
+      return false;
+    }
+    return true;
+  }
+
+  void _goToReview() {
+    setState(() {
+      _step = _TopUpStep.review;
+      _quote = null;
+      _quoteError = null;
+      _isLoadingQuote = true;
+    });
+    _loadTopupQuote();
+  }
+
+  void _goToForm() {
+    if (_isProcessingPayment) return;
+    _quoteRequestId++;
+    setState(() {
+      _step = _TopUpStep.form;
+      _isLoadingQuote = false;
+      _quoteError = null;
+    });
+  }
+
+  Future<void> _loadTopupQuote() async {
+    final requestId = ++_quoteRequestId;
+    final amount = _parsedSetAmount();
+    final currency = _selectedCurrency;
+
+    setState(() {
+      _isLoadingQuote = true;
+      _quoteError = null;
+    });
+
+    try {
+      final quote = await _quoteApi.fetchQuote(
+        amount: amount,
+        currency: currency,
+      );
+      if (!mounted || requestId != _quoteRequestId) return;
+      setState(() {
+        _quote = quote;
+        _isLoadingQuote = false;
+        _quoteError = null;
+      });
+    } catch (e) {
+      if (!mounted || requestId != _quoteRequestId) return;
+      final message = e is TopupQuoteApiException
+          ? e.message
+          : 'Unable to load deposit quote. Please try again.';
+      setState(() {
+        _isLoadingQuote = false;
+        _quoteError = message;
+        // Keep Confirm disabled until a successful quote; show Free/amount fallback
+        // values only as placeholders while the user retries.
+        _quote = TopupQuote.fallback(
+          amount: amount,
+          currency: currency,
+          checkoutProvider: _providerDisplayLabel,
+        );
+      });
+    }
+  }
+
+  void _onBackPressed() {
+    if (_step == _TopUpStep.review) {
+      _goToForm();
       return;
     }
+    Navigator.of(context).pop();
+  }
 
+  /// Card checkout: createPayment (Cloud Function) → open hosted checkout in-app.
+  Future<void> _processFiatTopUp() async {
+    if (!_validateFiatDepositForm()) return;
     if (_isProcessingPayment) return;
+
+    final amount = _parsedSetAmount();
+    final user = FirebaseAuth.instance.currentUser;
+    final email = _emailCtrl.text.trim().isNotEmpty
+        ? _emailCtrl.text.trim()
+        : user?.email;
 
     setState(() {
       _isProcessingPayment = true;
@@ -368,7 +492,7 @@ class _TopUpPageState extends State<TopUpPage> {
         amount: amount,
         currency: _selectedCurrency,
         provider: _cardMobileMoneyProvider,
-        email: email,
+        email: email!,
         firstName: _firstNameCtrl.text.trim().isNotEmpty
             ? _firstNameCtrl.text.trim()
             : null,
@@ -423,7 +547,9 @@ class _TopUpPageState extends State<TopUpPage> {
     switch (_selectedMethod) {
       case _TopUpPaymentMethod.cardMobileMoney:
       case _TopUpPaymentMethod.directFiatDeposit:
-        _processFiatTopUp();
+        if (_validateFiatDepositForm()) {
+          _goToReview();
+        }
       case _TopUpPaymentMethod.cryptoDeposit:
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -456,6 +582,72 @@ class _TopUpPageState extends State<TopUpPage> {
   @override
   Widget build(BuildContext context) {
     final colors = AppColors.getThemeColors(context);
+    final isReview = _step == _TopUpStep.review;
+
+    return PopScope(
+      canPop: !isReview,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop && isReview) {
+          _goToForm();
+        }
+      },
+      child: Scaffold(
+        backgroundColor: colors.background,
+        appBar: AppBar(
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          title: isReview
+              ? Text(
+                  'Deposit',
+                  style: TextStyle(
+                    color: colors.textPrimary,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 18,
+                  ),
+                )
+              : null,
+          centerTitle: true,
+          leading: IconButton(
+            icon: Icon(Icons.arrow_back, color: colors.textPrimary),
+            onPressed: _onBackPressed,
+          ),
+          actions: [
+            if (!isReview)
+              IconButton(
+                icon: Icon(
+                  _hideBalance ? Icons.visibility_off : Icons.visibility,
+                  color: colors.textSecondary,
+                ),
+                onPressed: () => setState(() => _hideBalance = !_hideBalance),
+              ),
+          ],
+        ),
+        body: isReview ? _buildReviewStep() : _buildFormStep(colors),
+      ),
+    );
+  }
+
+  Widget _buildReviewStep() {
+    final amount = _parsedSetAmount();
+    final fallbackAmount =
+        '${amount.toStringAsFixed(2)} $_selectedCurrency';
+
+    return DepositReviewScreen(
+      quote: _quote,
+      isLoadingQuote: _isLoadingQuote,
+      quoteError: _quoteError,
+      onRetryQuote: _isLoadingQuote ? null : _loadTopupQuote,
+      fallbackAmountLabel: fallbackAmount,
+      paymentMethodTitle: _paymentMethodTitle,
+      paymentMethodSubtitle: _paymentMethodSubtitle,
+      isSubmitting: _isProcessingPayment,
+      onEditDepositDetails: _goToForm,
+      onEditPaymentMethod: _goToForm,
+      onConfirm: _processFiatTopUp,
+    );
+  }
+
+  Widget _buildFormStep(AppThemeColors colors) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final primary = Theme.of(context).colorScheme.primary;
     final availableLabel = _hideBalance
@@ -464,148 +656,132 @@ class _TopUpPageState extends State<TopUpPage> {
     final nextEnabled = _selectedMethod != _TopUpPaymentMethod.cryptoDeposit;
     final nextLabel = nextEnabled ? 'Next' : 'Copy address below';
 
-    return Scaffold(
-      backgroundColor: colors.background,
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        leading: IconButton(
-          icon: Icon(Icons.arrow_back, color: colors.textPrimary),
-          onPressed: () => Navigator.of(context).pop(),
-        ),
-        actions: [
-          IconButton(
-            icon: Icon(
-              _hideBalance ? Icons.visibility_off : Icons.visibility,
-              color: colors.textSecondary,
-            ),
-            onPressed: () => setState(() => _hideBalance = !_hideBalance),
-          ),
-        ],
-      ),
-      body: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Expanded(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Deposit',
-                    style: TextStyle(
-                      fontSize: 32,
-                      fontWeight: FontWeight.w700,
-                      color: colors.textPrimary,
-                      height: 1.1,
-                    ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Expanded(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Deposit',
+                  style: TextStyle(
+                    fontSize: 32,
+                    fontWeight: FontWeight.w700,
+                    color: colors.textPrimary,
+                    height: 1.1,
                   ),
-                  const SizedBox(height: 32),
-                  Text(
-                    'Deposit',
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w500,
-                      color: colors.textSecondary,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  _DepositAmountField(
-                    controller: _amountCtrl,
-                    selectedCurrency: _selectedCurrency,
-                    currencies: _depositPickerCurrencies,
-                    loadingCurrencies: _loadingCountries,
-                    onCurrencyChanged: (currency) {
-                      setState(() => _selectedCurrency = currency);
-                    },
-                  ),
-                  const SizedBox(height: 8),
-                  if (_isLoadingBalance && !_hasBalanceData)
-                    const ShimmerBusyIndicator(width: 96, height: 12)
-                  else
-                    Text(
-                      availableLabel,
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: colors.textSecondary,
-                      ),
-                    ),
-                  const SizedBox(height: 32),
-                  Text(
-                    'Select a payment method',
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w500,
-                      color: colors.textSecondary,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  _PaymentMethodTile(
-                    title: 'Local Topup',
-                    subtitle: 'Local bank or card or mobile money',
-                    brandIcon: Icons.account_balance_outlined,
-                    selected: _selectedMethod == _TopUpPaymentMethod.directFiatDeposit,
-                    onTap: () =>
-                        _selectPaymentMethod(_TopUpPaymentMethod.directFiatDeposit),
-                  ),
-                  const SizedBox(height: 12),
-                  _PaymentMethodTile(
-                    title: 'International Topup',
-                    subtitle:
-                        'International bank or card, Apple Pay or Google Pay.',
-                    brandIcon: Icons.payment,
-                    selected: _selectedMethod == _TopUpPaymentMethod.cardMobileMoney,
-                    onTap: () =>
-                        _selectPaymentMethod(_TopUpPaymentMethod.cardMobileMoney),
-                  ),
-                  const SizedBox(height: 12),
-                  _PaymentMethodTile(
-                    title: 'Crypto Deposit',
-                    subtitle: 'Send any crypto or stablecoin from any network to a wallet address',
-                    brandIcon: Icons.currency_bitcoin,
-                    selected: _selectedMethod == _TopUpPaymentMethod.cryptoDeposit,
-                    onTap: () =>
-                        _selectPaymentMethod(_TopUpPaymentMethod.cryptoDeposit),
-                  ),
-                  if (_selectedMethod == _TopUpPaymentMethod.cryptoDeposit) ...[
-                    const SizedBox(height: 16),
-                    const _CryptoDepositDetails(),
-                  ],
-                ],
-              ),
-            ),
-          ),
-          BottomSafeActionBar(
-            padding: const EdgeInsets.fromLTRB(24, 8, 24, 16),
-            child: SizedBox(
-              height: 52,
-              width: double.infinity,
-              child: ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: primary,
-                  foregroundColor: isDark ? colors.onPrimary : Colors.white,
-                  disabledBackgroundColor: colors.surfaceVariant,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  elevation: 0,
                 ),
-                onPressed: _isProcessingPayment ? null : _onNextPressed,
-                child: _isProcessingPayment
-                    ? const ShimmerBusyIndicator(onPrimary: true)
-                    : Text(
-                        nextLabel,
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-              ),
+                const SizedBox(height: 32),
+                Text(
+                  'Deposit',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                    color: colors.textSecondary,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                _DepositAmountField(
+                  controller: _amountCtrl,
+                  selectedCurrency: _selectedCurrency,
+                  currencies: _depositPickerCurrencies,
+                  loadingCurrencies: _loadingCountries,
+                  onCurrencyChanged: (currency) {
+                    setState(() => _selectedCurrency = currency);
+                  },
+                ),
+                const SizedBox(height: 8),
+                if (_isLoadingBalance && !_hasBalanceData)
+                  const ShimmerBusyIndicator(width: 96, height: 12)
+                else
+                  Text(
+                    availableLabel,
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: colors.textSecondary,
+                    ),
+                  ),
+                const SizedBox(height: 32),
+                Text(
+                  'Select a payment method',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                    color: colors.textSecondary,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                _PaymentMethodTile(
+                  title: 'Local Topup',
+                  subtitle: 'Local bank or card or mobile money',
+                  brandIcon: Icons.account_balance_outlined,
+                  selected:
+                      _selectedMethod == _TopUpPaymentMethod.directFiatDeposit,
+                  onTap: () =>
+                      _selectPaymentMethod(_TopUpPaymentMethod.directFiatDeposit),
+                ),
+                const SizedBox(height: 12),
+                _PaymentMethodTile(
+                  title: 'International Topup',
+                  subtitle:
+                      'International bank or card, Apple Pay or Google Pay.',
+                  brandIcon: Icons.payment,
+                  selected:
+                      _selectedMethod == _TopUpPaymentMethod.cardMobileMoney,
+                  onTap: () =>
+                      _selectPaymentMethod(_TopUpPaymentMethod.cardMobileMoney),
+                ),
+                const SizedBox(height: 12),
+                _PaymentMethodTile(
+                  title: 'Crypto Deposit',
+                  subtitle:
+                      'Send any crypto or stablecoin from any network to a wallet address',
+                  brandIcon: Icons.currency_bitcoin,
+                  selected:
+                      _selectedMethod == _TopUpPaymentMethod.cryptoDeposit,
+                  onTap: () =>
+                      _selectPaymentMethod(_TopUpPaymentMethod.cryptoDeposit),
+                ),
+                if (_selectedMethod == _TopUpPaymentMethod.cryptoDeposit) ...[
+                  const SizedBox(height: 16),
+                  const _CryptoDepositDetails(),
+                ],
+              ],
             ),
           ),
-        ],
-      ),
+        ),
+        BottomSafeActionBar(
+          padding: const EdgeInsets.fromLTRB(24, 8, 24, 16),
+          child: SizedBox(
+            height: 52,
+            width: double.infinity,
+            child: ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: primary,
+                foregroundColor: isDark ? colors.onPrimary : Colors.white,
+                disabledBackgroundColor: colors.surfaceVariant,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                elevation: 0,
+              ),
+              onPressed: _isProcessingPayment ? null : _onNextPressed,
+              child: _isProcessingPayment
+                  ? const ShimmerBusyIndicator(onPrimary: true)
+                  : Text(
+                      nextLabel,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

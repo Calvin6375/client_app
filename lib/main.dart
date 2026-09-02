@@ -21,6 +21,7 @@ import 'package:pretium/features/pay/screens/pay_page.dart';
 import 'package:pretium/app/route_names.dart';
 import 'package:pretium/utils/logger.dart';
 import 'package:pretium/core/constants/app_colors.dart';
+import 'package:pretium/core/theme/app_typography.dart';
 import 'package:pretium/core/theme/system_ui.dart';
 import 'package:pretium/core/theme/theme_provider.dart';
 import 'package:pretium/features/wallet_verification/screens/wallet_verification_screen.dart';
@@ -104,6 +105,7 @@ class _MyAppState extends State<MyApp> {
     final base = ThemeData(
       useMaterial3: true,
       brightness: Brightness.light,
+      fontFamily: AppTypography.fontFamily,
       scaffoldBackgroundColor: colors.background,
     );
     final scheme = ColorScheme.fromSeed(
@@ -117,7 +119,7 @@ class _MyAppState extends State<MyApp> {
       onSurface: colors.textPrimary,
       error: colors.error,
     );
-    return base.copyWith(
+    return AppTypography.apply(base.copyWith(
       colorScheme: scheme,
       primaryColor: colors.primary,
       appBarTheme: AppBarTheme(
@@ -181,7 +183,7 @@ class _MyAppState extends State<MyApp> {
           borderSide: BorderSide(color: colors.inputBorderFocused, width: 2),
         ),
       ),
-    );
+    ));
   }
 
   ThemeData _buildDarkTheme() {
@@ -189,6 +191,7 @@ class _MyAppState extends State<MyApp> {
     final base = ThemeData(
       useMaterial3: true,
       brightness: Brightness.dark,
+      fontFamily: AppTypography.fontFamily,
       scaffoldBackgroundColor: colors.background,
     );
     final scheme = ColorScheme.fromSeed(
@@ -202,7 +205,7 @@ class _MyAppState extends State<MyApp> {
       onSurface: colors.textPrimary,
       error: colors.error,
     );
-    return base.copyWith(
+    return AppTypography.apply(base.copyWith(
       colorScheme: scheme,
       primaryColor: colors.primary,
       appBarTheme: AppBarTheme(
@@ -266,7 +269,7 @@ class _MyAppState extends State<MyApp> {
           borderSide: BorderSide(color: colors.inputBorderFocused, width: 2),
         ),
       ),
-    );
+    ));
   }
 
   @override

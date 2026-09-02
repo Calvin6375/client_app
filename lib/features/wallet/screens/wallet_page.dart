@@ -311,7 +311,11 @@ class _SpendingActivityCard extends StatelessWidget {
       }
     }
     final maxVal = amounts.fold<double>(0, (a, b) => a > b ? a : b);
-    const maxHeight = 80.0;
+    // Chart area must fit: bar + gap + day label (was overflowing by ~5.5px).
+    const chartHeight = 100.0;
+    const labelGap = 8.0;
+    const labelHeight = 16.0;
+    const maxBarHeight = chartHeight - labelGap - labelHeight;
 
     return Container(
       width: double.infinity,
@@ -353,29 +357,35 @@ class _SpendingActivityCard extends StatelessWidget {
           ),
           const SizedBox(height: 20),
           SizedBox(
-            height: 100,
+            height: chartHeight,
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               crossAxisAlignment: CrossAxisAlignment.end,
               children: List.generate(7, (i) {
-                final h = maxVal > 0 ? (amounts[i] / maxVal) * maxHeight : 0.0;
+                final h =
+                    maxVal > 0 ? (amounts[i] / maxVal) * maxBarHeight : 0.0;
                 return Column(
                   mainAxisAlignment: MainAxisAlignment.end,
+                  mainAxisSize: MainAxisSize.min,
                   children: [
                     Container(
                       width: 24,
-                      height: h.clamp(4.0, maxHeight),
+                      height: h.clamp(4.0, maxBarHeight),
                       decoration: BoxDecoration(
                         color: primary.withValues(alpha: 0.85),
                         borderRadius: BorderRadius.circular(4),
                       ),
                     ),
-                    const SizedBox(height: 8),
-                    Text(
-                      days[i],
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: colors.textSecondary,
+                    const SizedBox(height: labelGap),
+                    SizedBox(
+                      height: labelHeight,
+                      child: Text(
+                        days[i],
+                        style: TextStyle(
+                          fontSize: 12,
+                          height: 1.0,
+                          color: colors.textSecondary,
+                        ),
                       ),
                     ),
                   ],

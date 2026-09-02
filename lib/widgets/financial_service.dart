@@ -53,7 +53,6 @@ class FinancialServices extends StatelessWidget {
               context,
               FontAwesomeIcons.paperPlane,
               "Send Money",
-              true,
               () => _openAndRefresh(context, const SendMoneyPage()),
             ),
             const SizedBox(width: 12),
@@ -61,7 +60,6 @@ class FinancialServices extends StatelessWidget {
               context,
               FontAwesomeIcons.arrowRightArrowLeft,
               "Exchange",
-              true,
               () => _openAndRefresh(
                 context,
                 SwapPage(initialFromCurrency: swapInitialCurrency),
@@ -72,7 +70,6 @@ class FinancialServices extends StatelessWidget {
               context,
               FontAwesomeIcons.ellipsis,
               "More",
-              true,
               () => _showComingSoonDialog(context),
             ),
           ],
@@ -81,7 +78,12 @@ class FinancialServices extends StatelessWidget {
     );
   }
 
-  Widget _buildServiceButton(BuildContext context, IconData icon, String label, bool isFontAwesome, [VoidCallback? onTap]) {
+  Widget _buildServiceButton(
+    BuildContext context,
+    FaIconData icon,
+    String label, [
+    VoidCallback? onTap,
+  ]) {
     final colors = AppColors.getThemeColors(context);
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final containerColor = isDark ? AppColors.surfaceDark : Colors.white;
@@ -123,17 +125,11 @@ class FinancialServices extends StatelessWidget {
                       ],
               ),
               child: Center(
-                child: isFontAwesome
-                    ? FaIcon(
-                        icon,
-                        color: colors.primary,
-                        size: 24,
-                      )
-                    : Icon(
-                        icon,
-                        color: colors.primary,
-                        size: 24,
-                      ),
+                child: FaIcon(
+                  icon,
+                  color: colors.primary,
+                  size: 24,
+                ),
               ),
             ),
             const SizedBox(height: 8),
