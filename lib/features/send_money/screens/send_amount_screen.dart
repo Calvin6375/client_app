@@ -210,9 +210,8 @@ class _SendAmountScreenState extends State<SendAmountScreen> {
   void _showCurrencyPicker(bool isFromCurrency) {
     showModalBottomSheet(
       context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
       builder: (context) => CurrencyPickerBottomSheet(
         currencies: _availableCurrencies,
         selectedCode: isFromCurrency ? _fromCurrency : _toCurrency,

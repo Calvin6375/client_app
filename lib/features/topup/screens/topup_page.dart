@@ -26,6 +26,7 @@ import 'package:pretium/widgets/bottom_safe_action_bar.dart';
 /// Fiat codes for the Deposit currency picker.
 /// Prefers [apiCodes] from `GET /api/countries`; falls back to the static catalog.
 /// When [excludeAfrican] is true (International Topup), African fiat is omitted.
+/// Otherwise African fiat is dropped except KES and ETB; AED is never shown.
 List<String> _topupFiatCurrencyCodes({
   List<String>? apiCodes,
   String? includeCode,
@@ -39,16 +40,24 @@ List<String> _topupFiatCurrencyCodes({
       'EUR',
       'GBP',
     ],
-    if (includeCode != null &&
-        includeCode.trim().isNotEmpty &&
-        !(excludeAfrican &&
-            TopupDepositCountry.isAfricanCurrency(includeCode)))
-      includeCode.trim().toUpperCase(),
   };
+
+  final extra = includeCode?.trim().toUpperCase();
+  if (extra != null && extra.isNotEmpty) {
+    final extraAllowed = excludeAfrican
+        ? !TopupDepositCountry.isAfricanCurrency(extra)
+        : TopupDepositCountry.isAllowedOnDepositSelector(extra);
+    if (extraAllowed) codes.add(extra);
+  }
+
   final list = codes.toList()..sort();
-  if (!excludeAfrican) return list;
+  if (excludeAfrican) {
+    return list
+        .where((c) => !TopupDepositCountry.isAfricanCurrency(c))
+        .toList();
+  }
   return list
-      .where((c) => !TopupDepositCountry.isAfricanCurrency(c))
+      .where(TopupDepositCountry.isAllowedOnDepositSelector)
       .toList();
 }
 

@@ -7,6 +7,7 @@ import 'package:pretium/core/constants/cloud_functions_api_config.dart';
 import 'package:pretium/core/http/c2b_http_codec.dart';
 import 'package:pretium/features/safari_tap/models/safari_tap_bank.dart';
 import 'package:pretium/features/safari_tap/models/safari_tap_payout.dart';
+import 'package:pretium/features/safari_tap/models/safari_tap_payout_quote.dart';
 import 'package:pretium/utils/logger.dart';
 
 class SafariTapPayApiException implements Exception {
@@ -147,6 +148,30 @@ final class SafariTapPayApiService {
     return BeneficiaryValidation.fromJson(
       Map<String, dynamic>.from(parsed['data'] as Map),
     );
+  }
+
+  /// Fee quote only — does not create a payout.
+  Future<SafariTapPayoutQuote> quotePayout(Map<String, dynamic> body) async {
+    Logger.info(
+      'SafariTapPayApi POST /safari-card/payouts/quote '
+      'type=${body['type']} amount=${body['amount']} currency=${body['currency']}',
+    );
+    Future<http.Response> send({required bool forceRefresh}) async => _http.post(
+          CloudFunctionsApiConfig.safariTapPayoutsQuoteUri(),
+          headers: await _headers(forceRefresh: forceRefresh),
+          body: await _codec.encodeJsonBody(jsonEncode(body)),
+        );
+    final response = await send(forceRefresh: true);
+    final parsed = await _decodeResponse(response, send: send);
+    final data = Map<String, dynamic>.from(parsed['data'] as Map);
+    data.putIfAbsent('amount', () => body['amount']);
+    data.putIfAbsent('currency', () => body['currency']);
+    final quote = SafariTapPayoutQuote.fromJson(data);
+    Logger.success(
+      'SafariTap payout quote: send=${quote.youSend} '
+      'arto=${quote.artoFees} pay=${quote.youWillPay}',
+    );
+    return quote;
   }
 
   Future<SafariTapPayout> createPayout(Map<String, dynamic> body) async {

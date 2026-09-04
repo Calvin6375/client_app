@@ -15,34 +15,34 @@ class CurrencyPickerBottomSheet extends StatelessWidget {
   final ValueChanged<Currency> onSelected;
   const CurrencyPickerBottomSheet({super.key, required this.currencies, required this.selectedCode, required this.onSelected});
 
+  /// Shared with the bank picker so both sheets match visually.
+  static double sheetHeight(BuildContext context) =>
+      MediaQuery.sizeOf(context).height * 0.55;
+
   @override
   Widget build(BuildContext context) {
     final colors = AppColors.getThemeColors(context);
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final primary = Theme.of(context).colorScheme.primary;
+    final sheetColor =
+        isDark ? colors.surface : Colors.white.withValues(alpha: 0.9);
+
     return SafeArea(
-      child: Container(
-        decoration: BoxDecoration(
-          color: isDark 
-              ? colors.surface 
-              : Colors.white.withValues(alpha: 0.9),
+      child: Material(
+        color: sheetColor,
+        elevation: isDark ? 0 : 2,
+        shadowColor: Colors.black.withValues(alpha: 0.08),
+        shape: RoundedRectangleBorder(
           borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-          border: isDark 
-              ? null
-              : Border.all(color: const Color(0xFFE5E7EB)),
-          boxShadow: isDark
-              ? null
-              : [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.04),
-                    blurRadius: 8,
-                    offset: const Offset(0, -2),
-                  ),
-                ],
+          side: isDark
+              ? BorderSide.none
+              : const BorderSide(color: Color(0xFFE5E7EB)),
         ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
+        clipBehavior: Clip.antiAlias,
+        child: SizedBox(
+          height: sheetHeight(context),
+          child: Column(
+            children: [
             const SizedBox(height: 8),
             Container(
               width: 48,
@@ -70,9 +70,8 @@ class CurrencyPickerBottomSheet extends StatelessWidget {
                 ],
               ),
             ),
-            Flexible(
+            Expanded(
               child: ListView.separated(
-                shrinkWrap: true,
                 itemCount: currencies.length,
                 separatorBuilder: (_, __) => Divider(
                   height: 1,
@@ -128,6 +127,7 @@ class CurrencyPickerBottomSheet extends StatelessWidget {
               ),
             ),
           ],
+          ),
         ),
       ),
     );

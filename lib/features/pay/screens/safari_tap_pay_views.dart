@@ -1,6 +1,8 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:pretium/core/constants/app_colors.dart';
+import 'package:pretium/features/pay/screens/pay_review_screen.dart';
+import 'package:pretium/features/safari_tap/models/safari_tap_payout_quote.dart';
 import 'package:pretium/features/safari_tap/services/safari_tap_pay_api_service.dart';
 import 'package:pretium/features/safari_tap/services/safari_tap_pay_flow.dart';
 import 'package:pretium/features/safari_tap/utils/payout_error_messages.dart';
@@ -13,6 +15,8 @@ import 'package:pretium/widgets/app_shimmer.dart';
 import 'package:pretium/widgets/bottom_safe_action_bar.dart';
 
 const String kSafariTapPayCurrency = 'KES';
+
+enum _PayFlowStep { form, review }
 
 class SafariTapKesBalanceRow extends StatelessWidget {
   const SafariTapKesBalanceRow({
@@ -137,12 +141,14 @@ class SafariTapPayBillView extends StatefulWidget {
     required this.loadingBalance,
     required this.payApi,
     required this.onPaid,
+    this.onFlowStepChanged,
   });
 
   final double kesBalance;
   final bool loadingBalance;
   final SafariTapPayApiService payApi;
   final VoidCallback onPaid;
+  final VoidCallback? onFlowStepChanged;
 
   @override
   State<SafariTapPayBillView> createState() => SafariTapPayBillViewState();
@@ -154,11 +160,26 @@ class SafariTapPayBillViewState extends State<SafariTapPayBillView>
   final _accountCtrl = TextEditingController();
   final _amountCtrl = TextEditingController();
   bool _submitting = false;
+  _PayFlowStep _step = _PayFlowStep.form;
+
+  SafariTapPayoutQuote? _quote;
+  bool _isLoadingQuote = false;
+  String? _quoteError;
+  int _quoteRequestId = 0;
 
   @override
   SafariTapPayApiService get payApi => widget.payApi;
 
   void applyScannedCode(String code) => setState(() => _businessCtrl.text = code);
+
+  /// Returns true when the back press was handled by leaving review.
+  bool handleBack() {
+    if (_step != _PayFlowStep.review || _submitting) return false;
+    _goToForm();
+    return true;
+  }
+
+  bool get isReviewStep => _step == _PayFlowStep.review;
 
   @override
   void dispose() {
@@ -168,18 +189,47 @@ class SafariTapPayBillViewState extends State<SafariTapPayBillView>
     super.dispose();
   }
 
-  bool get _isValidated =>
-      beneficiaryName != null && beneficiaryName!.trim().isNotEmpty;
-
   Map<String, dynamic> _validateBody() {
     return {
       'type': 'MPESA_B2B',
       'accountType': 'PayBill',
       'recipient': {
         'account': _businessCtrl.text.trim(),
+        'accountType': 'PayBill',
         'accountReference': _accountCtrl.text.trim(),
         'name': beneficiaryName ?? 'PayBill',
       },
+    };
+  }
+
+  Map<String, dynamic> _quoteBody(double amount) {
+    return {
+      'type': 'MPESA_B2B',
+      'accountType': 'PayBill',
+      'amount': amount,
+      'currency': kSafariTapPayCurrency,
+      'recipient': {
+        'account': _businessCtrl.text.trim(),
+        'accountType': 'PayBill',
+        'accountReference': _accountCtrl.text.trim(),
+      },
+    };
+  }
+
+  Map<String, dynamic> _payoutBody(double amount, String clientRequestId) {
+    return {
+      'type': 'MPESA_B2B',
+      'accountType': 'PayBill',
+      'amount': amount,
+      'currency': kSafariTapPayCurrency,
+      'clientRequestId': clientRequestId,
+      'recipient': {
+        'account': _businessCtrl.text.trim(),
+        'accountType': 'PayBill',
+        'accountReference': _accountCtrl.text.trim(),
+        'name': beneficiaryName ?? 'PayBill',
+      },
+      'narrative': 'SafariTap payment',
     };
   }
 
@@ -190,9 +240,50 @@ class SafariTapPayBillViewState extends State<SafariTapPayBillView>
     });
   }
 
-  Future<void> _validateRecipient() async {
+  void _goToForm() {
+    _quoteRequestId++;
+    setState(() {
+      _step = _PayFlowStep.form;
+      _isLoadingQuote = false;
+      _quoteError = null;
+    });
+    widget.onFlowStepChanged?.call();
+  }
+
+  Future<void> _loadQuote(double amount) async {
+    final requestId = ++_quoteRequestId;
+    setState(() {
+      _isLoadingQuote = true;
+      _quoteError = null;
+    });
+    try {
+      final quote = await widget.payApi.quotePayout(_quoteBody(amount));
+      if (!mounted || requestId != _quoteRequestId) return;
+      setState(() {
+        _quote = quote;
+        _isLoadingQuote = false;
+        _quoteError = null;
+      });
+    } catch (e) {
+      if (!mounted || requestId != _quoteRequestId) return;
+      final message = e is SafariTapPayApiException
+          ? safariTapPayoutErrorMessage(e)
+          : 'Unable to load payment quote. Please try again.';
+      setState(() {
+        _isLoadingQuote = false;
+        _quoteError = message;
+        _quote = SafariTapPayoutQuote.fallback(
+          amount: amount,
+          currency: kSafariTapPayCurrency,
+        );
+      });
+    }
+  }
+
+  Future<void> _continueToReview() async {
     final business = _businessCtrl.text.trim();
     final account = _accountCtrl.text.trim();
+    final amount = double.tryParse(_amountCtrl.text.trim()) ?? 0;
     if (business.isEmpty || account.isEmpty) {
       _snack('Enter business number and account number');
       return;
@@ -201,17 +292,6 @@ class SafariTapPayBillViewState extends State<SafariTapPayBillView>
       _snack('Account number must be 1–20 characters');
       return;
     }
-    await validateBeneficiary(_validateBody());
-  }
-
-  Future<void> _pay() async {
-    if (!_isValidated) {
-      _snack('Validate the merchant first');
-      return;
-    }
-    final business = _businessCtrl.text.trim();
-    final account = _accountCtrl.text.trim();
-    final amount = double.tryParse(_amountCtrl.text.trim()) ?? 0;
     if (amount <= 0) {
       _snack('Enter an amount to pay');
       return;
@@ -220,6 +300,23 @@ class SafariTapPayBillViewState extends State<SafariTapPayBillView>
       _snack('Insufficient KES balance');
       return;
     }
+
+    final ok = await validateBeneficiary(_validateBody());
+    if (!ok || !mounted) return;
+
+    setState(() {
+      _step = _PayFlowStep.review;
+      _quote = null;
+      _quoteError = null;
+      _isLoadingQuote = true;
+    });
+    widget.onFlowStepChanged?.call();
+    await _loadQuote(amount);
+  }
+
+  Future<void> _confirmPay() async {
+    final amount = double.tryParse(_amountCtrl.text.trim()) ?? 0;
+    if (amount <= 0) return;
 
     await runGuardedAsync(
       this,
@@ -232,19 +329,7 @@ class SafariTapPayBillViewState extends State<SafariTapPayBillView>
           clientRequestId: clientRequestId,
           flowLabel: 'PayBill',
           onPaid: widget.onPaid,
-          payoutBody: {
-            'type': 'MPESA_B2B',
-            'accountType': 'PayBill',
-            'amount': amount,
-            'currency': kSafariTapPayCurrency,
-            'clientRequestId': clientRequestId,
-            'recipient': {
-              'account': business,
-              'accountReference': account,
-              'name': beneficiaryName ?? 'PayBill',
-            },
-            'narrative': 'SafariTap payment',
-          },
+          payoutBody: _payoutBody(amount, clientRequestId),
         );
       },
     );
@@ -255,6 +340,29 @@ class SafariTapPayBillViewState extends State<SafariTapPayBillView>
 
   @override
   Widget build(BuildContext context) {
+    if (_step == _PayFlowStep.review) {
+      final amount = double.tryParse(_amountCtrl.text.trim()) ?? 0;
+      return PayReviewScreen(
+        flowTitle: 'Pay Bill',
+        merchantName: beneficiaryName?.trim().isNotEmpty == true
+            ? beneficiaryName!.trim()
+            : 'Pay Bill merchant',
+        accountLabel: 'PayBill number',
+        accountValue: _businessCtrl.text.trim(),
+        accountReferenceLabel: 'Account number',
+        accountReferenceValue: _accountCtrl.text.trim(),
+        amountLabel: '${amount.toStringAsFixed(2)} $kSafariTapPayCurrency',
+        quote: _quote,
+        isLoadingQuote: _isLoadingQuote,
+        quoteError: _quoteError,
+        onRetryQuote: _isLoadingQuote ? null : () => _loadQuote(amount),
+        onEditPaymentDetails: _goToForm,
+        onEditMerchant: _goToForm,
+        isSubmitting: _submitting,
+        onConfirm: _confirmPay,
+      );
+    }
+
     final colors = AppColors.getThemeColors(context);
     return Column(
       children: [
@@ -262,7 +370,10 @@ class SafariTapPayBillViewState extends State<SafariTapPayBillView>
           child: ListView(
             padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
             children: [
-              SafariTapKesBalanceRow(balance: widget.kesBalance, loading: widget.loadingBalance),
+              SafariTapKesBalanceRow(
+                balance: widget.kesBalance,
+                loading: widget.loadingBalance,
+              ),
               const SizedBox(height: 20),
               SafariTapPayField(
                 controller: _businessCtrl,
@@ -295,9 +406,9 @@ class SafariTapPayBillViewState extends State<SafariTapPayBillView>
           ),
         ),
         SafariTapPayBottomButton(
-          label: _isValidated ? 'Pay' : 'Validate merchant',
-          loading: _isValidated ? _submitting : validationLoading,
-          onPressed: _isValidated ? _pay : _validateRecipient,
+          label: 'Continue',
+          loading: validationLoading,
+          onPressed: _continueToReview,
         ),
       ],
     );
@@ -311,12 +422,14 @@ class SafariTapBuyGoodsView extends StatefulWidget {
     required this.loadingBalance,
     required this.payApi,
     required this.onPaid,
+    this.onFlowStepChanged,
   });
 
   final double kesBalance;
   final bool loadingBalance;
   final SafariTapPayApiService payApi;
   final VoidCallback onPaid;
+  final VoidCallback? onFlowStepChanged;
 
   @override
   State<SafariTapBuyGoodsView> createState() => SafariTapBuyGoodsViewState();
@@ -327,11 +440,26 @@ class SafariTapBuyGoodsViewState extends State<SafariTapBuyGoodsView>
   final _tillCtrl = TextEditingController();
   final _amountCtrl = TextEditingController();
   bool _submitting = false;
+  _PayFlowStep _step = _PayFlowStep.form;
+
+  SafariTapPayoutQuote? _quote;
+  bool _isLoadingQuote = false;
+  String? _quoteError;
+  int _quoteRequestId = 0;
 
   @override
   SafariTapPayApiService get payApi => widget.payApi;
 
   void applyScannedCode(String code) => setState(() => _tillCtrl.text = code);
+
+  /// Returns true when the back press was handled by leaving review.
+  bool handleBack() {
+    if (_step != _PayFlowStep.review || _submitting) return false;
+    _goToForm();
+    return true;
+  }
+
+  bool get isReviewStep => _step == _PayFlowStep.review;
 
   @override
   void dispose() {
@@ -340,9 +468,6 @@ class SafariTapBuyGoodsViewState extends State<SafariTapBuyGoodsView>
     super.dispose();
   }
 
-  bool get _isValidated =>
-      beneficiaryName != null && beneficiaryName!.trim().isNotEmpty;
-
   void _clearValidation() {
     setState(() {
       beneficiaryName = null;
@@ -350,29 +475,94 @@ class SafariTapBuyGoodsViewState extends State<SafariTapBuyGoodsView>
     });
   }
 
-  Future<void> _validateRecipient() async {
+  void _goToForm() {
+    _quoteRequestId++;
+    setState(() {
+      _step = _PayFlowStep.form;
+      _isLoadingQuote = false;
+      _quoteError = null;
+    });
+    widget.onFlowStepChanged?.call();
+  }
+
+  Map<String, dynamic> _validateBody() {
+    return {
+      'type': 'MPESA_B2B',
+      'accountType': 'TillNumber',
+      'recipient': {
+        'account': _tillCtrl.text.trim(),
+        'accountType': 'TillNumber',
+        'name': beneficiaryName ?? 'Till',
+      },
+    };
+  }
+
+  Map<String, dynamic> _quoteBody(double amount) {
+    return {
+      'type': 'MPESA_B2B',
+      'accountType': 'TillNumber',
+      'amount': amount,
+      'currency': kSafariTapPayCurrency,
+      'recipient': {
+        'account': _tillCtrl.text.trim(),
+        'accountType': 'TillNumber',
+      },
+    };
+  }
+
+  Map<String, dynamic> _payoutBody(double amount, String clientRequestId) {
+    return {
+      'type': 'MPESA_B2B',
+      'accountType': 'TillNumber',
+      'amount': amount,
+      'currency': kSafariTapPayCurrency,
+      'clientRequestId': clientRequestId,
+      'recipient': {
+        'account': _tillCtrl.text.trim(),
+        'accountType': 'TillNumber',
+        'name': beneficiaryName ?? 'Till',
+      },
+      'narrative': 'SafariTap payment',
+    };
+  }
+
+  Future<void> _loadQuote(double amount) async {
+    final requestId = ++_quoteRequestId;
+    setState(() {
+      _isLoadingQuote = true;
+      _quoteError = null;
+    });
+    try {
+      final quote = await widget.payApi.quotePayout(_quoteBody(amount));
+      if (!mounted || requestId != _quoteRequestId) return;
+      setState(() {
+        _quote = quote;
+        _isLoadingQuote = false;
+        _quoteError = null;
+      });
+    } catch (e) {
+      if (!mounted || requestId != _quoteRequestId) return;
+      final message = e is SafariTapPayApiException
+          ? safariTapPayoutErrorMessage(e)
+          : 'Unable to load payment quote. Please try again.';
+      setState(() {
+        _isLoadingQuote = false;
+        _quoteError = message;
+        _quote = SafariTapPayoutQuote.fallback(
+          amount: amount,
+          currency: kSafariTapPayCurrency,
+        );
+      });
+    }
+  }
+
+  Future<void> _continueToReview() async {
     final till = _tillCtrl.text.trim();
+    final amount = double.tryParse(_amountCtrl.text.trim()) ?? 0;
     if (till.isEmpty) {
       _snack('Enter till number');
       return;
     }
-    await validateBeneficiary({
-      'type': 'MPESA_B2B',
-      'accountType': 'TillNumber',
-      'recipient': {
-        'account': till,
-        'name': beneficiaryName ?? 'Till',
-      },
-    });
-  }
-
-  Future<void> _pay() async {
-    if (!_isValidated) {
-      _snack('Validate the merchant first');
-      return;
-    }
-    final till = _tillCtrl.text.trim();
-    final amount = double.tryParse(_amountCtrl.text.trim()) ?? 0;
     if (amount <= 0) {
       _snack('Enter an amount to pay');
       return;
@@ -381,6 +571,23 @@ class SafariTapBuyGoodsViewState extends State<SafariTapBuyGoodsView>
       _snack('Insufficient KES balance');
       return;
     }
+
+    final ok = await validateBeneficiary(_validateBody());
+    if (!ok || !mounted) return;
+
+    setState(() {
+      _step = _PayFlowStep.review;
+      _quote = null;
+      _quoteError = null;
+      _isLoadingQuote = true;
+    });
+    widget.onFlowStepChanged?.call();
+    await _loadQuote(amount);
+  }
+
+  Future<void> _confirmPay() async {
+    final amount = double.tryParse(_amountCtrl.text.trim()) ?? 0;
+    if (amount <= 0) return;
 
     await runGuardedAsync(
       this,
@@ -393,18 +600,7 @@ class SafariTapBuyGoodsViewState extends State<SafariTapBuyGoodsView>
           clientRequestId: clientRequestId,
           flowLabel: 'Buy Goods',
           onPaid: widget.onPaid,
-          payoutBody: {
-            'type': 'MPESA_B2B',
-            'accountType': 'TillNumber',
-            'amount': amount,
-            'currency': kSafariTapPayCurrency,
-            'clientRequestId': clientRequestId,
-            'recipient': {
-              'account': till,
-              'name': beneficiaryName ?? 'Till',
-            },
-            'narrative': 'SafariTap payment',
-          },
+          payoutBody: _payoutBody(amount, clientRequestId),
         );
       },
     );
@@ -415,6 +611,27 @@ class SafariTapBuyGoodsViewState extends State<SafariTapBuyGoodsView>
 
   @override
   Widget build(BuildContext context) {
+    if (_step == _PayFlowStep.review) {
+      final amount = double.tryParse(_amountCtrl.text.trim()) ?? 0;
+      return PayReviewScreen(
+        flowTitle: 'Buy Goods',
+        merchantName: beneficiaryName?.trim().isNotEmpty == true
+            ? beneficiaryName!.trim()
+            : 'Till merchant',
+        accountLabel: 'Till number',
+        accountValue: _tillCtrl.text.trim(),
+        amountLabel: '${amount.toStringAsFixed(2)} $kSafariTapPayCurrency',
+        quote: _quote,
+        isLoadingQuote: _isLoadingQuote,
+        quoteError: _quoteError,
+        onRetryQuote: _isLoadingQuote ? null : () => _loadQuote(amount),
+        onEditPaymentDetails: _goToForm,
+        onEditMerchant: _goToForm,
+        isSubmitting: _submitting,
+        onConfirm: _confirmPay,
+      );
+    }
+
     final colors = AppColors.getThemeColors(context);
     return Column(
       children: [
@@ -422,7 +639,10 @@ class SafariTapBuyGoodsViewState extends State<SafariTapBuyGoodsView>
           child: ListView(
             padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
             children: [
-              SafariTapKesBalanceRow(balance: widget.kesBalance, loading: widget.loadingBalance),
+              SafariTapKesBalanceRow(
+                balance: widget.kesBalance,
+                loading: widget.loadingBalance,
+              ),
               const SizedBox(height: 20),
               SafariTapPayField(
                 controller: _tillCtrl,
@@ -447,9 +667,9 @@ class SafariTapBuyGoodsViewState extends State<SafariTapBuyGoodsView>
           ),
         ),
         SafariTapPayBottomButton(
-          label: _isValidated ? 'Pay' : 'Validate merchant',
-          loading: _isValidated ? _submitting : validationLoading,
-          onPressed: _isValidated ? _pay : _validateRecipient,
+          label: 'Continue',
+          loading: validationLoading,
+          onPressed: _continueToReview,
         ),
       ],
     );

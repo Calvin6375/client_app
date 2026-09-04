@@ -5,7 +5,8 @@ class TransactionDetails {
   String fromCurrency;
   double amountToReceive;
   String toCurrency;
-  PaymentMethod paymentMethod;
+  /// Null until the user picks a transfer method on Send Money.
+  PaymentMethod? paymentMethod;
   String recipientFullName;
   String recipientPhoneNumber;
   /// Mobile money network (e.g. Safaricom) when [paymentMethod] is mobile money.
@@ -22,7 +23,7 @@ class TransactionDetails {
     this.fromCurrency = '',
     this.amountToReceive = 0.0,
     this.toCurrency = '',
-    this.paymentMethod = PaymentMethod.mobileMoney,
+    this.paymentMethod,
     this.recipientFullName = '',
     this.recipientPhoneNumber = '',
     this.recipientMobileNetwork = '',

@@ -100,6 +100,37 @@ class _PayPageState extends State<PayPage> {
     setState(() => _selected = null);
   }
 
+  bool _handleNestedBack() {
+    switch (_selected) {
+      case _PayOption.payBill:
+        return _payBillKey.currentState?.handleBack() ?? false;
+      case _PayOption.buyGoods:
+        return _buyGoodsKey.currentState?.handleBack() ?? false;
+      case _PayOption.pochiLaBiashara:
+      case null:
+        return false;
+    }
+  }
+
+  bool get _isReviewStep {
+    switch (_selected) {
+      case _PayOption.payBill:
+        return _payBillKey.currentState?.isReviewStep ?? false;
+      case _PayOption.buyGoods:
+        return _buyGoodsKey.currentState?.isReviewStep ?? false;
+      case _PayOption.pochiLaBiashara:
+      case null:
+        return false;
+    }
+  }
+
+  void _onBackPressed() {
+    if (_handleNestedBack()) return;
+    if (_selected != null) {
+      _backToHub();
+    }
+  }
+
   double get _kesBalance => _balances[_kPayAmountCurrency] ?? 0;
 
   Future<void> _openQrScanner() async {
@@ -137,53 +168,66 @@ class _PayPageState extends State<PayPage> {
       null => 'Pay',
     };
 
-    return Scaffold(
-      backgroundColor: colors.background,
-      appBar: AppBar(
-        backgroundColor: isDark ? Colors.transparent : primary.withValues(alpha: 0.08),
-        elevation: 0,
-        title: Text(title, style: TextStyle(color: colors.textPrimary)),
-        iconTheme: IconThemeData(color: colors.textPrimary),
-        leading: _selected != null
-            ? IconButton(
-                icon: Icon(Icons.arrow_back, color: colors.textPrimary),
-                onPressed: _backToHub,
-              )
-            : null,
-        actions: [
-          if (_selected != null)
-            IconButton(
-              tooltip: 'Scan QR code',
-              icon: Icon(Icons.qr_code_scanner_rounded, color: colors.textPrimary),
-              onPressed: _openQrScanner,
-            ),
-        ],
+    return PopScope(
+      canPop: _selected == null,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        _onBackPressed();
+      },
+      child: Scaffold(
+        backgroundColor: colors.background,
+        appBar: AppBar(
+          backgroundColor: isDark ? Colors.transparent : primary.withValues(alpha: 0.08),
+          elevation: 0,
+          title: Text(title, style: TextStyle(color: colors.textPrimary)),
+          iconTheme: IconThemeData(color: colors.textPrimary),
+          leading: _selected != null
+              ? IconButton(
+                  icon: Icon(Icons.arrow_back, color: colors.textPrimary),
+                  onPressed: _onBackPressed,
+                )
+              : null,
+          actions: [
+            if (_selected != null && !_isReviewStep)
+              IconButton(
+                tooltip: 'Scan QR code',
+                icon: Icon(Icons.qr_code_scanner_rounded, color: colors.textPrimary),
+                onPressed: _openQrScanner,
+              ),
+          ],
+        ),
+        body: _selected == null
+            ? _PayHub(onSelect: _openOption)
+            : switch (_selected!) {
+                _PayOption.payBill => SafariTapPayBillView(
+                    key: _payBillKey,
+                    kesBalance: _kesBalance,
+                    loadingBalance: _loadingWallets,
+                    payApi: _payApi,
+                    onPaid: () => Navigator.of(context).pop(true),
+                    onFlowStepChanged: () {
+                      if (mounted) setState(() {});
+                    },
+                  ),
+                _PayOption.buyGoods => SafariTapBuyGoodsView(
+                    key: _buyGoodsKey,
+                    kesBalance: _kesBalance,
+                    loadingBalance: _loadingWallets,
+                    payApi: _payApi,
+                    onPaid: () => Navigator.of(context).pop(true),
+                    onFlowStepChanged: () {
+                      if (mounted) setState(() {});
+                    },
+                  ),
+                _PayOption.pochiLaBiashara => SafariTapPochiView(
+                    key: _pochiKey,
+                    kesBalance: _kesBalance,
+                    loadingBalance: _loadingWallets,
+                    payApi: _payApi,
+                    onPaid: () => Navigator.of(context).pop(true),
+                  ),
+              },
       ),
-      body: _selected == null
-          ? _PayHub(onSelect: _openOption)
-          : switch (_selected!) {
-              _PayOption.payBill => SafariTapPayBillView(
-                  key: _payBillKey,
-                  kesBalance: _kesBalance,
-                  loadingBalance: _loadingWallets,
-                  payApi: _payApi,
-                  onPaid: () => Navigator.of(context).pop(true),
-                ),
-              _PayOption.buyGoods => SafariTapBuyGoodsView(
-                  key: _buyGoodsKey,
-                  kesBalance: _kesBalance,
-                  loadingBalance: _loadingWallets,
-                  payApi: _payApi,
-                  onPaid: () => Navigator.of(context).pop(true),
-                ),
-              _PayOption.pochiLaBiashara => SafariTapPochiView(
-                  key: _pochiKey,
-                  kesBalance: _kesBalance,
-                  loadingBalance: _loadingWallets,
-                  payApi: _payApi,
-                  onPaid: () => Navigator.of(context).pop(true),
-                ),
-            },
     );
   }
 }

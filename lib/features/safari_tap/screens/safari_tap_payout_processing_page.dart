@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:pretium/app/route_names.dart';
 import 'package:pretium/core/constants/app_colors.dart';
 import 'package:pretium/features/safari_tap/models/safari_tap_payout.dart';
 import 'package:pretium/features/safari_tap/services/safari_tap_pay_api_service.dart';
@@ -107,14 +108,48 @@ class _SafariTapPayoutProcessingPageState extends State<SafariTapPayoutProcessin
 
   bool get _isSuccess => _current.isSuccess;
 
-  String get _displayName => _current.displayName;
+  /// Send Money / wallet / bank — not Pay Bill / Buy Goods (MPESA_B2B).
+  bool get _isSendMoneyFlow {
+    final type = _current.type.toUpperCase();
+    if (type == 'MPESA_B2C' ||
+        type == 'SAFARITAP_WALLET' ||
+        type == 'BANK') {
+      return true;
+    }
+    final label = widget.summary.flowLabel.toLowerCase();
+    return label.contains('send') || label.contains('wallet');
+  }
+
+  String get _displayName {
+    final fromSummary = widget.summary.recipientName.trim();
+    if (fromSummary.isNotEmpty && fromSummary != 'Recipient') {
+      return fromSummary;
+    }
+    return _current.displayName;
+  }
+
+  /// Amount the recipient receives (excludes fees).
+  double get _recipientGetsAmount {
+    if (_current.amount > 0) return _current.amount;
+    if (widget.summary.amount > 0) return widget.summary.amount;
+    return _current.displayDebit;
+  }
 
   double get _displayDebit => _current.displayDebit;
 
-  String? get _mpesaReference {
+  String? get _paymentReference {
     final ref = _current.mpesaReference?.trim();
     return ref != null && ref.isNotEmpty ? ref : null;
   }
+
+  bool get _isBankTransfer {
+    if (_current.type.toUpperCase() == 'BANK') return true;
+    // Poll payloads sometimes omit type — bank rows use account number.
+    return widget.summary.accountLabel == 'Account number';
+  }
+
+  String get _referenceLabel =>
+      _isBankTransfer ? 'Reference' : 'Mpesa reference';
 
   String? get _accountValue {
     final fromSummary = widget.summary.accountValue?.trim();
@@ -217,8 +252,11 @@ class _SafariTapPayoutProcessingPageState extends State<SafariTapPayoutProcessin
     }
   }
 
-  void _finish({required bool success}) {
-    Navigator.of(context).pop(success);
+  void _goHome() {
+    Navigator.of(context).pushNamedAndRemoveUntil(
+      RouteNames.home,
+      (route) => false,
+    );
   }
 
   @override
@@ -248,7 +286,13 @@ class _SafariTapPayoutProcessingPageState extends State<SafariTapPayoutProcessin
                     : 'Still confirming with M-Pesa. Pull down to refresh.')
                 : 'This usually takes a few seconds. Pull down to refresh.';
 
-    return Scaffold(
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        _goHome();
+      },
+      child: Scaffold(
       backgroundColor: colors.background,
       appBar: AppBar(
         backgroundColor: colors.background,
@@ -256,7 +300,7 @@ class _SafariTapPayoutProcessingPageState extends State<SafariTapPayoutProcessin
         surfaceTintColor: Colors.transparent,
         leading: IconButton(
           icon: Icon(Icons.arrow_back, color: colors.textPrimary),
-          onPressed: () => _finish(success: _isSuccess),
+          onPressed: _goHome,
         ),
         title: Text(
           widget.summary.flowLabel,
@@ -295,7 +339,9 @@ class _SafariTapPayoutProcessingPageState extends State<SafariTapPayoutProcessin
                     ),
                     const SizedBox(height: 6),
                     Text(
-                      '-${_current.currency} ${_displayDebit.toStringAsFixed(2)}',
+                      _isSendMoneyFlow
+                          ? 'Recipient gets · ${_current.currency} ${_recipientGetsAmount.toStringAsFixed(2)}'
+                          : '-${_current.currency} ${_displayDebit.toStringAsFixed(2)}',
                       style: TextStyle(
                         color: colors.textSecondary,
                         fontSize: 15,
@@ -321,10 +367,10 @@ class _SafariTapPayoutProcessingPageState extends State<SafariTapPayoutProcessin
                                     ? AppColors.errorRed
                                     : primary,
                           ),
-                          if (_mpesaReference != null)
+                          if (_paymentReference != null)
                             _DetailRow(
-                              label: 'Mpesa reference',
-                              value: _mpesaReference!,
+                              label: _referenceLabel,
+                              value: _paymentReference!,
                               copyable: true,
                             ),
                           if (widget.summary.accountLabel != null &&
@@ -335,9 +381,16 @@ class _SafariTapPayoutProcessingPageState extends State<SafariTapPayoutProcessin
                               copyable: true,
                             ),
                           ],
+                          if (_isSendMoneyFlow)
+                            _DetailRow(
+                              label: 'Recipient gets',
+                              value:
+                                  '${_current.currency} ${_recipientGetsAmount.toStringAsFixed(2)}',
+                            ),
                           _DetailRow(
-                            label: 'Total amount',
-                            value: '${_current.currency} ${_displayDebit.toStringAsFixed(2)}',
+                            label: _isSendMoneyFlow ? 'You paid' : 'Total amount',
+                            value:
+                                '${_current.currency} ${_displayDebit.toStringAsFixed(2)}',
                           ),
                           if (_current.fee > 0)
                             _DetailRow(
@@ -382,7 +435,7 @@ class _SafariTapPayoutProcessingPageState extends State<SafariTapPayoutProcessin
               child: SizedBox(
                 width: double.infinity,
                 child: FilledButton(
-                  onPressed: _isTerminal ? () => _finish(success: _isSuccess) : null,
+                  onPressed: _isTerminal ? _goHome : null,
                   style: FilledButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
@@ -400,6 +453,7 @@ class _SafariTapPayoutProcessingPageState extends State<SafariTapPayoutProcessin
           ],
         ),
       ),
+    ),
     );
   }
 

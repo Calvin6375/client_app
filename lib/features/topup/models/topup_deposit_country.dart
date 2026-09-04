@@ -146,6 +146,54 @@ class TopupDepositCountry {
   static bool isAfricanCurrency(String code) =>
       africanCurrencyCodes.contains(code.trim().toUpperCase());
 
+  /// Extra African ISO 4217 codes that may appear on `GET /api/countries`
+  /// but are not in the Paystack catalog above.
+  static const Set<String> _otherAfricanCurrencyCodes = {
+    'ZAR',
+    'MAD',
+    'EGP',
+    'TND',
+    'DZD',
+    'LYD',
+    'SDG',
+    'SSP',
+    'SOS',
+    'DJF',
+    'ERN',
+    'RWF',
+    'MZN',
+    'AOA',
+    'ZMW',
+    'MWK',
+    'BWP',
+    'NAD',
+    'SZL',
+    'LSL',
+    'MUR',
+    'SCR',
+    'MGA',
+    'KMF',
+    'STN',
+    'CVE',
+    'GMD',
+    'GNF',
+    'SLL',
+    'LRD',
+    'SLE',
+    'XOF',
+    'XAF',
+  };
+
+  /// Deposit currency picker: KES + ETB + non-African (AED excluded).
+  static bool isAllowedOnDepositSelector(String code) {
+    final u = code.trim().toUpperCase();
+    if (u == 'KES' || u == 'ETB') return true;
+    if (u == 'AED') return false;
+    if (africanCurrencyCodes.contains(u)) return false;
+    if (_otherAfricanCurrencyCodes.contains(u)) return false;
+    return true;
+  }
+
   /// Card / mobile money funding provider for [currencyCode].
   /// African currencies → Paystack; USD, GBP, EUR, and other non-African → Transak.
   static String cardMobileMoneyProviderFor(String currencyCode) =>

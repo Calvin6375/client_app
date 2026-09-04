@@ -1,55 +1,63 @@
 import 'package:flutter/material.dart';
 import 'package:pretium/core/constants/app_colors.dart';
 import 'package:pretium/features/safari_tap/models/safari_tap_payout_quote.dart';
-import 'package:pretium/models/transaction_details_model.dart';
 import 'package:pretium/widgets/app_shimmer.dart';
 import 'package:pretium/widgets/bottom_safe_action_bar.dart';
 
-class ReviewDetailsScreen extends StatelessWidget {
-  final VoidCallback onNext;
-  final TransactionDetails details;
-  final VoidCallback? onEditTransferDetails;
-  final VoidCallback? onEditRecipientDetails;
-  final bool isSubmitting;
-  final SafariTapPayoutQuote? quote;
-  final bool isLoadingQuote;
-  final String? quoteError;
-  final VoidCallback? onRetryQuote;
-
-  const ReviewDetailsScreen({
+/// Review step for Buy Goods / Pay Bill before confirm payout.
+class PayReviewScreen extends StatelessWidget {
+  const PayReviewScreen({
     super.key,
-    required this.onNext,
-    required this.details,
-    this.onEditTransferDetails,
-    this.onEditRecipientDetails,
-    this.isSubmitting = false,
+    required this.flowTitle,
+    required this.merchantName,
+    required this.accountLabel,
+    required this.accountValue,
+    required this.amountLabel,
+    required this.onConfirm,
+    this.accountReferenceLabel,
+    this.accountReferenceValue,
     this.quote,
     this.isLoadingQuote = false,
     this.quoteError,
     this.onRetryQuote,
+    this.onEditPaymentDetails,
+    this.onEditMerchant,
+    this.isSubmitting = false,
   });
 
-  bool get _canSend =>
+  final String flowTitle;
+  final String merchantName;
+  final String accountLabel;
+  final String accountValue;
+  final String? accountReferenceLabel;
+  final String? accountReferenceValue;
+  final String amountLabel;
+  final SafariTapPayoutQuote? quote;
+  final bool isLoadingQuote;
+  final String? quoteError;
+  final VoidCallback? onRetryQuote;
+  final VoidCallback? onEditPaymentDetails;
+  final VoidCallback? onEditMerchant;
+  final VoidCallback onConfirm;
+  final bool isSubmitting;
+
+  bool get _canConfirm =>
       !isSubmitting && !isLoadingQuote && quoteError == null && quote != null;
 
-  String get _fallbackAmount =>
-      '${details.amountToSend.toStringAsFixed(2)} ${details.fromCurrency}';
+  String get _youPay => quote?.youPay ?? amountLabel;
 
-  String get _youSend => quote?.youSend ?? _fallbackAmount;
-
-  String get _artoFees => quote?.artoFees ?? '—';
+  String get _fees => quote?.artoFees ?? '—';
 
   String get _paymentMethodFees => quote?.paymentMethodFees ?? '—';
 
-  String get _youWillPay => quote?.youWillPay ?? _fallbackAmount;
-
-  String get _recipientAmount =>
-      '${details.amountToReceive.toStringAsFixed(2)} ${details.toCurrency}';
+  String get _youWillPay => quote?.youWillPay ?? amountLabel;
 
   @override
   Widget build(BuildContext context) {
     final colors = AppColors.getThemeColors(context);
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primary = Theme.of(context).colorScheme.primary;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -60,7 +68,7 @@ class ReviewDetailsScreen extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Review your detail transfer',
+                  'Review your payment',
                   style: TextStyle(
                     fontSize: 24,
                     fontWeight: FontWeight.bold,
@@ -80,17 +88,17 @@ class ReviewDetailsScreen extends StatelessWidget {
                     children: [
                       _buildDetailsCard(
                         context,
-                        title: 'Transfer details',
-                        onEdit: onEditTransferDetails,
+                        title: 'Payment details',
+                        onEdit: onEditPaymentDetails,
                         children: [
                           _DetailRow(
-                            label: 'You send',
-                            value: _youSend,
+                            label: 'You pay',
+                            value: _youPay,
                             loading: isLoadingQuote,
                           ),
                           _DetailRow(
                             label: 'Fees',
-                            value: isLoadingQuote ? '—' : _artoFees,
+                            value: isLoadingQuote ? '—' : _fees,
                             loading: isLoadingQuote,
                           ),
                           _DetailRow(
@@ -109,30 +117,28 @@ class ReviewDetailsScreen extends StatelessWidget {
                       const SizedBox(height: 24),
                       _buildDetailsCard(
                         context,
-                        title: 'Recipient details',
-                        onEdit: onEditRecipientDetails,
+                        title: 'Merchant details',
+                        onEdit: onEditMerchant,
                         children: [
-                          _buildRecipientTile(
+                          _buildMerchantTile(
                             context,
-                            details.recipientFullName,
-                            details.recipientPhoneNumber,
-                            _recipientAmount,
+                            name: merchantName,
+                            subtitle: flowTitle,
+                            amount: _youWillPay == '—' ? _youPay : _youWillPay,
+                            loading: isLoadingQuote,
                           ),
-                          if (details.verifiedBeneficiaryName
-                              .trim()
-                              .isNotEmpty) ...[
-                            const SizedBox(height: 12),
+                          const SizedBox(height: 12),
+                          _DetailRow(
+                            label: accountLabel,
+                            value: accountValue,
+                          ),
+                          if (accountReferenceLabel != null &&
+                              (accountReferenceValue?.trim().isNotEmpty ??
+                                  false)) ...[
+                            const SizedBox(height: 4),
                             _DetailRow(
-                              label: 'Verified name',
-                              value: details.verifiedBeneficiaryName.trim(),
-                            ),
-                          ],
-                          if (details.recipientBankName?.trim().isNotEmpty ==
-                              true) ...[
-                            const SizedBox(height: 12),
-                            _DetailRow(
-                              label: 'Bank',
-                              value: details.recipientBankName!.trim(),
+                              label: accountReferenceLabel!,
+                              value: accountReferenceValue!.trim(),
                             ),
                           ],
                         ],
@@ -146,21 +152,21 @@ class ReviewDetailsScreen extends StatelessWidget {
         ),
         BottomSafeActionBar(
           child: ElevatedButton(
-            onPressed: _canSend ? onNext : null,
+            onPressed: _canConfirm ? onConfirm : null,
             style: ElevatedButton.styleFrom(
               padding: const EdgeInsets.symmetric(vertical: 16),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),
               ),
               minimumSize: const Size(double.infinity, 50),
-              backgroundColor: Theme.of(context).colorScheme.primary,
+              backgroundColor: primary,
               foregroundColor: isDark ? colors.onPrimary : Colors.white,
               disabledBackgroundColor: colors.textTertiary,
             ),
             child: isSubmitting
                 ? const ShimmerBusyIndicator(onPrimary: true)
                 : Text(
-                    'Send',
+                    'Confirm & Pay',
                     style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
@@ -181,8 +187,10 @@ class ReviewDetailsScreen extends StatelessWidget {
   }) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final colors = AppColors.getThemeColors(context);
+    final primary = Theme.of(context).colorScheme.primary;
+
     return Container(
-      padding: const EdgeInsets.all(16.0),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: isDark
             ? colors.surface
@@ -220,17 +228,8 @@ class ReviewDetailsScreen extends StatelessWidget {
               ),
               TextButton.icon(
                 onPressed: onEdit,
-                icon: Icon(
-                  Icons.edit,
-                  size: 16,
-                  color: Theme.of(context).colorScheme.primary,
-                ),
-                label: Text(
-                  'Edit',
-                  style: TextStyle(
-                    color: Theme.of(context).colorScheme.primary,
-                  ),
-                ),
+                icon: Icon(Icons.edit, size: 16, color: primary),
+                label: Text('Edit', style: TextStyle(color: primary)),
               ),
             ],
           ),
@@ -244,27 +243,23 @@ class ReviewDetailsScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildRecipientTile(
-    BuildContext context,
-    String name,
-    String email,
-    String amount,
-  ) {
+  Widget _buildMerchantTile(
+    BuildContext context, {
+    required String name,
+    required String subtitle,
+    required String amount,
+    required bool loading,
+  }) {
     final colors = AppColors.getThemeColors(context);
+    final primary = Theme.of(context).colorScheme.primary;
+
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8.0),
+      padding: const EdgeInsets.symmetric(vertical: 8),
       child: Row(
         children: [
           CircleAvatar(
-            backgroundColor:
-                Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
-            child: Text(
-              'R',
-              style: TextStyle(
-                color: Theme.of(context).colorScheme.primary,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
+            backgroundColor: primary.withValues(alpha: 0.1),
+            child: Icon(Icons.storefront_outlined, color: primary, size: 20),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -279,19 +274,26 @@ class ReviewDetailsScreen extends StatelessWidget {
                   ),
                 ),
                 Text(
-                  email,
-                  style: TextStyle(color: colors.textSecondary),
+                  subtitle,
+                  style: TextStyle(
+                    color: colors.textSecondary,
+                    fontSize: 13,
+                  ),
                 ),
               ],
             ),
           ),
-          Text(
-            amount,
-            style: TextStyle(
-              fontWeight: FontWeight.bold,
-              color: colors.textPrimary,
+          const SizedBox(width: 8),
+          if (loading)
+            const AppShimmer(child: ShimmerBox(width: 72, height: 14))
+          else
+            Text(
+              amount,
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                color: colors.textPrimary,
+              ),
             ),
-          ),
         ],
       ),
     );
@@ -327,10 +329,7 @@ class _QuoteErrorBanner extends StatelessWidget {
           Expanded(
             child: Text(
               message,
-              style: TextStyle(
-                color: colors.textPrimary,
-                fontSize: 13,
-              ),
+              style: TextStyle(color: colors.textPrimary, fontSize: 13),
             ),
           ),
           if (onRetry != null)
@@ -351,11 +350,6 @@ class _QuoteErrorBanner extends StatelessWidget {
 }
 
 class _DetailRow extends StatelessWidget {
-  final String label;
-  final String value;
-  final bool isBold;
-  final bool loading;
-
   const _DetailRow({
     required this.label,
     required this.value,
@@ -363,11 +357,16 @@ class _DetailRow extends StatelessWidget {
     this.loading = false,
   });
 
+  final String label;
+  final String value;
+  final bool isBold;
+  final bool loading;
+
   @override
   Widget build(BuildContext context) {
     final colors = AppColors.getThemeColors(context);
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8.0),
+      padding: const EdgeInsets.symmetric(vertical: 8),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [

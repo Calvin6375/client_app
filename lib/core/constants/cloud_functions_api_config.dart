@@ -63,6 +63,10 @@ final class CloudFunctionsApiConfig {
   static Uri safariTapValidateBeneficiaryUri() =>
       Uri.parse('$baseSafariTapApiUrl/safari-card/payouts/validate-beneficiary');
 
+  /// Payout fee quote only (`POST …/safari-card/payouts/quote`). Does not create a payout.
+  static Uri safariTapPayoutsQuoteUri() =>
+      Uri.parse('$baseSafariTapApiUrl/safari-card/payouts/quote');
+
   static Uri safariTapPayoutsUri({int? limit}) {
     final base = '$baseSafariTapApiUrl/safari-card/payouts';
     if (limit != null) return Uri.parse('$base?limit=$limit');

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
@@ -36,6 +37,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
   final GlobalKey<State<WalletCard>> _walletCardKey = GlobalKey<State<WalletCard>>();
   final GlobalKey<State<PlaceholderTransactions>> _transactionsKey = GlobalKey<State<PlaceholderTransactions>>();
   bool _accessChecked = false;
+  bool _navVisible = true;
+  Timer? _navRevealTimer;
+
+  static const Duration _navAnimDuration = Duration(milliseconds: 320);
+  static const Duration _navRevealDelay = Duration(milliseconds: 220);
 
   @override
   void initState() {
@@ -46,8 +52,35 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   @override
   void dispose() {
+    _navRevealTimer?.cancel();
     WalletBalanceRefresh.revision.removeListener(_onBalancesRefreshed);
     super.dispose();
+  }
+
+  void _setNavVisible(bool visible) {
+    if (!mounted || _navVisible == visible) return;
+    setState(() => _navVisible = visible);
+  }
+
+  void _scheduleNavReveal() {
+    _navRevealTimer?.cancel();
+    _navRevealTimer = Timer(_navRevealDelay, () => _setNavVisible(true));
+  }
+
+  bool _onScrollNotification(ScrollNotification notification) {
+    // Only react to the dashboard list, not nested horizontal scrolls.
+    if (notification.depth != 0) return false;
+
+    if (notification is ScrollUpdateNotification) {
+      final delta = notification.scrollDelta;
+      if (delta != null && delta.abs() > 0.8) {
+        _navRevealTimer?.cancel();
+        _setNavVisible(false);
+      }
+    } else if (notification is ScrollEndNotification) {
+      _scheduleNavReveal();
+    }
+    return false;
   }
 
   void _onBalancesRefreshed() {
@@ -149,69 +182,72 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 child: const HeaderWidget(),
               ),
               Expanded(
-                child: RefreshIndicator(
-                  onRefresh: _handleRefresh,
-                  color: primary,
-                  child: ListView(
-                    padding: EdgeInsets.fromLTRB(
-                      20,
-                      0,
-                      20,
-                      floatingNavClearance + bottomInset,
+                child: NotificationListener<ScrollNotification>(
+                  onNotification: _onScrollNotification,
+                  child: RefreshIndicator(
+                    onRefresh: _handleRefresh,
+                    color: primary,
+                    child: ListView(
+                      padding: EdgeInsets.fromLTRB(
+                        20,
+                        0,
+                        20,
+                        floatingNavClearance + bottomInset,
+                      ),
+                      children: [
+                        const SizedBox(height: 16),
+                        // Segmented control style - wallet toggle with glassmorphism container
+                        Container(
+                          padding: const EdgeInsets.all(4),
+                          decoration: BoxDecoration(
+                            color: Theme.of(context).brightness == Brightness.dark
+                                ? AppColors.surfaceDark
+                                : Colors.white.withValues(alpha: 0.9),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Theme.of(context).brightness == Brightness.light
+                                ? Border.all(
+                                    color: const Color(0xFFE5E7EB),
+                                    width: 1,
+                                  )
+                                : null,
+                            boxShadow:
+                                Theme.of(context).brightness == Brightness.light
+                                    ? [
+                                        BoxShadow(
+                                          color: Colors.black
+                                              .withValues(alpha: 0.04),
+                                          blurRadius: 8,
+                                          offset: const Offset(0, 2),
+                                        ),
+                                      ]
+                                    : null,
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              _buildPillTab('Fiat Wallet', 0),
+                              const SizedBox(width: 4),
+                              _buildPillTab('Crypto Wallet', 1),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        WalletCard(
+                          key: _walletCardKey,
+                          selectedTab: _selectedTab,
+                        ),
+                        const SizedBox(height: 12),
+                        FinancialServices(
+                          swapInitialCurrency:
+                              _selectedTab == 0 ? 'USD' : 'USDT',
+                        ),
+                        const SizedBox(height: 40),
+                        const RecentTransactionsHeader(),
+                        const SizedBox(height: 16),
+                        PlaceholderTransactions(key: _transactionsKey),
+                        const SizedBox(height: 24),
+                      ],
                     ),
-                    children: [
-                      const SizedBox(height: 16),
-                      // Segmented control style - wallet toggle with glassmorphism container
-                      Container(
-                        padding: const EdgeInsets.all(4),
-                        decoration: BoxDecoration(
-                          color: Theme.of(context).brightness == Brightness.dark
-                              ? AppColors.surfaceDark
-                              : Colors.white.withValues(alpha: 0.9),
-                          borderRadius: BorderRadius.circular(16),
-                          border: Theme.of(context).brightness == Brightness.light
-                              ? Border.all(
-                                  color: const Color(0xFFE5E7EB),
-                                  width: 1,
-                                )
-                              : null,
-                          boxShadow:
-                              Theme.of(context).brightness == Brightness.light
-                                  ? [
-                                      BoxShadow(
-                                        color: Colors.black
-                                            .withValues(alpha: 0.04),
-                                        blurRadius: 8,
-                                        offset: const Offset(0, 2),
-                                      ),
-                                    ]
-                                  : null,
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            _buildPillTab('Fiat Wallet', 0),
-                            const SizedBox(width: 4),
-                            _buildPillTab('Crypto Wallet', 1),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      WalletCard(
-                        key: _walletCardKey,
-                        selectedTab: _selectedTab,
-                      ),
-                      const SizedBox(height: 12),
-                      FinancialServices(
-                        swapInitialCurrency:
-                            _selectedTab == 0 ? 'USD' : 'USDT',
-                      ),
-                      const SizedBox(height: 40),
-                      const RecentTransactionsHeader(),
-                      const SizedBox(height: 16),
-                      PlaceholderTransactions(key: _transactionsKey),
-                      const SizedBox(height: 24),
-                    ],
                   ),
                 ),
               ),
@@ -221,7 +257,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
             left: 0,
             right: 0,
             bottom: 0,
-            child: _buildFloatingBottomNav(context, colors, primary),
+            child: AnimatedSlide(
+              duration: _navAnimDuration,
+              curve: _navVisible ? Curves.easeOutCubic : Curves.easeInCubic,
+              offset: _navVisible ? Offset.zero : const Offset(0, 1.15),
+              child: AnimatedOpacity(
+                duration: _navAnimDuration,
+                curve: Curves.easeOut,
+                opacity: _navVisible ? 1 : 0,
+                child: IgnorePointer(
+                  ignoring: !_navVisible,
+                  child: _buildFloatingBottomNav(context, colors, primary),
+                ),
+              ),
+            ),
           ),
         ],
       ),

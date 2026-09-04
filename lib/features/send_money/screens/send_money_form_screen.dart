@@ -7,6 +7,7 @@ import 'package:pretium/features/auth/widgets/phone_number_field.dart';
 import 'package:pretium/features/safari_tap/models/safari_tap_bank.dart';
 import 'package:pretium/features/safari_tap/services/safari_tap_pay_api_service.dart';
 import 'package:pretium/features/send_money/screens/payment_method_screen.dart';
+import 'package:pretium/features/send_money/widgets/bank_picker_bottom_sheet.dart';
 import 'package:pretium/features/swap/widgets/currency_picker_bottom_sheet.dart';
 import 'package:pretium/models/transaction_details_model.dart';
 import 'package:pretium/repositories/wallet_repository.dart';
@@ -45,7 +46,7 @@ class _SendMoneyFormScreenState extends State<SendMoneyFormScreen> {
   final _accountNumberCtrl = TextEditingController();
   final _walletRepository = WalletRepository();
 
-  PaymentMethod _method = PaymentMethod.mobileMoney;
+  PaymentMethod? _method;
   String _currency = 'KES';
   double _balance = 0;
   bool _loadingBalance = true;
@@ -72,6 +73,7 @@ class _SendMoneyFormScreenState extends State<SendMoneyFormScreen> {
   @override
   void initState() {
     super.initState();
+    // Restore prior choice when returning from review; stay unset on first open.
     _method = widget.initialDetails.paymentMethod;
     _currency = widget.initialDetails.fromCurrency.trim().isNotEmpty
         ? widget.initialDetails.fromCurrency.trim().toUpperCase()
@@ -280,12 +282,32 @@ class _SendMoneyFormScreenState extends State<SendMoneyFormScreen> {
 
     showModalBottomSheet<void>(
       context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
       builder: (context) => CurrencyPickerBottomSheet(
         currencies: currencies,
         selectedCode: _currency,
         onSelected: (currency) {
           // Sheet already pops itself before calling onSelected.
           _selectWallet(currency.code);
+        },
+      ),
+    );
+  }
+
+  Future<void> _showBankPicker({ValueChanged<String>? onPicked}) async {
+    if (_loadingBanks || _banks.isEmpty) return;
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => BankPickerBottomSheet(
+        banks: _banks,
+        selectedCode: _selectedBankCode,
+        onSelected: (bank) {
+          setState(() => _selectedBankCode = bank.code);
+          onPicked?.call(bank.code);
+          _emitUpdate();
         },
       ),
     );
@@ -312,8 +334,10 @@ class _SendMoneyFormScreenState extends State<SendMoneyFormScreen> {
   }
 
   void _selectMethod(PaymentMethod method) {
+    final kenyaOnly =
+        method == PaymentMethod.truePay || method == PaymentMethod.mobileMoney;
     if (_method == method) {
-      if (method == PaymentMethod.truePay && _countryCode != '254') {
+      if (kenyaOnly && _countryCode != '254') {
         setState(() => _countryCode = '254');
         _emitUpdate();
       }
@@ -321,7 +345,8 @@ class _SendMoneyFormScreenState extends State<SendMoneyFormScreen> {
     }
     setState(() {
       _method = method;
-      if (method == PaymentMethod.truePay) _countryCode = '254';
+      // Mobile Money and SafariTap wallet are Kenya (+254) only.
+      if (kenyaOnly) _countryCode = '254';
     });
     if (method == PaymentMethod.bank) _loadBanks();
     _emitUpdate();
@@ -413,12 +438,15 @@ class _SendMoneyFormScreenState extends State<SendMoneyFormScreen> {
   }
 
   bool get _canContinue {
+    final method = _method;
+    if (method == null) return false;
     if (_amount <= 0) return false;
     final nameOk = _fullNameCtrl.text.trim().isNotEmpty;
+    // Local part only — country code (+254) is selected separately.
     final phoneDigits = _phoneCtrl.text.replaceAll(RegExp(r'[^\d]'), '');
-    final phoneOk = phoneDigits.length >= 7;
+    final phoneOk = phoneDigits.length == 9;
 
-    switch (_method) {
+    switch (method) {
       case PaymentMethod.mobileMoney:
       case PaymentMethod.truePay:
         return nameOk && phoneOk;
@@ -471,7 +499,6 @@ class _SendMoneyFormScreenState extends State<SendMoneyFormScreen> {
   Widget build(BuildContext context) {
     final colors = AppColors.getThemeColors(context);
     final primary = Theme.of(context).colorScheme.primary;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Column(
       children: [
@@ -577,112 +604,140 @@ class _SendMoneyFormScreenState extends State<SendMoneyFormScreen> {
                       ),
                   ],
                 ),
-                const SizedBox(height: 24),
-                Text(
-                  _method == PaymentMethod.bank
-                      ? 'Recipient details'
-                      : _method == PaymentMethod.truePay
-                          ? 'SafariTap recipient'
-                          : 'Mobile Money Number',
-                  style: TextStyle(
-                    color: colors.textPrimary,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 10),
-                TextFormField(
-                  controller: _fullNameCtrl,
-                  textCapitalization: TextCapitalization.words,
-                  style: TextStyle(color: colors.textPrimary),
-                  decoration: _fieldDecoration(
-                    context,
-                    hint: 'Full name',
-                    suffixIcon: IconButton(
-                      tooltip: 'Pick from contacts',
-                      onPressed: _pickFromContacts,
-                      icon: Icon(
-                        Icons.contacts_rounded,
-                        color: primary,
-                      ),
+                if (_method != null) ...[
+                  const SizedBox(height: 24),
+                  Text(
+                    _method == PaymentMethod.bank
+                        ? 'Recipient details'
+                        : _method == PaymentMethod.truePay
+                            ? 'SafariTap recipient'
+                            : 'Mobile Money Number',
+                    style: TextStyle(
+                      color: colors.textPrimary,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
-                  validator: (v) {
-                    if (v == null || v.trim().isEmpty) {
-                      return 'Full name is required';
-                    }
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 14),
-                if (_needsPhone) ...[
-                  PhoneNumberField(
-                    phoneController: _phoneCtrl,
-                    initialCountryCode: _countryCode,
-                    // SafariTap wallet + Kenya MM resolve recipients as 254… numbers.
-                    lockCountryCode: _method == PaymentMethod.truePay,
-                    onCountryCodeChanged: (code) {
-                      if (_countryCode == code) return;
-                      setState(() => _countryCode = code);
-                      _emitUpdate();
-                    },
-                    primaryColor: primary,
-                    labelColor: colors.textSecondary,
-                    validator: (value) {
-                      if (value == null || value.trim().isEmpty) {
-                        return 'Phone number is required';
-                      }
-                      if (value.trim().length < 7) {
-                        return 'Enter a valid phone number';
-                      }
-                      return null;
-                    },
-                  ),
-                ] else ...[
-                  DropdownButtonFormField<String>(
-                    initialValue: _selectedBankCode,
-                    items: _banks
-                        .map(
-                          (bank) => DropdownMenuItem<String>(
-                            value: bank.code,
-                            child: Text(bank.name),
-                          ),
-                        )
-                        .toList(),
-                    onChanged: _loadingBanks
-                        ? null
-                        : (value) {
-                            setState(() => _selectedBankCode = value);
-                            _emitUpdate();
-                          },
-                    validator: (value) {
-                      if (value == null || value.isEmpty) {
-                        return 'Select a bank';
-                      }
-                      return null;
-                    },
-                    isExpanded: true,
-                    hint: _loadingBanks
-                        ? const ShimmerBusyIndicator(width: 100, height: 12)
-                        : const Text('Select bank'),
-                    dropdownColor: isDark ? colors.surface : Colors.white,
-                    style: TextStyle(color: colors.textPrimary, fontSize: 16),
-                    decoration: _fieldDecoration(context, hint: 'Select bank'),
-                  ),
-                  const SizedBox(height: 14),
+                  const SizedBox(height: 10),
                   TextFormField(
-                    controller: _accountNumberCtrl,
-                    keyboardType: TextInputType.number,
+                    controller: _fullNameCtrl,
+                    textCapitalization: TextCapitalization.words,
                     style: TextStyle(color: colors.textPrimary),
-                    decoration:
-                        _fieldDecoration(context, hint: 'Account number'),
+                    decoration: _fieldDecoration(
+                      context,
+                      hint: 'Full name',
+                      suffixIcon: IconButton(
+                        tooltip: 'Pick from contacts',
+                        onPressed: _pickFromContacts,
+                        icon: Icon(
+                          Icons.contacts_rounded,
+                          color: primary,
+                        ),
+                      ),
+                    ),
                     validator: (v) {
                       if (v == null || v.trim().isEmpty) {
-                        return 'Account number is required';
+                        return 'Full name is required';
                       }
                       return null;
                     },
                   ),
+                  const SizedBox(height: 14),
+                  if (_needsPhone) ...[
+                    PhoneNumberField(
+                      phoneController: _phoneCtrl,
+                      initialCountryCode: _countryCode,
+                      // Mobile Money + SafariTap wallet resolve recipients as Kenya 254… numbers.
+                      lockCountryCode: _method == PaymentMethod.truePay ||
+                          _method == PaymentMethod.mobileMoney,
+                      onCountryCodeChanged: (code) {
+                        if (_countryCode == code) return;
+                        setState(() => _countryCode = code);
+                        _emitUpdate();
+                      },
+                      primaryColor: primary,
+                      labelColor: colors.textSecondary,
+                      validator: (value) {
+                        final digits =
+                            (value ?? '').replaceAll(RegExp(r'[^\d]'), '');
+                        if (digits.isEmpty) {
+                          return 'Phone number is required';
+                        }
+                        // +254 is already selected — local mobile must be exactly 9 digits.
+                        if (digits.length != 9) {
+                          return 'Enter a 9-digit phone number';
+                        }
+                        return null;
+                      },
+                    ),
+                  ] else ...[
+                    FormField<String>(
+                      initialValue: _selectedBankCode,
+                      validator: (value) {
+                        if (value == null || value.isEmpty) {
+                          return 'Select a bank';
+                        }
+                        return null;
+                      },
+                      builder: (state) {
+                        final selectedName = _selectedBank?.name;
+                        return InkWell(
+                          onTap: _loadingBanks
+                              ? null
+                              : () => _showBankPicker(
+                                    onPicked: state.didChange,
+                                  ),
+                          borderRadius: BorderRadius.circular(12),
+                          child: InputDecorator(
+                            isEmpty: selectedName == null,
+                            decoration: _fieldDecoration(
+                              context,
+                              hint: 'Select bank',
+                            ).copyWith(
+                              errorText: state.errorText,
+                              suffixIcon: _loadingBanks
+                                  ? const Padding(
+                                      padding: EdgeInsets.all(14),
+                                      child: ShimmerBusyIndicator(
+                                        width: 18,
+                                        height: 18,
+                                      ),
+                                    )
+                                  : Icon(
+                                      Icons.keyboard_arrow_down_rounded,
+                                      color: colors.textSecondary,
+                                    ),
+                            ),
+                            child: Text(
+                              selectedName ?? 'Select bank',
+                              style: TextStyle(
+                                color: selectedName == null
+                                    ? colors.textTertiary
+                                    : colors.textPrimary,
+                                fontSize: 16,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 14),
+                    TextFormField(
+                      controller: _accountNumberCtrl,
+                      keyboardType: TextInputType.number,
+                      style: TextStyle(color: colors.textPrimary),
+                      decoration:
+                          _fieldDecoration(context, hint: 'Account number'),
+                      validator: (v) {
+                        if (v == null || v.trim().isEmpty) {
+                          return 'Account number is required';
+                        }
+                        return null;
+                      },
+                    ),
+                  ],
                 ],
               ],
             ),

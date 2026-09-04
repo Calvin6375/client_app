@@ -4,6 +4,7 @@ import 'package:pretium/features/send_money/screens/payment_method_screen.dart';
 import 'package:pretium/features/send_money/screens/review_details_screen.dart';
 import 'package:pretium/models/transaction_details_model.dart';
 import 'package:pretium/core/constants/app_colors.dart';
+import 'package:pretium/features/safari_tap/models/safari_tap_payout_quote.dart';
 import 'package:pretium/features/safari_tap/services/safari_tap_pay_api_service.dart';
 import 'package:pretium/features/safari_tap/services/safari_tap_pay_flow.dart';
 import 'package:pretium/features/safari_tap/utils/payout_error_messages.dart';
@@ -30,13 +31,17 @@ class _SendMoneyPageState extends State<SendMoneyPage> {
   bool _isValidating = false;
   final SafariTapPayApiService _payApi = SafariTapPayApiService();
 
+  SafariTapPayoutQuote? _quote;
+  bool _isLoadingQuote = false;
+  String? _quoteError;
+  int _quoteRequestId = 0;
+
   @override
   void initState() {
     super.initState();
     _transactionDetails = TransactionDetails(
       fromCurrency: 'KES',
       toCurrency: 'KES',
-      paymentMethod: PaymentMethod.mobileMoney,
     );
   }
 
@@ -87,6 +92,8 @@ class _SendMoneyPageState extends State<SendMoneyPage> {
             'name': name,
           },
         };
+      case null:
+        throw StateError('Payment method is required before validation');
     }
   }
 
@@ -135,6 +142,81 @@ class _SendMoneyPageState extends State<SendMoneyPage> {
           },
           'narrative': 'SafariTap wallet transfer',
         };
+      case null:
+        throw StateError('Payment method is required before payout');
+    }
+  }
+
+  /// Quote body uses the same type/amount/currency/recipient as create payout.
+  Map<String, dynamic> _buildQuoteBody() {
+    final amount = _transactionDetails.amountToSend;
+    final phone = normalizeKenyaPhone(_transactionDetails.recipientPhoneNumber);
+
+    switch (_transactionDetails.paymentMethod) {
+      case PaymentMethod.mobileMoney:
+        return {
+          'type': 'MPESA_B2C',
+          'amount': amount,
+          'currency': _transactionDetails.fromCurrency.toUpperCase(),
+          'recipient': {
+            'phoneNumber': phone,
+          },
+        };
+      case PaymentMethod.bank:
+        return {
+          'type': 'BANK',
+          'amount': amount,
+          'currency': _transactionDetails.fromCurrency.toUpperCase(),
+          'recipient': {
+            'bankCode': _transactionDetails.recipientBankCode,
+            'accountNumber': _transactionDetails.recipientAccountNumber?.trim(),
+          },
+        };
+      case PaymentMethod.truePay:
+        return {
+          'type': 'SAFARITAP_WALLET',
+          'amount': amount,
+          'currency': 'KES',
+          'recipient': {
+            'phoneNumber': phone,
+          },
+        };
+      case null:
+        throw StateError('Payment method is required before quote');
+    }
+  }
+
+  Future<void> _loadPayoutQuote() async {
+    final requestId = ++_quoteRequestId;
+    final amount = _transactionDetails.amountToSend;
+    final currency = _transactionDetails.fromCurrency.toUpperCase();
+
+    setState(() {
+      _isLoadingQuote = true;
+      _quoteError = null;
+    });
+
+    try {
+      final quote = await _payApi.quotePayout(_buildQuoteBody());
+      if (!mounted || requestId != _quoteRequestId) return;
+      setState(() {
+        _quote = quote;
+        _isLoadingQuote = false;
+        _quoteError = null;
+      });
+    } catch (e) {
+      if (!mounted || requestId != _quoteRequestId) return;
+      final message = e is SafariTapPayApiException
+          ? safariTapPayoutErrorMessage(e)
+          : 'Unable to load transfer quote. Please try again.';
+      setState(() {
+        _isLoadingQuote = false;
+        _quoteError = message;
+        _quote = SafariTapPayoutQuote.fallback(
+          amount: amount,
+          currency: currency,
+        );
+      });
     }
   }
 
@@ -181,7 +263,15 @@ class _SendMoneyPageState extends State<SendMoneyPage> {
     setState(() => _isValidating = true);
     try {
       final ok = await _validateBeneficiary();
-      if (ok && mounted) setState(() => _step = SendMoneyStep.review);
+      if (ok && mounted) {
+        setState(() {
+          _step = SendMoneyStep.review;
+          _quote = null;
+          _quoteError = null;
+          _isLoadingQuote = true;
+        });
+        await _loadPayoutQuote();
+      }
     } finally {
       if (mounted) setState(() => _isValidating = false);
     }
@@ -243,8 +333,22 @@ class _SendMoneyPageState extends State<SendMoneyPage> {
 
   void _previousStep() {
     if (_step == SendMoneyStep.review) {
-      setState(() => _step = SendMoneyStep.form);
+      _quoteRequestId++;
+      setState(() {
+        _step = SendMoneyStep.form;
+        _isLoadingQuote = false;
+        _quoteError = null;
+      });
     }
+  }
+
+  void _editFromReview() {
+    _quoteRequestId++;
+    setState(() {
+      _step = SendMoneyStep.form;
+      _isLoadingQuote = false;
+      _quoteError = null;
+    });
   }
 
   Widget _buildCurrentStep() {
@@ -260,9 +364,13 @@ class _SendMoneyPageState extends State<SendMoneyPage> {
         return ReviewDetailsScreen(
           onNext: _onReviewConfirm,
           details: _transactionDetails,
-          onEditTransferDetails: () => setState(() => _step = SendMoneyStep.form),
-          onEditRecipientDetails: () => setState(() => _step = SendMoneyStep.form),
+          onEditTransferDetails: _editFromReview,
+          onEditRecipientDetails: _editFromReview,
           isSubmitting: _isSubmittingSendMoney,
+          quote: _quote,
+          isLoadingQuote: _isLoadingQuote,
+          quoteError: _quoteError,
+          onRetryQuote: _isLoadingQuote ? null : _loadPayoutQuote,
         );
     }
   }

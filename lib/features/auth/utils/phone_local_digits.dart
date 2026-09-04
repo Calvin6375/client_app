@@ -45,6 +45,9 @@ String? validatePhoneLocalDigits({
   final digits = raw.replaceAll(RegExp(r'[^\d]'), '');
   if (dialCode == '254') {
     final local = stripKenyaLocalDigits(digits);
+    if (local.length != 9) {
+      return 'Enter a 9-digit phone number';
+    }
     if (!kenyaMobileLocalRegex.hasMatch(local)) {
       return 'Enter a valid 9-digit Kenyan mobile number';
     }
