@@ -81,6 +81,16 @@ class HeaderWidget extends StatelessWidget {
             ],
           ),
         ),
+        IconButton(
+          tooltip: 'Help',
+          icon: Icon(
+            Icons.help_outline,
+            color: colors.textPrimary,
+            size: 26,
+          ),
+          onPressed: () =>
+              Navigator.of(context).pushNamed(RouteNames.contactSupport),
+        ),
         if (userId != null) _NotificationBellButton(userId: userId),
       ],
     );

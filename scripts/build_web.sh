@@ -41,11 +41,10 @@ mkdir -p "$DIST_DIR/web"
 pub_get
 
 echo "==> flutter build web (release, offline-first PWA, tree-shake icons)"
-# --pwa-strategy=offline-first uses Flutter's generated service worker with
-# hashed app-shell caching. Auth API / Cloud Functions / Paystack / Transak /
-# Circle calls are cross-origin and are not service-worker cached.
+# Auth API / Cloud Functions / Paystack / Transak / Circle calls are
+# cross-origin and are not service-worker cached.
+# --pwa-strategy was removed in recent Flutter; default web service worker is used.
 flutter build web --release \
-  --pwa-strategy=offline-first \
   --tree-shake-icons \
   --no-wasm-dry-run \
   --base-href /
