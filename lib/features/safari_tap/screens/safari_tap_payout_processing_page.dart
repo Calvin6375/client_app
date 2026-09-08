@@ -43,6 +43,11 @@ class SafariTapPayoutSummary {
     } else if (accountType == 'PayBill') {
       accountLabel = 'PayBill number';
       accountValue = r['account']?.toString();
+    } else if (accountType == 'Merchant' ||
+        body['type']?.toString() == 'TRUEPAY_MERCHANT' ||
+        r['merchantId'] != null) {
+      accountLabel = 'Merchant ID';
+      accountValue = r['merchantId']?.toString() ?? r['account']?.toString();
     } else if (r['phoneNumber'] != null) {
       accountLabel = body['type']?.toString() == 'SAFARITAP_WALLET'
           ? 'SafariTap phone'
@@ -59,7 +64,9 @@ class SafariTapPayoutSummary {
       currency: body['currency']?.toString() ?? 'KES',
       recipientName: r['name']?.toString().trim().isNotEmpty == true
           ? r['name'].toString()
-          : 'Recipient',
+          : (body['type']?.toString() == 'TRUEPAY_MERCHANT'
+              ? 'TruePay merchant'
+              : 'Recipient'),
       accountLabel: accountLabel,
       accountValue: accountValue,
     );
@@ -108,15 +115,16 @@ class _SafariTapPayoutProcessingPageState extends State<SafariTapPayoutProcessin
 
   bool get _isSuccess => _current.isSuccess;
 
-  /// Send Money / wallet / bank — not Pay Bill / Buy Goods (MPESA_B2B).
+  /// Send Money / wallet / bank — not Pay Bill / Buy Goods / TruePay merchant.
   bool get _isSendMoneyFlow {
+    final label = widget.summary.flowLabel.toLowerCase();
+    if (label.contains('merchant')) return false;
     final type = _current.type.toUpperCase();
     if (type == 'MPESA_B2C' ||
         type == 'SAFARITAP_WALLET' ||
         type == 'BANK') {
       return true;
     }
-    final label = widget.summary.flowLabel.toLowerCase();
     return label.contains('send') || label.contains('wallet');
   }
 

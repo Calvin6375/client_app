@@ -10,12 +10,14 @@ class MerchantValidationPanel extends StatelessWidget {
     this.loading = false,
     this.error,
     this.idleMessage = 'Recipient name will appear here after validation',
+    this.loadingMessage = 'Validating…',
   });
 
   final String? beneficiaryName;
   final bool loading;
   final String? error;
   final String idleMessage;
+  final String loadingMessage;
 
   @override
   Widget build(BuildContext context) {
@@ -58,7 +60,7 @@ class MerchantValidationPanel extends StatelessWidget {
               children: [
                 const ShimmerBusyIndicator(),
                 const SizedBox(width: 12),
-                Text('Validating…', style: TextStyle(color: colors.textSecondary)),
+                Text(loadingMessage, style: TextStyle(color: colors.textSecondary)),
               ],
             )
           else if (error != null && error!.trim().isNotEmpty)

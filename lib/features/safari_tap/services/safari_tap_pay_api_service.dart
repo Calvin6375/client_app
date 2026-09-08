@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 import 'package:pretium/core/constants/cloud_functions_api_config.dart';
 import 'package:pretium/core/http/c2b_http_codec.dart';
 import 'package:pretium/features/safari_tap/models/safari_tap_bank.dart';
+import 'package:pretium/features/safari_tap/models/safari_tap_merchant_resolve.dart';
 import 'package:pretium/features/safari_tap/models/safari_tap_payout.dart';
 import 'package:pretium/features/safari_tap/models/safari_tap_payout_quote.dart';
 import 'package:pretium/utils/logger.dart';
@@ -132,6 +133,26 @@ final class SafariTapPayApiService {
     }
 
     return body;
+  }
+
+  /// Resolve a scanned QR or typed merchant/product payload.
+  Future<SafariTapMerchantResolve> resolveMerchant(String payload) async {
+    Logger.info('SafariTapPayApi POST /safari-card/merchants/resolve');
+    Future<http.Response> send({required bool forceRefresh}) async => _http.post(
+          CloudFunctionsApiConfig.safariTapMerchantsResolveUri(),
+          headers: await _headers(forceRefresh: forceRefresh),
+          body: await _codec.encodeJsonBody(
+            jsonEncode({'payload': payload}),
+          ),
+        );
+    final response = await send(forceRefresh: true);
+    final parsed = await _decodeResponse(response, send: send);
+    final data = parsed['data'];
+    return SafariTapMerchantResolve.fromJson(
+      data is Map
+          ? Map<String, dynamic>.from(data)
+          : Map<String, dynamic>.from(parsed),
+    );
   }
 
   Future<BeneficiaryValidation> validateBeneficiary(

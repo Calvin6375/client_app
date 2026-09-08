@@ -9,7 +9,7 @@ import 'package:pretium/repositories/wallet_repository.dart';
 import 'package:pretium/services/dashboard_session_cache.dart';
 import 'package:pretium/utils/firebase_utils.dart';
 
-enum _PayOption { payBill, buyGoods, pochiLaBiashara }
+enum _PayOption { truePayMerchant, payBill, buyGoods, pochiLaBiashara }
 
 const String _kPayAmountCurrency = 'KES';
 
@@ -25,6 +25,7 @@ class PayPage extends StatefulWidget {
 
 class _PayPageState extends State<PayPage> {
   _PayOption? _selected;
+  final _truePayMerchantKey = GlobalKey<SafariTapTruePayMerchantViewState>();
   final _payBillKey = GlobalKey<SafariTapPayBillViewState>();
   final _buyGoodsKey = GlobalKey<SafariTapBuyGoodsViewState>();
   final _pochiKey = GlobalKey<SafariTapPochiViewState>();
@@ -102,6 +103,8 @@ class _PayPageState extends State<PayPage> {
 
   bool _handleNestedBack() {
     switch (_selected) {
+      case _PayOption.truePayMerchant:
+        return _truePayMerchantKey.currentState?.handleBack() ?? false;
       case _PayOption.payBill:
         return _payBillKey.currentState?.handleBack() ?? false;
       case _PayOption.buyGoods:
@@ -114,6 +117,8 @@ class _PayPageState extends State<PayPage> {
 
   bool get _isReviewStep {
     switch (_selected) {
+      case _PayOption.truePayMerchant:
+        return _truePayMerchantKey.currentState?.isReviewStep ?? false;
       case _PayOption.payBill:
         return _payBillKey.currentState?.isReviewStep ?? false;
       case _PayOption.buyGoods:
@@ -141,6 +146,8 @@ class _PayPageState extends State<PayPage> {
     final scanned = code.trim();
 
     switch (_selected) {
+      case _PayOption.truePayMerchant:
+        _truePayMerchantKey.currentState?.applyScannedCode(scanned);
       case _PayOption.payBill:
         _payBillKey.currentState?.applyScannedCode(scanned);
       case _PayOption.buyGoods:
@@ -148,9 +155,9 @@ class _PayPageState extends State<PayPage> {
       case _PayOption.pochiLaBiashara:
         _pochiKey.currentState?.applyScannedCode(scanned);
       case null:
-        _openOption(_PayOption.buyGoods);
+        _openOption(_PayOption.truePayMerchant);
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          _buyGoodsKey.currentState?.applyScannedCode(scanned);
+          _truePayMerchantKey.currentState?.applyScannedCode(scanned);
         });
     }
   }
@@ -162,6 +169,7 @@ class _PayPageState extends State<PayPage> {
     final primary = Theme.of(context).colorScheme.primary;
 
     final title = switch (_selected) {
+      _PayOption.truePayMerchant => 'TruePay merchant',
       _PayOption.payBill => 'Pay Bill',
       _PayOption.buyGoods => 'Buy Goods',
       _PayOption.pochiLaBiashara => 'Pochi La Biashara',
@@ -199,6 +207,16 @@ class _PayPageState extends State<PayPage> {
         body: _selected == null
             ? _PayHub(onSelect: _openOption)
             : switch (_selected!) {
+                _PayOption.truePayMerchant => SafariTapTruePayMerchantView(
+                    key: _truePayMerchantKey,
+                    kesBalance: _kesBalance,
+                    loadingBalance: _loadingWallets,
+                    payApi: _payApi,
+                    onPaid: () => Navigator.of(context).pop(true),
+                    onFlowStepChanged: () {
+                      if (mounted) setState(() {});
+                    },
+                  ),
                 _PayOption.payBill => SafariTapPayBillView(
                     key: _payBillKey,
                     kesBalance: _kesBalance,
@@ -254,10 +272,17 @@ class _PayHub extends StatelessWidget {
         ),
         const SizedBox(height: 8),
         Text(
-          'Pay bills, buy goods, or send to Pochi from your KES wallet.',
+          'Pay bills, buy goods, TruePay merchants, or Pochi from your KES wallet.',
           style: TextStyle(color: colors.textSecondary, fontSize: 14),
         ),
         const SizedBox(height: 24),
+        _PayOptionCard(
+          icon: Icons.storefront_outlined,
+          title: 'Pay to TruePay merchant',
+          subtitle: 'Enter merchant ID and amount',
+          onTap: () => onSelect(_PayOption.truePayMerchant),
+        ),
+        const SizedBox(height: 12),
         _PayOptionCard(
           icon: Icons.receipt_long_rounded,
           title: 'Pay to Pay Bill',

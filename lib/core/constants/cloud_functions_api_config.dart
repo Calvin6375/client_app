@@ -63,6 +63,10 @@ final class CloudFunctionsApiConfig {
   static Uri safariTapValidateBeneficiaryUri() =>
       Uri.parse('$baseSafariTapApiUrl/safari-card/payouts/validate-beneficiary');
 
+  /// Resolve a TruePay merchant QR / typed ID (`POST …/safari-card/merchants/resolve`).
+  static Uri safariTapMerchantsResolveUri() =>
+      Uri.parse('$baseSafariTapApiUrl/safari-card/merchants/resolve');
+
   /// Payout fee quote only (`POST …/safari-card/payouts/quote`). Does not create a payout.
   static Uri safariTapPayoutsQuoteUri() =>
       Uri.parse('$baseSafariTapApiUrl/safari-card/payouts/quote');
