@@ -156,7 +156,7 @@ class _SafariAiPageState extends State<SafariAiPage> {
                   ),
                   Text(
                     _typing ? 'Reading the map…' : 'Field guide · East Africa',
-                    style: TextStyle(
+                    style: const TextStyle(
                       color: ochre,
                       fontSize: 12,
                       fontWeight: FontWeight.w500,
@@ -391,7 +391,7 @@ class _DestinationCard extends StatelessWidget {
                 const SizedBox(height: 4),
                 Text(
                   destination.region,
-                  style: TextStyle(
+                  style: const TextStyle(
                     color: ochre,
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
@@ -422,7 +422,7 @@ class _DestinationCard extends StatelessWidget {
                 ),
                 if (expanded) ...[
                   const SizedBox(height: 12),
-                  Text(
+                  const Text(
                     'FIELD NOTES',
                     style: TextStyle(
                       fontSize: 10,
