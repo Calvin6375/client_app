@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:pretium/features/safari_ai/screens/safari_ai_page.dart';
 import 'package:pretium/features/send_money/screens/send_money_page.dart';
 import 'package:pretium/features/swap/screens/swap_page.dart';
 import 'package:pretium/core/constants/app_colors.dart';
@@ -68,9 +69,13 @@ class FinancialServices extends StatelessWidget {
             const SizedBox(width: 12),
             _buildServiceButton(
               context,
-              FontAwesomeIcons.ellipsis,
-              "More",
-              () => _showComingSoonDialog(context),
+              FontAwesomeIcons.binoculars,
+              "Safari AI",
+              () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => const SafariAiPage(),
+                ),
+              ),
             ),
           ],
         ),
@@ -147,26 +152,6 @@ class FinancialServices extends StatelessWidget {
           ],
         ),
       ),
-    );
-  }
-
-  void _showComingSoonDialog(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Text("Coming Soon"),
-          content: const Text("This feature is under development."),
-          actions: <Widget>[
-            TextButton(
-              child: const Text("OK"),
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
-            ),
-          ],
-        );
-      },
     );
   }
 }

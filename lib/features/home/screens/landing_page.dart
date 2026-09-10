@@ -72,6 +72,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
     if (notification.depth != 0) return false;
 
     if (notification is ScrollUpdateNotification) {
+      // Pull-to-refresh / top bounce should not hide the dock — that leaves
+      // a blank band where the nav was.
+      if (notification.metrics.pixels <= 0) return false;
       final delta = notification.scrollDelta;
       if (delta != null && delta.abs() > 0.8) {
         _navRevealTimer?.cancel();
@@ -160,8 +163,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final colors = AppColors.getThemeColors(context);
     final primary = Theme.of(context).colorScheme.primary;
     final bottomInset = MediaQuery.of(context).padding.bottom;
-    // Room for the floating dock so list content can scroll clear of it.
-    const floatingNavClearance = 108.0;
+    // Keep just enough space for the floating dock to overlay the last rows.
+    // Extra reserved height was painting as a blank band when the dock hides.
+    final listBottomPadding = _navVisible ? 80.0 : bottomInset + 12.0;
 
     return Scaffold(
       backgroundColor: colors.background,
@@ -187,66 +191,84 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   child: RefreshIndicator(
                     onRefresh: _handleRefresh,
                     color: primary,
-                    child: ListView(
-                      padding: EdgeInsets.fromLTRB(
-                        20,
-                        0,
-                        20,
-                        floatingNavClearance + bottomInset,
-                      ),
-                      children: [
-                        const SizedBox(height: 16),
-                        // Segmented control style - wallet toggle with glassmorphism container
-                        Container(
-                          padding: const EdgeInsets.all(4),
-                          decoration: BoxDecoration(
-                            color: Theme.of(context).brightness == Brightness.dark
-                                ? AppColors.surfaceDark
-                                : Colors.white.withValues(alpha: 0.9),
-                            borderRadius: BorderRadius.circular(16),
-                            border: Theme.of(context).brightness == Brightness.light
-                                ? Border.all(
-                                    color: const Color(0xFFE5E7EB),
-                                    width: 1,
-                                  )
-                                : null,
-                            boxShadow:
-                                Theme.of(context).brightness == Brightness.light
-                                    ? [
-                                        BoxShadow(
-                                          color: Colors.black
-                                              .withValues(alpha: 0.04),
-                                          blurRadius: 8,
-                                          offset: const Offset(0, 2),
-                                        ),
-                                      ]
-                                    : null,
+                    child: LayoutBuilder(
+                      builder: (context, constraints) {
+                        return ListView(
+                          physics: const AlwaysScrollableScrollPhysics(),
+                          padding: EdgeInsets.fromLTRB(
+                            20,
+                            0,
+                            20,
+                            listBottomPadding,
                           ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              _buildPillTab('Fiat Wallet', 0),
-                              const SizedBox(width: 4),
-                              _buildPillTab('Crypto Wallet', 1),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        WalletCard(
-                          key: _walletCardKey,
-                          selectedTab: _selectedTab,
-                        ),
-                        const SizedBox(height: 12),
-                        FinancialServices(
-                          swapInitialCurrency:
-                              _selectedTab == 0 ? 'USD' : 'USDT',
-                        ),
-                        const SizedBox(height: 40),
-                        const RecentTransactionsHeader(),
-                        const SizedBox(height: 16),
-                        PlaceholderTransactions(key: _transactionsKey),
-                        const SizedBox(height: 24),
-                      ],
+                          children: [
+                            ConstrainedBox(
+                              constraints: BoxConstraints(
+                                minHeight: constraints.maxHeight -
+                                    listBottomPadding,
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  const SizedBox(height: 16),
+                                  Container(
+                                    padding: const EdgeInsets.all(4),
+                                    decoration: BoxDecoration(
+                                      color: Theme.of(context).brightness ==
+                                              Brightness.dark
+                                          ? AppColors.surfaceDark
+                                          : Colors.white.withValues(alpha: 0.9),
+                                      borderRadius: BorderRadius.circular(16),
+                                      border: Theme.of(context).brightness ==
+                                              Brightness.light
+                                          ? Border.all(
+                                              color: const Color(0xFFE5E7EB),
+                                              width: 1,
+                                            )
+                                          : null,
+                                      boxShadow: Theme.of(context).brightness ==
+                                              Brightness.light
+                                          ? [
+                                              BoxShadow(
+                                                color: Colors.black
+                                                    .withValues(alpha: 0.04),
+                                                blurRadius: 8,
+                                                offset: const Offset(0, 2),
+                                              ),
+                                            ]
+                                          : null,
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        _buildPillTab('Fiat Wallet', 0),
+                                        const SizedBox(width: 4),
+                                        _buildPillTab('Crypto Wallet', 1),
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  WalletCard(
+                                    key: _walletCardKey,
+                                    selectedTab: _selectedTab,
+                                  ),
+                                  const SizedBox(height: 12),
+                                  FinancialServices(
+                                    swapInitialCurrency:
+                                        _selectedTab == 0 ? 'USD' : 'USDT',
+                                  ),
+                                  const SizedBox(height: 24),
+                                  const RecentTransactionsHeader(),
+                                  const SizedBox(height: 8),
+                                  PlaceholderTransactions(
+                                    key: _transactionsKey,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        );
+                      },
                     ),
                   ),
                 ),

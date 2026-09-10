@@ -32,13 +32,16 @@ class _WalletCardState extends State<WalletCard> {
   final Map<String, Wallet> _fiatWallets = {};
   final List<String> _availableFiatCurrencies = [];
   int _currentFiatIndex = 0;
-  final PageController _fiatPageController = PageController();
+  static const double _carouselViewportFraction = 0.88;
+  final PageController _fiatPageController =
+      PageController(viewportFraction: _carouselViewportFraction);
 
   // Multiple crypto wallets (USDT legacy + Circle USDC)
   final Map<String, Wallet> _cryptoWallets = {};
   final List<String> _availableCryptoCurrencies = ['USDT', 'USDC'];
   int _currentCryptoIndex = 0;
-  final PageController _cryptoPageController = PageController();
+  final PageController _cryptoPageController =
+      PageController(viewportFraction: _carouselViewportFraction);
 
   // Cache for balances to avoid unnecessary backend calls
   Wallet? _cachedFiatWallet;
@@ -78,6 +81,34 @@ class _WalletCardState extends State<WalletCard> {
   double _cardHeight(BuildContext context) {
     final cardWidth = MediaQuery.of(context).size.width - 40;
     return cardWidth / _cardAspectRatio;
+  }
+
+  Widget _buildWalletPager({
+    required PageController controller,
+    required int itemCount,
+    required int currentIndex,
+    required ValueChanged<int> onPageChanged,
+    required Widget Function(BuildContext context, int index) itemBuilder,
+  }) {
+    return SizedBox(
+      height: _cardHeight(context),
+      child: PageView.builder(
+        controller: controller,
+        clipBehavior: Clip.none,
+        padEnds: true,
+        onPageChanged: onPageChanged,
+        itemCount: itemCount,
+        itemBuilder: (context, index) {
+          return _CarouselPage(
+            controller: controller,
+            index: index,
+            fallbackPage: currentIndex.toDouble(),
+            viewportFraction: _carouselViewportFraction,
+            child: itemBuilder(context, index),
+          );
+        },
+      ),
+    );
   }
 
   Widget _buildActionButtons(
@@ -131,6 +162,7 @@ class _WalletCardState extends State<WalletCard> {
         if (_cryptoPageController.hasClients && _availableCryptoCurrencies.length > 1) {
           _cryptoPageController.jumpToPage(_currentCryptoIndex.clamp(0, _availableCryptoCurrencies.length - 1));
         }
+        setState(() {});
       });
       _refreshBalance(silent: true, forceRefresh: true);
     } else {
@@ -372,56 +404,52 @@ class _WalletCardState extends State<WalletCard> {
       return Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          SizedBox(
-            height: _cardHeight(context),
-            child: PageView.builder(
-              controller: _fiatPageController,
-              onPageChanged: (index) {
-                setState(() {
-                  _currentFiatIndex = index;
-                  if (index < _availableFiatCurrencies.length) {
-                    _fiatWallet = _fiatWallets[_availableFiatCurrencies[index]];
+          _buildWalletPager(
+            controller: _fiatPageController,
+            itemCount: _availableFiatCurrencies.length,
+            currentIndex: _currentFiatIndex,
+            onPageChanged: (index) {
+              setState(() {
+                _currentFiatIndex = index;
+                if (index < _availableFiatCurrencies.length) {
+                  _fiatWallet = _fiatWallets[_availableFiatCurrencies[index]];
+                }
+              });
+            },
+            itemBuilder: (context, index) {
+              final currency = _availableFiatCurrencies[index];
+              final wallet = _fiatWallets[currency] ??
+                  Wallet(currencyCode: currency, balance: 0.0);
+
+              String? secondaryCurrency;
+              double? secondaryBalance;
+
+              if (currency == 'USD' && _fiatWallets.containsKey('KES')) {
+                secondaryCurrency = 'KES';
+                secondaryBalance = _fiatWallets['KES']!.balance;
+              } else {
+                for (final otherCurrency in _availableFiatCurrencies) {
+                  if (otherCurrency != currency &&
+                      _fiatWallets.containsKey(otherCurrency)) {
+                    secondaryCurrency = otherCurrency;
+                    secondaryBalance = _fiatWallets[otherCurrency]?.balance;
+                    break;
                   }
-                });
-              },
-              itemCount: _availableFiatCurrencies.length,
-              itemBuilder: (context, index) {
-            final currency = _availableFiatCurrencies[index];
-            final wallet = _fiatWallets[currency] ?? Wallet(currencyCode: currency, balance: 0.0);
-            
-            // Find secondary currency to display
-            // Priority: 1) KES if USD is primary, 2) Next currency in list, 3) First other currency
-            String? secondaryCurrency;
-            double? secondaryBalance;
-            
-            if (currency == 'USD' && _fiatWallets.containsKey('KES')) {
-              // Show KES next to USD (most common pair)
-              secondaryCurrency = 'KES';
-              secondaryBalance = _fiatWallets['KES']!.balance;
-            } else {
-              // Find the next available currency that's not the current one
-              for (final otherCurrency in _availableFiatCurrencies) {
-                if (otherCurrency != currency && _fiatWallets.containsKey(otherCurrency)) {
-                  secondaryCurrency = otherCurrency;
-                  secondaryBalance = _fiatWallets[otherCurrency]?.balance;
-                  break;
                 }
               }
-            }
-            
-            return WalletCardWidget(
-              title: "Fiat Wallet",
-              currency: wallet.currencyCode,
-              balance: wallet.balance,
-              secondaryCurrency: secondaryCurrency,
-              secondaryBalance: secondaryBalance,
-              updatedAt: _lastRefreshedAt,
-              loading: _loading && index == _currentFiatIndex,
-              error: _fiatError,
-              backgroundColor: primary,
-            );
-          },
-            ),
+
+              return WalletCardWidget(
+                title: "Fiat Wallet",
+                currency: wallet.currencyCode,
+                balance: wallet.balance,
+                secondaryCurrency: secondaryCurrency,
+                secondaryBalance: secondaryBalance,
+                updatedAt: _lastRefreshedAt,
+                loading: _loading && index == _currentFiatIndex,
+                error: _fiatError,
+                backgroundColor: primary,
+              );
+            },
           ),
           const SizedBox(height: 12),
           _buildActionButtons(
@@ -484,41 +512,40 @@ class _WalletCardState extends State<WalletCard> {
       return Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          SizedBox(
-            height: _cardHeight(context),
-            child: PageView.builder(
-              controller: _cryptoPageController,
-              onPageChanged: (index) {
-                setState(() => _currentCryptoIndex = index);
-              },
-              itemCount: _availableCryptoCurrencies.length,
-              itemBuilder: (context, index) {
-                final currency = _availableCryptoCurrencies[index];
-                final wallet = _cryptoWallets[currency] ?? Wallet(currencyCode: currency, balance: 0.0);
+          _buildWalletPager(
+            controller: _cryptoPageController,
+            itemCount: _availableCryptoCurrencies.length,
+            currentIndex: _currentCryptoIndex,
+            onPageChanged: (index) {
+              setState(() => _currentCryptoIndex = index);
+            },
+            itemBuilder: (context, index) {
+              final currency = _availableCryptoCurrencies[index];
+              final wallet = _cryptoWallets[currency] ??
+                  Wallet(currencyCode: currency, balance: 0.0);
 
-                String? secondaryCurrency;
-                double? secondaryBalance;
-                if (currency == 'USDT' && _cryptoWallets.containsKey('USDC')) {
-                  secondaryCurrency = 'USDC';
-                  secondaryBalance = _cryptoWallets['USDC']!.balance;
-                } else if (currency == 'USDC' && _cryptoWallets.containsKey('USDT')) {
-                  secondaryCurrency = 'USDT';
-                  secondaryBalance = _cryptoWallets['USDT']!.balance;
-                }
+              String? secondaryCurrency;
+              double? secondaryBalance;
+              if (currency == 'USDT' && _cryptoWallets.containsKey('USDC')) {
+                secondaryCurrency = 'USDC';
+                secondaryBalance = _cryptoWallets['USDC']!.balance;
+              } else if (currency == 'USDC' && _cryptoWallets.containsKey('USDT')) {
+                secondaryCurrency = 'USDT';
+                secondaryBalance = _cryptoWallets['USDT']!.balance;
+              }
 
-                return WalletCardWidget(
-                  title: "Crypto Wallet",
-                  currency: wallet.currencyCode,
-                  balance: wallet.balance,
-                  secondaryCurrency: secondaryCurrency,
-                  secondaryBalance: secondaryBalance,
-                  updatedAt: _lastRefreshedAt,
-                  loading: _loading && index == _currentCryptoIndex,
-                  error: _cryptoError,
-                  backgroundColor: primary,
-                );
-              },
-            ),
+              return WalletCardWidget(
+                title: "Crypto Wallet",
+                currency: wallet.currencyCode,
+                balance: wallet.balance,
+                secondaryCurrency: secondaryCurrency,
+                secondaryBalance: secondaryBalance,
+                updatedAt: _lastRefreshedAt,
+                loading: _loading && index == _currentCryptoIndex,
+                error: _cryptoError,
+                backgroundColor: primary,
+              );
+            },
           ),
           const SizedBox(height: 12),
           _buildActionButtons(
@@ -601,6 +628,58 @@ class _WalletCardState extends State<WalletCard> {
 }
 
 /// Reusable wallet card widget — FlowPay credit-card layout with app colors
+class _CarouselPage extends StatelessWidget {
+  const _CarouselPage({
+    required this.controller,
+    required this.index,
+    required this.fallbackPage,
+    required this.viewportFraction,
+    required this.child,
+  });
+
+  final PageController controller;
+  final int index;
+  final double fallbackPage;
+  final double viewportFraction;
+  final Widget child;
+
+  double get _page {
+    if (controller.hasClients && controller.position.hasContentDimensions) {
+      return controller.page ?? fallbackPage;
+    }
+    return fallbackPage;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: controller,
+      builder: (context, _) {
+        final page = _page;
+        final delta = page - index;
+        final distance = delta.abs().clamp(0.0, 1.0);
+        final zoomOut = Curves.easeOutCubic.transform(distance);
+        // Focused page scales up to the original card size; neighbors ease down.
+        final scale = (1 / viewportFraction) * (1.0 - 0.16 * zoomOut);
+        final slide = 14.0 * zoomOut;
+        final dx = delta == 0 ? 0.0 : -delta.sign * slide;
+
+        return Transform.translate(
+          offset: Offset(dx, 0),
+          child: Transform.scale(
+            scale: scale,
+            alignment: Alignment.center,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              child: child,
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
 class WalletCardWidget extends StatefulWidget {
   final String title;
   final String currency;
@@ -666,16 +745,21 @@ class _WalletCardWidgetState extends State<WalletCardWidget> {
   @override
   Widget build(BuildContext context) {
     final colors = AppColors.getThemeColors(context);
-    final size = MediaQuery.of(context).size;
-    final cardWidth = size.width - 40;
+    final fallbackWidth = MediaQuery.of(context).size.width - 40;
     const cardAspectRatio = 1.586;
-    final cardHeight = cardWidth / cardAspectRatio;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    return Center(
-      child: Container(
-        width: cardWidth,
-        height: cardHeight,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final cardWidth = fallbackWidth;
+        final cardHeight = cardWidth / cardAspectRatio;
+
+        return Center(
+          child: FittedBox(
+            fit: BoxFit.contain,
+            child: Container(
+              width: cardWidth,
+              height: cardHeight,
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(24),
           boxShadow: isDark
@@ -866,7 +950,10 @@ class _WalletCardWidgetState extends State<WalletCardWidget> {
             ),
           ),
         ),
-      ),
+            ),
+          ),
+        );
+      },
     );
   }
 }
