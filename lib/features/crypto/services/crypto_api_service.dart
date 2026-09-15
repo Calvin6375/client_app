@@ -6,6 +6,7 @@ import 'package:pretium/core/constants/cloud_functions_api_config.dart';
 import 'package:pretium/core/http/c2b_http_codec.dart';
 import 'package:pretium/features/crypto/models/crypto_transaction.dart';
 import 'package:pretium/features/crypto/models/crypto_wallet_info.dart';
+import 'package:pretium/features/crypto/models/deposit_watch_result.dart';
 import 'package:pretium/services/auth_claims_service.dart';
 import 'package:pretium/utils/logger.dart';
 
@@ -18,7 +19,7 @@ class CryptoApiException implements Exception {
   String toString() => 'CryptoApiException($statusCode): $message';
 }
 
-/// HTTP client for Circle USDC endpoints (`cryptoApi` Cloud Function).
+/// HTTP client for `cryptoApi` Cloud Function (USDC ledger + Turnkey deposit watch).
 final class CryptoApiService {
   CryptoApiService({http.Client? httpClient, AuthClaimsService? authClaims})
       : _http = httpClient ?? http.Client(),
@@ -76,6 +77,7 @@ final class CryptoApiService {
     return body;
   }
 
+  /// Circle wallet path — do **not** use for USDC top-up (can still return Circle).
   Future<CryptoWalletInfo> getWallet() async {
     Logger.info('CryptoApiService GET /crypto/wallet');
     final response = await _http.get(
@@ -86,6 +88,26 @@ final class CryptoApiService {
     return CryptoWalletInfo.fromJson(
       Map<String, dynamic>.from(body['data'] as Map),
     );
+  }
+
+  /// Starts (or resumes) backend deposit monitoring. Same address is reused.
+  /// Auth uid is taken from the Firebase token — do not send `userId`.
+  Future<DepositWatchResult> startUsdcDepositWatch() async {
+    Logger.info('CryptoApiService POST /crypto/deposit/watch');
+    final payload = jsonEncode({
+      'asset': 'USDC',
+      'network': 'avalanche-fuji',
+    });
+    final response = await _http.post(
+      CloudFunctionsApiConfig.cryptoDepositWatchUri(),
+      headers: await _headers(),
+      body: await _codec.encodeJsonBody(payload),
+    );
+    final body = await _decodeResponse(response);
+    final payloadMap = body['data'] is Map
+        ? Map<String, dynamic>.from(body['data'] as Map)
+        : body;
+    return DepositWatchResult.fromJson(payloadMap);
   }
 
   Future<double> getBalance() async {

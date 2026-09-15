@@ -3,8 +3,8 @@
 // African currencies → Paystack; USD, GBP, EUR, and other non-African → Transak.
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:pretium/features/crypto/screens/crypto_deposit_page.dart';
 import 'package:pretium/repositories/wallet_repository.dart';
 import 'package:pretium/repositories/user_repository.dart';
 import 'package:pretium/services/payment_service.dart';
@@ -19,7 +19,6 @@ import 'package:pretium/features/topup/models/topup_quote.dart';
 import 'package:pretium/features/topup/screens/deposit_review_screen.dart';
 import 'package:pretium/features/topup/screens/payment_checkout_webview_page.dart';
 import 'package:pretium/features/topup/services/topup_quote_api_service.dart';
-import 'package:pretium/widgets/currency_logo.dart';
 import 'package:pretium/widgets/app_shimmer.dart';
 import 'package:pretium/widgets/bottom_safe_action_bar.dart';
 
@@ -143,6 +142,22 @@ class _TopUpPageState extends State<TopUpPage> {
             : (international.isNotEmpty ? international.first : 'USD');
       }
     });
+    if (method == _TopUpPaymentMethod.cryptoDeposit) {
+      _openCryptoDeposit();
+    }
+  }
+
+  Future<void> _openCryptoDeposit() async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => CryptoDepositPage(
+          initialAsset: _selectedCurrency == 'USDC' ? 'USDC' : 'USDT',
+        ),
+      ),
+    );
+    if (!mounted) return;
+    await WalletBalanceRefresh.afterSuccessfulTransaction();
+    await _loadWalletBalance(silent: true);
   }
 
   @override
@@ -560,11 +575,7 @@ class _TopUpPageState extends State<TopUpPage> {
           _goToReview();
         }
       case _TopUpPaymentMethod.cryptoDeposit:
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Copy a crypto address below and send your deposit.'),
-          ),
-        );
+        _openCryptoDeposit();
     }
   }
 
@@ -662,8 +673,9 @@ class _TopUpPageState extends State<TopUpPage> {
     final availableLabel = _hideBalance
         ? 'Available: •••• $_selectedCurrency'
         : 'Available: ${_availableBalanceForSelected.toStringAsFixed(2)} $_selectedCurrency';
-    final nextEnabled = _selectedMethod != _TopUpPaymentMethod.cryptoDeposit;
-    final nextLabel = nextEnabled ? 'Next' : 'Copy address below';
+    final nextLabel = _selectedMethod == _TopUpPaymentMethod.cryptoDeposit
+        ? 'Continue'
+        : 'Next';
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -754,10 +766,6 @@ class _TopUpPageState extends State<TopUpPage> {
                   onTap: () =>
                       _selectPaymentMethod(_TopUpPaymentMethod.cryptoDeposit),
                 ),
-                if (_selectedMethod == _TopUpPaymentMethod.cryptoDeposit) ...[
-                  const SizedBox(height: 16),
-                  const _CryptoDepositDetails(),
-                ],
               ],
             ),
           ),
@@ -1129,130 +1137,6 @@ class _PaymentMethodTile extends StatelessWidget {
             ],
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _CryptoDepositDetails extends StatelessWidget {
-  const _CryptoDepositDetails();
-
-  static const Map<String, Map<String, String>> _cryptoAddresses = {
-    'USDT': {
-      'address': 'TGkPQsmAhRVh51bEj961EUavP3BjZqEnBb',
-      'network': 'Tron Network',
-    },
-    'USDC': {
-      'address': 'FPJoay8fh2FpBBUM2pSmSdTrqpKepZPagGZfU6pwF2qo',
-      'network': 'Solana Network',
-    },
-    'BNB': {
-      'address': '0xe421b816e5664a4ecd514956db132762b4e82e8d',
-      'network': 'BNB Smart Chain',
-      'icon': '🟡',
-    },
-  };
-
-  void _copy(BuildContext context, String address, String currency) {
-    Clipboard.setData(ClipboardData(text: address));
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('$currency address copied to clipboard'),
-        backgroundColor: Colors.green,
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = AppColors.getThemeColors(context);
-    final primary = Theme.of(context).colorScheme.primary;
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: primary.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: primary.withValues(alpha: 0.25)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Deposit from a crypto wallet below:',
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-              color: colors.textPrimary,
-            ),
-          ),
-          const SizedBox(height: 12),
-          ..._cryptoAddresses.entries.map((entry) {
-            final currency = entry.key;
-            final data = entry.value;
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      CurrencyLogo(
-                        code: currency,
-                        size: 20,
-                        fallbackEmoji: data['icon'],
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        currency,
-                        style: TextStyle(
-                          fontWeight: FontWeight.w600,
-                          color: colors.textPrimary,
-                        ),
-                      ),
-                      const Spacer(),
-                      Text(
-                        data['network']!,
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: colors.textSecondary,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: colors.background,
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: colors.surfaceVariant),
-                    ),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            data['address']!,
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontFamily: 'monospace',
-                              color: colors.textPrimary,
-                            ),
-                          ),
-                        ),
-                        InkWell(
-                          onTap: () => _copy(context, data['address']!, currency),
-                          child: Icon(Icons.copy, size: 18, color: primary),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            );
-          }),
-        ],
       ),
     );
   }

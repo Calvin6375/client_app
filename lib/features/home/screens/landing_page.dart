@@ -6,6 +6,7 @@ import 'package:pretium/features/pay/screens/pay_page.dart';
 import 'package:pretium/core/constants/app_colors.dart';
 import 'package:pretium/app/route_names.dart';
 import 'package:pretium/services/app_access_guard.dart';
+import 'package:pretium/services/home_wallet_focus.dart';
 import 'package:pretium/services/wallet_balance_refresh.dart';
 import 'package:pretium/widgets/app_shimmer.dart';
 import '/widgets/header_widget.dart';
@@ -34,6 +35,7 @@ class DashboardScreen extends StatefulWidget {
 class _DashboardScreenState extends State<DashboardScreen> {
   int _selectedIndex = 0;
   int _selectedTab = 0; // For pill-shaped tabs: 0 = Fiat, 1 = Crypto
+  String? _focusCryptoCurrency;
   final GlobalKey<State<WalletCard>> _walletCardKey = GlobalKey<State<WalletCard>>();
   final GlobalKey<State<PlaceholderTransactions>> _transactionsKey = GlobalKey<State<PlaceholderTransactions>>();
   bool _accessChecked = false;
@@ -103,7 +105,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
       await guard.enforceDeniedAccess(context, access);
       return;
     }
-    setState(() => _accessChecked = true);
+    setState(() {
+      _accessChecked = true;
+      _applyPendingHomeFocus();
+    });
+  }
+
+  void _applyPendingHomeFocus() {
+    final focus = HomeWalletFocus.take();
+    if (focus == null) return;
+    _selectedTab = focus.walletTab;
+    _focusCryptoCurrency = focus.cryptoCurrency;
   }
 
   Future<void> _silentRefreshBalance() async {
@@ -251,6 +263,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                   WalletCard(
                                     key: _walletCardKey,
                                     selectedTab: _selectedTab,
+                                    focusCryptoCurrency: _focusCryptoCurrency,
                                   ),
                                   const SizedBox(height: 12),
                                   FinancialServices(

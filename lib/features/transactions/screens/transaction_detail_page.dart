@@ -298,7 +298,11 @@ class _TransactionDetailPageState extends State<TransactionDetailPage> {
     final normalized = label.trim().toLowerCase();
     return normalized == 'reference' ||
         normalized == 'funding order id' ||
-        normalized == 'mpesa reference';
+        normalized == 'mpesa reference' ||
+        normalized == 'network' ||
+        normalized == 'tx hash' ||
+        normalized == 'txhash' ||
+        normalized == 'transaction hash';
   }
 
   /// Builds labeled rows for every meaningful field from the API response.

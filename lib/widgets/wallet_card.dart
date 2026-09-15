@@ -14,7 +14,12 @@ import 'package:pretium/widgets/app_shimmer.dart';
 
 class WalletCard extends StatefulWidget {
   final int selectedTab;
-  const WalletCard({super.key, this.selectedTab = 0});
+  final String? focusCryptoCurrency;
+  const WalletCard({
+    super.key,
+    this.selectedTab = 0,
+    this.focusCryptoCurrency,
+  });
 
   @override
   State<WalletCard> createState() => _WalletCardState();
@@ -40,6 +45,7 @@ class _WalletCardState extends State<WalletCard> {
   final Map<String, Wallet> _cryptoWallets = {};
   final List<String> _availableCryptoCurrencies = ['USDT', 'USDC'];
   int _currentCryptoIndex = 0;
+  String? _pendingCryptoFocus;
   final PageController _cryptoPageController =
       PageController(viewportFraction: _carouselViewportFraction);
 
@@ -147,6 +153,7 @@ class _WalletCardState extends State<WalletCard> {
   @override
   void initState() {
     super.initState();
+    _pendingCryptoFocus = widget.focusCryptoCurrency;
     WalletBalanceRefresh.revision.addListener(_onExternalBalanceRefresh);
     if (!isFirebaseInitialized()) return;
     // Stale-while-revalidate: paint last known balance immediately, then
@@ -159,6 +166,7 @@ class _WalletCardState extends State<WalletCard> {
         if (_fiatPageController.hasClients && _availableFiatCurrencies.length > 1) {
           _fiatPageController.jumpToPage(_currentFiatIndex.clamp(0, _availableFiatCurrencies.length - 1));
         }
+        _applyPendingCryptoFocus();
         if (_cryptoPageController.hasClients && _availableCryptoCurrencies.length > 1) {
           _cryptoPageController.jumpToPage(_currentCryptoIndex.clamp(0, _availableCryptoCurrencies.length - 1));
         }
@@ -208,6 +216,38 @@ class _WalletCardState extends State<WalletCard> {
     _loading = false;
     _fiatError = null;
     _cryptoError = null;
+    _applyPendingCryptoFocus();
+  }
+
+  @override
+  void didUpdateWidget(WalletCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.focusCryptoCurrency != null &&
+        widget.focusCryptoCurrency != oldWidget.focusCryptoCurrency) {
+      _pendingCryptoFocus = widget.focusCryptoCurrency;
+      _applyPendingCryptoFocus();
+    }
+  }
+
+  void showCryptoCurrency(String? code) {
+    if (code == null || code.trim().isEmpty) return;
+    _pendingCryptoFocus = code;
+    _applyPendingCryptoFocus();
+    if (mounted) setState(() {});
+  }
+
+  void _applyPendingCryptoFocus() {
+    final code = _pendingCryptoFocus?.trim().toUpperCase();
+    if (code == null || code.isEmpty) return;
+    final index = _availableCryptoCurrencies.indexWhere(
+      (c) => c.toUpperCase() == code,
+    );
+    if (index < 0) return;
+    _pendingCryptoFocus = null;
+    _currentCryptoIndex = index;
+    if (_cryptoPageController.hasClients) {
+      _cryptoPageController.jumpToPage(index);
+    }
   }
   
   @override
@@ -344,6 +384,7 @@ class _WalletCardState extends State<WalletCard> {
         _lastRefreshedAt = now;
         _fiatError = null;
         _cryptoError = null;
+        _applyPendingCryptoFocus();
       });
     } catch (e) {
       // This should rarely happen now since fetchWalletBalance returns default wallet

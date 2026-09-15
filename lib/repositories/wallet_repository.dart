@@ -8,7 +8,8 @@ import 'package:pretium/utils/logger.dart';
 ///
 /// Balances come from `GET /api/accounts` (Firestore + USDC ledger on the
 /// server). The client must not read or write RTDB `wallet/{uid}/…` for the
-/// wallet list. Circle deposit address / QR still uses [CryptoApiService.getWallet].
+/// wallet list. USDC top-up uses `POST /crypto/deposit/watch`, not Circle
+/// `GET /crypto/wallet`.
 ///
 /// [uid] arguments on methods are ignored for the network call (token subject);
 /// they remain for call-site compatibility and optional mismatch checks.

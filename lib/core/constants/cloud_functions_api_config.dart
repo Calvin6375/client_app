@@ -54,6 +54,11 @@ final class CloudFunctionsApiConfig {
   static Uri cryptoTransactionsUri({int limit = 50}) =>
       Uri.parse('$baseCryptoApiUrl/crypto/transactions?limit=$limit');
 
+  /// Turnkey USDC deposit watch (`POST …/crypto/deposit/watch`).
+  /// Do not use [cryptoWalletUri] for USDC top-up — that can still return Circle.
+  static Uri cryptoDepositWatchUri() =>
+      Uri.parse('$baseCryptoApiUrl/crypto/deposit/watch');
+
   /// SafariTap pay / send HTTP API (`safariCardApi` Cloud Function).
   static String get baseSafariTapApiUrl {
     final projectId = DefaultFirebaseOptions.currentPlatform.projectId;
