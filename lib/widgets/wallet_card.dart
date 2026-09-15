@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:pretium/features/crypto/screens/usdc_receive_screen.dart';
+import 'package:pretium/features/crypto/services/crypto_api_service.dart';
 import 'package:pretium/features/pay/screens/pay_page.dart';
 import 'package:pretium/features/topup/models/topup_deposit_country.dart';
 import 'package:pretium/features/topup/screens/topup_page.dart';
@@ -622,13 +623,61 @@ class _WalletCardState extends State<WalletCard> {
 
   Future<void> _openCryptoTopUp(String currency) async {
     if (currency == 'USDC') {
-      await Navigator.of(context).push<void>(
-        MaterialPageRoute<void>(builder: (_) => const UsdcReceiveScreen()),
-      );
-      if (mounted) await _refreshBalance(forceRefresh: true);
+      await _openUsdcTopUp();
       return;
     }
     await _openTopUpFlow();
+  }
+
+  Future<void> _openUsdcTopUp() async {
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        return const PopScope(
+          canPop: false,
+          child: Center(
+            child: Card(
+              child: Padding(
+                padding: EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    CircularProgressIndicator(),
+                    SizedBox(height: 16),
+                    Text('Preparing USDC address…'),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+
+    try {
+      final status = await CryptoApiService().ensureProductionWallet();
+      if (!mounted) return;
+      Navigator.of(context, rootNavigator: true).pop();
+      await Navigator.of(context).push<void>(
+        MaterialPageRoute<void>(
+          builder: (_) => UsdcReceiveScreen(walletStatus: status),
+        ),
+      );
+      if (mounted) await _refreshBalance(forceRefresh: true);
+    } on CryptoApiException catch (e) {
+      if (!mounted) return;
+      Navigator.of(context, rootNavigator: true).pop();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.message ?? 'Could not prepare USDC wallet')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      Navigator.of(context, rootNavigator: true).pop();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString())),
+      );
+    }
   }
 
   Future<void> _openTopUpFlow() async {

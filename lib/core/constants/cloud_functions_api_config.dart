@@ -49,6 +49,14 @@ final class CloudFunctionsApiConfig {
 
   static Uri cryptoWalletUri() => Uri.parse('$baseCryptoApiUrl/crypto/wallet');
 
+  /// Read-only wallet probe. Never creates Fuji or mainnet wallets.
+  static Uri cryptoWalletStatusUri() =>
+      Uri.parse('$baseCryptoApiUrl/crypto/wallet/status');
+
+  /// Creates the Avalanche mainnet USDC deposit address when status says to.
+  static Uri cryptoWalletProductionUri() =>
+      Uri.parse('$baseCryptoApiUrl/crypto/wallet/production');
+
   static Uri cryptoBalanceUri() => Uri.parse('$baseCryptoApiUrl/crypto/balance');
 
   static Uri cryptoTransactionsUri({int limit = 50}) =>

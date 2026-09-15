@@ -35,7 +35,7 @@ class CryptoDepositNetwork {
     ),
     CryptoDepositNetwork(
       asset: 'USDC',
-      networkLabel: 'Avalanche Fuji',
+      networkLabel: 'Avalanche C-Chain',
       usesUsdcWatch: true,
     ),
     CryptoDepositNetwork(
@@ -103,7 +103,7 @@ class _CryptoDepositPageState extends State<CryptoDepositPage> {
       _watchError = null;
     });
     try {
-      final watch = await _cryptoApi.startUsdcDepositWatch();
+      final watch = await _cryptoApi.prepareUsdcTopUp();
       if (!mounted) return;
       setState(() {
         _watch = watch;
@@ -369,7 +369,7 @@ class _UsdcWatchBody extends StatelessWidget {
       credited: credited,
       statusDetail: credited
           ? 'USDC ${displayUsdc.toStringAsFixed(2)} is on your ledger display.'
-          : 'Send Fuji USDC. Your balance updates when the backend credits you.',
+          : 'Send ${watch!.networkLabel} USDC. Your balance updates when the backend credits you.',
       footnote:
           'This address is reused for your account. After you send, the app waits for the ledger — it does not scan the chain.',
       onCopy: onCopy,

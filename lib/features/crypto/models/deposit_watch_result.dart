@@ -33,10 +33,17 @@ class DepositWatchResult {
     );
   }
 
-  String get networkLabel {
-    switch (network) {
+  String get networkLabel => labelForNetwork(network);
+
+  static String labelForNetwork(String network) {
+    switch (network.trim().toLowerCase()) {
       case 'avalanche-fuji':
         return 'Avalanche Fuji';
+      case 'avalanche':
+      case 'avalanche-c':
+      case 'avalanche-c-chain':
+      case 'avalanche-mainnet':
+        return 'Avalanche C-Chain';
       default:
         return network;
     }

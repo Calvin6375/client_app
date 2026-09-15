@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:pretium/app/route_names.dart';
 import 'package:pretium/core/constants/app_colors.dart';
+import 'package:pretium/features/crypto/models/crypto_wallet_status.dart';
 import 'package:pretium/features/crypto/models/deposit_watch_result.dart';
 import 'package:pretium/features/crypto/screens/crypto_transactions_screen.dart';
 import 'package:pretium/features/crypto/services/crypto_api_service.dart';
@@ -15,7 +16,10 @@ import 'package:pretium/widgets/app_shimmer.dart';
 import 'package:pretium/widgets/truepay_qr_code.dart';
 
 class UsdcReceiveScreen extends StatefulWidget {
-  const UsdcReceiveScreen({super.key});
+  const UsdcReceiveScreen({super.key, this.walletStatus});
+
+  /// From GET /crypto/wallet/status after production was ensured (if needed).
+  final CryptoWalletStatus? walletStatus;
 
   @override
   State<UsdcReceiveScreen> createState() => _UsdcReceiveScreenState();
@@ -52,7 +56,13 @@ class _UsdcReceiveScreenState extends State<UsdcReceiveScreen> {
       _error = null;
     });
     try {
-      final watch = await _cryptoApi.startUsdcDepositWatch();
+      var status = widget.walletStatus;
+      if (status == null || status.shouldCreateMainnet) {
+        status = await _cryptoApi.ensureProductionWallet();
+      }
+      final watch = await _cryptoApi.startUsdcDepositWatch(
+        network: status.preferredWatchNetwork,
+      );
       if (!mounted) return;
       setState(() {
         _watch = watch;
@@ -251,7 +261,11 @@ class _DepositContent extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 20),
-        _StatusBanner(credited: credited, usdc: displayUsdc),
+        _StatusBanner(
+          credited: credited,
+          usdc: displayUsdc,
+          networkLabel: watch.networkLabel,
+        ),
         const SizedBox(height: 24),
         Center(
           child: TruePayQrCode(
@@ -340,10 +354,15 @@ class _DepositContent extends StatelessWidget {
 }
 
 class _StatusBanner extends StatelessWidget {
-  const _StatusBanner({required this.credited, required this.usdc});
+  const _StatusBanner({
+    required this.credited,
+    required this.usdc,
+    required this.networkLabel,
+  });
 
   final bool credited;
   final double usdc;
+  final String networkLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -387,7 +406,7 @@ class _StatusBanner extends StatelessWidget {
                 Text(
                   credited
                       ? 'USDC ${usdc.toStringAsFixed(2)} is on your ledger display.'
-                      : 'Send Fuji USDC. Your balance updates when the backend credits you.',
+                      : 'Send $networkLabel USDC. Your balance updates when the backend credits you.',
                   style: TextStyle(color: colors.textSecondary, fontSize: 12.5),
                 ),
               ],
