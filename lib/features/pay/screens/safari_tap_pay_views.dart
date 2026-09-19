@@ -81,6 +81,9 @@ mixin SafariTapPayValidationMixin<T extends StatefulWidget> on State<T> {
 
   SafariTapPayApiService get payApi;
 
+  bool get isBeneficiaryValidated =>
+      beneficiaryName != null && beneficiaryName!.trim().isNotEmpty;
+
   Future<bool> validateBeneficiary(Map<String, dynamic> body) async {
     setState(() {
       validationLoading = true;
@@ -303,8 +306,10 @@ class SafariTapPayBillViewState extends State<SafariTapPayBillView>
       return;
     }
 
-    final ok = await validateBeneficiary(_validateBody());
-    if (!ok || !mounted) return;
+    if (!isBeneficiaryValidated) {
+      await validateBeneficiary(_validateBody());
+      return;
+    }
 
     setState(() {
       _step = _PayFlowStep.review;
@@ -408,7 +413,7 @@ class SafariTapPayBillViewState extends State<SafariTapPayBillView>
           ),
         ),
         SafariTapPayBottomButton(
-          label: 'Continue',
+          label: isBeneficiaryValidated ? 'Continue to pay' : 'Validate',
           loading: validationLoading,
           onPressed: _continueToReview,
         ),
@@ -574,8 +579,10 @@ class SafariTapBuyGoodsViewState extends State<SafariTapBuyGoodsView>
       return;
     }
 
-    final ok = await validateBeneficiary(_validateBody());
-    if (!ok || !mounted) return;
+    if (!isBeneficiaryValidated) {
+      await validateBeneficiary(_validateBody());
+      return;
+    }
 
     setState(() {
       _step = _PayFlowStep.review;
@@ -669,7 +676,7 @@ class SafariTapBuyGoodsViewState extends State<SafariTapBuyGoodsView>
           ),
         ),
         SafariTapPayBottomButton(
-          label: 'Continue',
+          label: isBeneficiaryValidated ? 'Continue to pay' : 'Validate',
           loading: validationLoading,
           onPressed: _continueToReview,
         ),
@@ -959,6 +966,7 @@ class SafariTapTruePayMerchantViewState extends State<SafariTapTruePayMerchantVi
   }
 
   Future<void> _continueToReview() async {
+    final alreadyValidated = isBeneficiaryValidated;
     final typed = _merchantCtrl.text.trim();
     if (typed.isEmpty) {
       _snack('Enter merchant ID');
@@ -994,8 +1002,12 @@ class SafariTapTruePayMerchantViewState extends State<SafariTapTruePayMerchantVi
       return;
     }
 
-    final ok = await _validateTruePayMerchant();
-    if (!ok || !mounted) return;
+    if (!alreadyValidated) {
+      if (!isBeneficiaryValidated) {
+        await _validateTruePayMerchant();
+      }
+      return;
+    }
 
     setState(() {
       _step = _PayFlowStep.review;
@@ -1092,7 +1104,7 @@ class SafariTapTruePayMerchantViewState extends State<SafariTapTruePayMerchantVi
           ),
         ),
         SafariTapPayBottomButton(
-          label: 'Continue',
+          label: isBeneficiaryValidated ? 'Continue to pay' : 'Validate',
           loading: validationLoading || _resolving,
           onPressed: _continueToReview,
         ),
@@ -1149,21 +1161,22 @@ class SafariTapPochiViewState extends State<SafariTapPochiView>
       return;
     }
 
+    if (!isBeneficiaryValidated) {
+      await validateBeneficiary({
+        'type': 'MPESA_B2C',
+        'recipient': {
+          'phoneNumber': pochi,
+          'name': beneficiaryName ?? 'Recipient',
+        },
+      });
+      return;
+    }
+
     await runGuardedAsync(
       this,
       isSubmitting: () => _submitting,
       setSubmitting: (v) => setState(() => _submitting = v),
       action: () async {
-        final valid = beneficiaryName != null ||
-            await validateBeneficiary({
-              'type': 'MPESA_B2C',
-              'recipient': {
-                'phoneNumber': pochi,
-                'name': beneficiaryName ?? 'Recipient',
-              },
-            });
-        if (!valid || !mounted) return;
-
         final clientRequestId = const Uuid().v4();
         await submitPayout(
           context: context,
@@ -1226,8 +1239,8 @@ class SafariTapPochiViewState extends State<SafariTapPochiView>
           ),
         ),
         SafariTapPayBottomButton(
-          label: 'Confirm Payment',
-          loading: _submitting,
+          label: isBeneficiaryValidated ? 'Confirm Payment' : 'Validate',
+          loading: validationLoading || _submitting,
           onPressed: _pay,
         ),
       ],
