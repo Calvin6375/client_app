@@ -8,6 +8,7 @@ import 'package:pretium/models/wallet_model.dart';
 import 'package:pretium/repositories/wallet_repository.dart';
 import 'package:pretium/services/dashboard_session_cache.dart';
 import 'package:pretium/utils/firebase_utils.dart';
+import 'package:pretium/widgets/money_form_widgets.dart';
 
 enum _PayOption { truePayMerchant, payBill, buyGoods, pochiLaBiashara }
 
@@ -115,20 +116,6 @@ class _PayPageState extends State<PayPage> {
     }
   }
 
-  bool get _isReviewStep {
-    switch (_selected) {
-      case _PayOption.truePayMerchant:
-        return _truePayMerchantKey.currentState?.isReviewStep ?? false;
-      case _PayOption.payBill:
-        return _payBillKey.currentState?.isReviewStep ?? false;
-      case _PayOption.buyGoods:
-        return _buyGoodsKey.currentState?.isReviewStep ?? false;
-      case _PayOption.pochiLaBiashara:
-      case null:
-        return false;
-    }
-  }
-
   void _onBackPressed() {
     if (_handleNestedBack()) return;
     if (_selected != null) {
@@ -195,17 +182,13 @@ class _PayPageState extends State<PayPage> {
                   onPressed: _onBackPressed,
                 )
               : null,
-          actions: [
-            if (_selected != null && !_isReviewStep)
-              IconButton(
-                tooltip: 'Scan QR code',
-                icon: Icon(Icons.qr_code_scanner_rounded, color: colors.textPrimary),
-                onPressed: _openQrScanner,
-              ),
-          ],
         ),
         body: _selected == null
-            ? _PayHub(onSelect: _openOption)
+            ? _PayHub(
+                kesBalance: _kesBalance,
+                loadingBalance: _loadingWallets,
+                onSelect: _openOption,
+              )
             : switch (_selected!) {
                 _PayOption.truePayMerchant => SafariTapTruePayMerchantView(
                     key: _truePayMerchantKey,
@@ -213,6 +196,7 @@ class _PayPageState extends State<PayPage> {
                     loadingBalance: _loadingWallets,
                     payApi: _payApi,
                     onPaid: () => Navigator.of(context).pop(true),
+                    onScanQr: _openQrScanner,
                     onFlowStepChanged: () {
                       if (mounted) setState(() {});
                     },
@@ -223,6 +207,7 @@ class _PayPageState extends State<PayPage> {
                     loadingBalance: _loadingWallets,
                     payApi: _payApi,
                     onPaid: () => Navigator.of(context).pop(true),
+                    onScanQr: _openQrScanner,
                     onFlowStepChanged: () {
                       if (mounted) setState(() {});
                     },
@@ -233,6 +218,7 @@ class _PayPageState extends State<PayPage> {
                     loadingBalance: _loadingWallets,
                     payApi: _payApi,
                     onPaid: () => Navigator.of(context).pop(true),
+                    onScanQr: _openQrScanner,
                     onFlowStepChanged: () {
                       if (mounted) setState(() {});
                     },
@@ -243,6 +229,7 @@ class _PayPageState extends State<PayPage> {
                     loadingBalance: _loadingWallets,
                     payApi: _payApi,
                     onPaid: () => Navigator.of(context).pop(true),
+                    onScanQr: _openQrScanner,
                   ),
               },
       ),
@@ -251,8 +238,14 @@ class _PayPageState extends State<PayPage> {
 }
 
 class _PayHub extends StatelessWidget {
-  const _PayHub({required this.onSelect});
+  const _PayHub({
+    required this.kesBalance,
+    required this.loadingBalance,
+    required this.onSelect,
+  });
 
+  final double kesBalance;
+  final bool loadingBalance;
   final ValueChanged<_PayOption> onSelect;
 
   @override
@@ -260,127 +253,52 @@ class _PayHub extends StatelessWidget {
     final colors = AppColors.getThemeColors(context);
 
     return ListView(
-      padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
       children: [
+        MoneyBalanceCard(
+          currency: _kPayAmountCurrency,
+          balance: kesBalance,
+          loading: loadingBalance,
+          caption: 'Pay from your $_kPayAmountCurrency wallet',
+        ),
+        const SizedBox(height: 24),
         Text(
-          'How would you like to pay?',
+          'Select Method',
           style: TextStyle(
             color: colors.textPrimary,
-            fontSize: 22,
+            fontSize: 16,
             fontWeight: FontWeight.w700,
           ),
         ),
-        const SizedBox(height: 8),
-        Text(
-          'Pay bills, buy goods, TruePay merchants, or Pochi from your KES wallet.',
-          style: TextStyle(color: colors.textSecondary, fontSize: 14),
-        ),
-        const SizedBox(height: 24),
-        _PayOptionCard(
+        const SizedBox(height: 12),
+        MoneyMethodTile(
           icon: Icons.storefront_outlined,
-          title: 'Pay to TruePay merchant',
-          subtitle: 'Enter merchant ID and amount',
+          title: 'TruePay merchant',
+          selected: false,
           onTap: () => onSelect(_PayOption.truePayMerchant),
         ),
-        const SizedBox(height: 12),
-        _PayOptionCard(
+        const SizedBox(height: 10),
+        MoneyMethodTile(
           icon: Icons.receipt_long_rounded,
-          title: 'Pay to Pay Bill',
-          subtitle: 'Enter PayBill number, account number, and amount',
+          title: 'Pay Bill',
+          selected: false,
           onTap: () => onSelect(_PayOption.payBill),
         ),
-        const SizedBox(height: 12),
-        _PayOptionCard(
+        const SizedBox(height: 10),
+        MoneyMethodTile(
           icon: Icons.storefront_rounded,
-          title: 'Pay to Buy Goods',
-          subtitle: 'Enter till number and amount',
+          title: 'Buy Goods',
+          selected: false,
           onTap: () => onSelect(_PayOption.buyGoods),
         ),
-        const SizedBox(height: 12),
-        _PayOptionCard(
+        const SizedBox(height: 10),
+        MoneyMethodTile(
           icon: Icons.account_balance_wallet_outlined,
-          title: 'Pay to Pochi La Biashara',
-          subtitle: 'Enter Pochi number and amount',
+          title: 'Pochi La Biashara',
+          selected: false,
           onTap: () => onSelect(_PayOption.pochiLaBiashara),
         ),
       ],
-    );
-  }
-}
-
-class _PayOptionCard extends StatelessWidget {
-  const _PayOptionCard({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = AppColors.getThemeColors(context);
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final primary = Theme.of(context).colorScheme.primary;
-
-    return Material(
-      color: isDark ? colors.surface : Colors.white.withValues(alpha: 0.95),
-      borderRadius: BorderRadius.circular(16),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
-        child: Container(
-          padding: const EdgeInsets.all(18),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: isDark ? colors.surfaceVariant : const Color(0xFFE5E7EB),
-            ),
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: 52,
-                height: 52,
-                decoration: BoxDecoration(
-                  color: primary.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                child: Icon(icon, color: primary, size: 26),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: TextStyle(
-                        color: colors.textPrimary,
-                        fontWeight: FontWeight.w600,
-                        fontSize: 16,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      subtitle,
-                      style: TextStyle(
-                        color: colors.textSecondary,
-                        fontSize: 13,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Icon(Icons.chevron_right_rounded, color: colors.textTertiary),
-            ],
-          ),
-        ),
-      ),
     );
   }
 }

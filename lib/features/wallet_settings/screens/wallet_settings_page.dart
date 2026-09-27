@@ -1,5 +1,7 @@
 // Wallet Settings screen - profile, balance, security, preferences.
 
+import 'dart:async';
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -11,6 +13,8 @@ import 'package:pretium/services/auth_service.dart';
 import 'package:pretium/services/biometric_session_service.dart';
 import 'package:pretium/utils/async_action_guard.dart';
 import 'package:pretium/app/route_names.dart';
+import 'package:pretium/features/safari_tap/models/safari_tap_profile_qr.dart';
+import 'package:pretium/features/safari_tap/services/safari_tap_pay_api_service.dart';
 import 'package:pretium/widgets/app_shimmer.dart';
 
 class WalletSettingsPage extends StatefulWidget {
@@ -35,6 +39,8 @@ class _WalletSettingsPageState extends State<WalletSettingsPage> {
   String _userName = '';
   String _userEmail = '';
   bool _loading = true;
+  SafariTapProfileQr? _profileQr;
+  bool _loadingQr = false;
 
   @override
   void initState() {
@@ -61,9 +67,74 @@ class _WalletSettingsPageState extends State<WalletSettingsPage> {
           _loading = false;
         });
       }
+      unawaited(_loadProfileQr());
     } catch (_) {
       if (mounted) setState(() => _loading = false);
     }
+  }
+
+  Future<void> _loadProfileQr() async {
+    if (_loadingQr) return;
+    setState(() => _loadingQr = true);
+    try {
+      final qr = await SafariTapPayApiService().getProfileQr();
+      if (!mounted) return;
+      setState(() {
+        _profileQr = qr;
+        _loadingQr = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _loadingQr = false);
+    }
+  }
+
+  void _showProfileQr() {
+    final bytes = _profileQr?.pngBytes;
+    if (bytes == null) {
+      if (!_loadingQr) unawaited(_loadProfileQr());
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Your receive QR is not available yet.')),
+      );
+      return;
+    }
+    showDialog<void>(
+      context: context,
+      builder: (ctx) {
+        final colors = AppColors.getThemeColors(ctx);
+        return AlertDialog(
+          title: const Text('My SafariTap QR'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                _profileQr?.displayName.isNotEmpty == true
+                    ? _profileQr!.displayName
+                    : _userName,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: colors.textPrimary,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 16),
+              Image.memory(bytes, width: 220, height: 220, fit: BoxFit.contain),
+              const SizedBox(height: 12),
+              Text(
+                'Others can scan this to send to your SafariTap wallet.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: colors.textSecondary, fontSize: 13),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('Close'),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   Future<void> _toggleBiometric(bool enabled) async {
@@ -196,10 +267,13 @@ class _WalletSettingsPageState extends State<WalletSettingsPage> {
                             Positioned(
                               right: 0,
                               bottom: 0,
-                              child: CircleAvatar(
-                                radius: 14,
-                                backgroundColor: primary,
-                                child: Icon(Icons.edit, size: 16, color: colors.onPrimary),
+                              child: GestureDetector(
+                                onTap: _showProfileQr,
+                                child: CircleAvatar(
+                                  radius: 14,
+                                  backgroundColor: primary,
+                                  child: Icon(Icons.qr_code_2_rounded, size: 16, color: colors.onPrimary),
+                                ),
                               ),
                             ),
                           ],
@@ -221,6 +295,29 @@ class _WalletSettingsPageState extends State<WalletSettingsPage> {
                             fontSize: 14,
                           ),
                         ),
+                        const SizedBox(height: 16),
+                        if (_loadingQr && _profileQr == null)
+                          const ShimmerBusyIndicator(width: 160, height: 160)
+                        else if (_profileQr?.pngBytes != null)
+                          GestureDetector(
+                            onTap: _showProfileQr,
+                            child: Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: colors.surface,
+                                borderRadius: BorderRadius.circular(16),
+                                border: Border.all(
+                                  color: colors.border.withValues(alpha: 0.5),
+                                ),
+                              ),
+                              child: Image.memory(
+                                _profileQr!.pngBytes!,
+                                width: 168,
+                                height: 168,
+                                fit: BoxFit.contain,
+                              ),
+                            ),
+                          ),
                       ],
                     ),
                   ),

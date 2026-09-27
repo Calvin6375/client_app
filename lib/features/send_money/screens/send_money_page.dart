@@ -57,9 +57,25 @@ class _SendMoneyPageState extends State<SendMoneyPage> {
       _transactionDetails.recipientBankName = details.recipientBankName;
       _transactionDetails.recipientAccountNumber = details.recipientAccountNumber;
       _transactionDetails.recipientBankCode = details.recipientBankCode;
+      _transactionDetails.recipientUserId = details.recipientUserId;
       _transactionDetails.recipientMobileNetwork = details.recipientMobileNetwork;
       _transactionDetails.verifiedBeneficiaryName = details.verifiedBeneficiaryName;
     });
+  }
+
+  Map<String, dynamic> _safariTapWalletRecipient({String? name}) {
+    final userId = _transactionDetails.recipientUserId?.trim() ?? '';
+    if (userId.isNotEmpty) {
+      return {
+        'userId': userId,
+        if (name != null && name.isNotEmpty) 'name': name,
+      };
+    }
+    final phone = normalizeKenyaPhone(_transactionDetails.recipientPhoneNumber);
+    return {
+      'phoneNumber': phone,
+      if (name != null && name.isNotEmpty) 'name': name,
+    };
   }
 
   Map<String, dynamic> _buildValidateBody() {
@@ -85,12 +101,7 @@ class _SendMoneyPageState extends State<SendMoneyPage> {
       case PaymentMethod.truePay:
         return {
           'type': 'SAFARITAP_WALLET',
-          'recipient': {
-            'phoneNumber': normalizeKenyaPhone(
-              _transactionDetails.recipientPhoneNumber,
-            ),
-            'name': name,
-          },
+          'recipient': _safariTapWalletRecipient(name: name),
         };
       case null:
         throw StateError('Payment method is required before validation');
@@ -136,10 +147,7 @@ class _SendMoneyPageState extends State<SendMoneyPage> {
           'amount': amount,
           'currency': 'KES',
           'clientRequestId': clientRequestId,
-          'recipient': {
-            'phoneNumber': phone,
-            'name': displayName,
-          },
+          'recipient': _safariTapWalletRecipient(name: displayName),
           'narrative': 'SafariTap wallet transfer',
         };
       case null:
@@ -177,9 +185,7 @@ class _SendMoneyPageState extends State<SendMoneyPage> {
           'type': 'SAFARITAP_WALLET',
           'amount': amount,
           'currency': 'KES',
-          'recipient': {
-            'phoneNumber': phone,
-          },
+          'recipient': _safariTapWalletRecipient(),
         };
       case null:
         throw StateError('Payment method is required before quote');

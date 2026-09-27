@@ -11,68 +11,12 @@ import 'package:pretium/features/safari_tap/utils/truepay_merchant_payload.dart'
 import 'package:pretium/features/safari_tap/widgets/merchant_validation_panel.dart';
 import 'package:pretium/features/topup/screens/payment_checkout_webview_page.dart';
 import 'package:pretium/utils/async_action_guard.dart';
-import 'package:pretium/widgets/currency_logo.dart';
 import 'package:uuid/uuid.dart';
-import 'package:pretium/widgets/app_shimmer.dart';
-import 'package:pretium/widgets/bottom_safe_action_bar.dart';
+import 'package:pretium/widgets/money_form_widgets.dart';
 
 const String kSafariTapPayCurrency = 'KES';
 
 enum _PayFlowStep { form, review }
-
-class SafariTapKesBalanceRow extends StatelessWidget {
-  const SafariTapKesBalanceRow({
-    super.key,
-    required this.balance,
-    required this.loading,
-  });
-
-  final double balance;
-  final bool loading;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = AppColors.getThemeColors(context);
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: isDark ? colors.surface : Colors.white.withValues(alpha: 0.95),
-        borderRadius: BorderRadius.circular(14),
-        border: isDark ? null : Border.all(color: const Color(0xFFE5E7EB)),
-      ),
-      child: Row(
-        children: [
-          const CurrencyLogo(code: kSafariTapPayCurrency, size: 22),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Available KES', style: TextStyle(color: colors.textSecondary, fontSize: 12)),
-                if (loading)
-                  const Padding(
-                    padding: EdgeInsets.only(top: 4),
-                    child: ShimmerBusyIndicator(width: 72, height: 14),
-                  )
-                else
-                  Text(
-                    balance.toStringAsFixed(2),
-                    style: TextStyle(
-                      color: colors.textPrimary,
-                      fontWeight: FontWeight.w700,
-                      fontSize: 15,
-                    ),
-                  ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
 
 mixin SafariTapPayValidationMixin<T extends StatefulWidget> on State<T> {
   String? beneficiaryName;
@@ -147,6 +91,7 @@ class SafariTapPayBillView extends StatefulWidget {
     required this.payApi,
     required this.onPaid,
     this.onFlowStepChanged,
+    this.onScanQr,
   });
 
   final double kesBalance;
@@ -154,6 +99,7 @@ class SafariTapPayBillView extends StatefulWidget {
   final SafariTapPayApiService payApi;
   final VoidCallback onPaid;
   final VoidCallback? onFlowStepChanged;
+  final VoidCallback? onScanQr;
 
   @override
   State<SafariTapPayBillView> createState() => SafariTapPayBillViewState();
@@ -377,27 +323,35 @@ class SafariTapPayBillViewState extends State<SafariTapPayBillView>
           child: ListView(
             padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
             children: [
-              SafariTapKesBalanceRow(
+              MoneyBalanceCard(
+                currency: kSafariTapPayCurrency,
                 balance: widget.kesBalance,
                 loading: widget.loadingBalance,
+                caption: 'Pay from your $kSafariTapPayCurrency wallet',
               ),
-              const SizedBox(height: 20),
-              SafariTapPayField(
+              const SizedBox(height: 24),
+              MoneyLabeledField(
                 controller: _businessCtrl,
                 label: 'PayBill number',
                 hint: 'e.g. 888880',
                 keyboardType: TextInputType.number,
                 onChanged: (_) => _clearValidation(),
+                suffixIcon: widget.onScanQr == null
+                    ? null
+                    : MoneyQrFieldButton(onPressed: widget.onScanQr!),
               ),
-              const SizedBox(height: 12),
-              SafariTapPayField(
+              const SizedBox(height: 14),
+              MoneyLabeledField(
                 controller: _accountCtrl,
                 label: 'Account Number',
                 hint: 'Account number',
                 onChanged: (_) => _clearValidation(),
               ),
-              const SizedBox(height: 12),
-              SafariTapPayAmountField(controller: _amountCtrl),
+              const SizedBox(height: 24),
+              MoneyAmountEntry(
+                controller: _amountCtrl,
+                onChanged: (_) => setState(() {}),
+              ),
               MerchantValidationPanel(
                 beneficiaryName: beneficiaryName,
                 loading: validationLoading,
@@ -412,7 +366,7 @@ class SafariTapPayBillViewState extends State<SafariTapPayBillView>
             ],
           ),
         ),
-        SafariTapPayBottomButton(
+        MoneyPrimaryButton(
           label: isBeneficiaryValidated ? 'Continue to pay' : 'Validate',
           loading: validationLoading,
           onPressed: _continueToReview,
@@ -430,6 +384,7 @@ class SafariTapBuyGoodsView extends StatefulWidget {
     required this.payApi,
     required this.onPaid,
     this.onFlowStepChanged,
+    this.onScanQr,
   });
 
   final double kesBalance;
@@ -437,6 +392,7 @@ class SafariTapBuyGoodsView extends StatefulWidget {
   final SafariTapPayApiService payApi;
   final VoidCallback onPaid;
   final VoidCallback? onFlowStepChanged;
+  final VoidCallback? onScanQr;
 
   @override
   State<SafariTapBuyGoodsView> createState() => SafariTapBuyGoodsViewState();
@@ -648,20 +604,28 @@ class SafariTapBuyGoodsViewState extends State<SafariTapBuyGoodsView>
           child: ListView(
             padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
             children: [
-              SafariTapKesBalanceRow(
+              MoneyBalanceCard(
+                currency: kSafariTapPayCurrency,
                 balance: widget.kesBalance,
                 loading: widget.loadingBalance,
+                caption: 'Pay from your $kSafariTapPayCurrency wallet',
               ),
-              const SizedBox(height: 20),
-              SafariTapPayField(
+              const SizedBox(height: 24),
+              MoneyLabeledField(
                 controller: _tillCtrl,
                 label: 'Till number',
                 hint: 'Lipa Na M-Pesa till',
                 keyboardType: TextInputType.number,
                 onChanged: (_) => _clearValidation(),
+                suffixIcon: widget.onScanQr == null
+                    ? null
+                    : MoneyQrFieldButton(onPressed: widget.onScanQr!),
               ),
-              const SizedBox(height: 12),
-              SafariTapPayAmountField(controller: _amountCtrl),
+              const SizedBox(height: 24),
+              MoneyAmountEntry(
+                controller: _amountCtrl,
+                onChanged: (_) => setState(() {}),
+              ),
               MerchantValidationPanel(
                 beneficiaryName: beneficiaryName,
                 loading: validationLoading,
@@ -675,7 +639,7 @@ class SafariTapBuyGoodsViewState extends State<SafariTapBuyGoodsView>
             ],
           ),
         ),
-        SafariTapPayBottomButton(
+        MoneyPrimaryButton(
           label: isBeneficiaryValidated ? 'Continue to pay' : 'Validate',
           loading: validationLoading,
           onPressed: _continueToReview,
@@ -693,6 +657,7 @@ class SafariTapTruePayMerchantView extends StatefulWidget {
     required this.payApi,
     required this.onPaid,
     this.onFlowStepChanged,
+    this.onScanQr,
   });
 
   final double kesBalance;
@@ -700,6 +665,7 @@ class SafariTapTruePayMerchantView extends StatefulWidget {
   final SafariTapPayApiService payApi;
   final VoidCallback onPaid;
   final VoidCallback? onFlowStepChanged;
+  final VoidCallback? onScanQr;
 
   @override
   State<SafariTapTruePayMerchantView> createState() =>
@@ -1075,19 +1041,27 @@ class SafariTapTruePayMerchantViewState extends State<SafariTapTruePayMerchantVi
           child: ListView(
             padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
             children: [
-              SafariTapKesBalanceRow(
+              MoneyBalanceCard(
+                currency: kSafariTapPayCurrency,
                 balance: widget.kesBalance,
                 loading: widget.loadingBalance,
+                caption: 'Pay from your $kSafariTapPayCurrency wallet',
               ),
-              const SizedBox(height: 20),
-              SafariTapPayField(
+              const SizedBox(height: 24),
+              MoneyLabeledField(
                 controller: _merchantCtrl,
                 label: 'Merchant ID',
                 hint: 'TruePay merchant ID',
                 onChanged: (_) => _clearValidation(),
+                suffixIcon: widget.onScanQr == null
+                    ? null
+                    : MoneyQrFieldButton(onPressed: widget.onScanQr!),
               ),
-              const SizedBox(height: 12),
-              SafariTapPayAmountField(controller: _amountCtrl),
+              const SizedBox(height: 24),
+              MoneyAmountEntry(
+                controller: _amountCtrl,
+                onChanged: (_) => setState(() {}),
+              ),
               MerchantValidationPanel(
                 beneficiaryName: beneficiaryName,
                 loading: validationLoading || _resolving,
@@ -1103,7 +1077,7 @@ class SafariTapTruePayMerchantViewState extends State<SafariTapTruePayMerchantVi
             ],
           ),
         ),
-        SafariTapPayBottomButton(
+        MoneyPrimaryButton(
           label: isBeneficiaryValidated ? 'Continue to pay' : 'Validate',
           loading: validationLoading || _resolving,
           onPressed: _continueToReview,
@@ -1120,12 +1094,14 @@ class SafariTapPochiView extends StatefulWidget {
     required this.loadingBalance,
     required this.payApi,
     required this.onPaid,
+    this.onScanQr,
   });
 
   final double kesBalance;
   final bool loadingBalance;
   final SafariTapPayApiService payApi;
   final VoidCallback onPaid;
+  final VoidCallback? onScanQr;
 
   @override
   State<SafariTapPochiView> createState() => SafariTapPochiViewState();
@@ -1211,9 +1187,14 @@ class SafariTapPochiViewState extends State<SafariTapPochiView>
           child: ListView(
             padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
             children: [
-              SafariTapKesBalanceRow(balance: widget.kesBalance, loading: widget.loadingBalance),
-              const SizedBox(height: 20),
-              SafariTapPayField(
+              MoneyBalanceCard(
+                currency: kSafariTapPayCurrency,
+                balance: widget.kesBalance,
+                loading: widget.loadingBalance,
+                caption: 'Pay from your $kSafariTapPayCurrency wallet',
+              ),
+              const SizedBox(height: 24),
+              MoneyLabeledField(
                 controller: _pochiCtrl,
                 label: 'Pochi number',
                 hint: '07XXXXXXXX or 2547XXXXXXXX',
@@ -1222,9 +1203,15 @@ class SafariTapPochiViewState extends State<SafariTapPochiView>
                   beneficiaryName = null;
                   validationError = null;
                 }),
+                suffixIcon: widget.onScanQr == null
+                    ? null
+                    : MoneyQrFieldButton(onPressed: widget.onScanQr!),
               ),
-              const SizedBox(height: 12),
-              SafariTapPayAmountField(controller: _amountCtrl),
+              const SizedBox(height: 24),
+              MoneyAmountEntry(
+                controller: _amountCtrl,
+                onChanged: (_) => setState(() {}),
+              ),
               MerchantValidationPanel(
                 beneficiaryName: beneficiaryName,
                 loading: validationLoading,
@@ -1238,108 +1225,12 @@ class SafariTapPochiViewState extends State<SafariTapPochiView>
             ],
           ),
         ),
-        SafariTapPayBottomButton(
+        MoneyPrimaryButton(
           label: isBeneficiaryValidated ? 'Confirm Payment' : 'Validate',
           loading: validationLoading || _submitting,
           onPressed: _pay,
         ),
       ],
-    );
-  }
-}
-
-class SafariTapPayField extends StatelessWidget {
-  const SafariTapPayField({
-    super.key,
-    required this.controller,
-    required this.label,
-    required this.hint,
-    this.keyboardType,
-    this.onChanged,
-  });
-
-  final TextEditingController controller;
-  final String label;
-  final String hint;
-  final TextInputType? keyboardType;
-  final ValueChanged<String>? onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = AppColors.getThemeColors(context);
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    return TextField(
-      controller: controller,
-      keyboardType: keyboardType,
-      onChanged: onChanged,
-      style: TextStyle(color: colors.textPrimary),
-      decoration: InputDecoration(
-        labelText: label,
-        hintText: hint,
-        filled: true,
-        fillColor: isDark ? colors.surface : Colors.white.withValues(alpha: 0.95),
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-      ),
-    );
-  }
-}
-
-class SafariTapPayAmountField extends StatelessWidget {
-  const SafariTapPayAmountField({super.key, required this.controller});
-
-  final TextEditingController controller;
-
-  @override
-  Widget build(BuildContext context) {
-    return SafariTapPayField(
-      controller: controller,
-      label: 'Amount (KES)',
-      hint: '0.00',
-      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-    );
-  }
-}
-
-class SafariTapPayBottomButton extends StatelessWidget {
-  const SafariTapPayBottomButton({
-    super.key,
-    required this.label,
-    required this.loading,
-    required this.onPressed,
-  });
-
-  final String label;
-  final bool loading;
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    final primary = Theme.of(context).colorScheme.primary;
-    return BottomSafeActionBar(
-      padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
-      child: SizedBox(
-        width: double.infinity,
-        height: 52,
-        child: ElevatedButton(
-          onPressed: loading ? null : onPressed,
-          style: ElevatedButton.styleFrom(
-            backgroundColor: primary,
-            foregroundColor: Colors.white,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(14),
-            ),
-          ),
-          child: loading
-              ? const ShimmerBusyIndicator(onPrimary: true)
-              : Text(
-                  label,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 16,
-                  ),
-                ),
-        ),
-      ),
     );
   }
 }

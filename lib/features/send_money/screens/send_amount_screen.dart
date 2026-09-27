@@ -211,6 +211,7 @@ class _SendAmountScreenState extends State<SendAmountScreen> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
+      useSafeArea: false,
       backgroundColor: Colors.transparent,
       builder: (context) => CurrencyPickerBottomSheet(
         currencies: _availableCurrencies,

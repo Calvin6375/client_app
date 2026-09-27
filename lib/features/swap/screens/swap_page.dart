@@ -594,6 +594,7 @@ class _SwapPageState extends State<SwapPage> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
+      useSafeArea: false,
       backgroundColor: Colors.transparent,
       builder: (context) => CurrencyPickerBottomSheet(
         currencies: availableCurrencies,

@@ -68,22 +68,28 @@ class _BankPickerBottomSheetState extends State<BankPickerBottomSheet> {
       padding: EdgeInsets.only(
         bottom: MediaQuery.viewInsetsOf(context).bottom,
       ),
-      child: SafeArea(
-        child: Material(
-          color: sheetColor,
-          elevation: isDark ? 0 : 2,
-          shadowColor: Colors.black.withValues(alpha: 0.08),
-          shape: RoundedRectangleBorder(
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-            side: isDark
-                ? BorderSide.none
-                : const BorderSide(color: Color(0xFFE5E7EB)),
+      child: Material(
+        color: sheetColor,
+        elevation: isDark ? 0 : 2,
+        shadowColor: Colors.black.withValues(alpha: 0.08),
+        shape: RoundedRectangleBorder(
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+          side: isDark
+              ? BorderSide.none
+              : const BorderSide(color: Color(0xFFE5E7EB)),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: BankPickerBottomSheet.sheetHeight(context),
           ),
-          clipBehavior: Clip.antiAlias,
-          child: SizedBox(
-            height: BankPickerBottomSheet.sheetHeight(context),
+          child: Padding(
+            padding: EdgeInsets.only(
+              bottom: MediaQuery.paddingOf(context).bottom,
+            ),
             child: Column(
-            children: [
+              mainAxisSize: MainAxisSize.min,
+              children: [
               const SizedBox(height: 8),
               Container(
                 width: 48,
@@ -145,15 +151,20 @@ class _BankPickerBottomSheetState extends State<BankPickerBottomSheet> {
                   ),
                 ),
               ),
-              Expanded(
+              Flexible(
                 child: _filtered.isEmpty
-                    ? Center(
-                        child: Text(
-                          'No banks found',
-                          style: TextStyle(color: colors.textSecondary),
+                    ? Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 32),
+                        child: Center(
+                          child: Text(
+                            'No banks found',
+                            style: TextStyle(color: colors.textSecondary),
+                          ),
                         ),
                       )
                     : ListView.separated(
+                        shrinkWrap: true,
+                        physics: const ClampingScrollPhysics(),
                         itemCount: _filtered.length,
                         separatorBuilder: (_, __) => Divider(
                           height: 1,

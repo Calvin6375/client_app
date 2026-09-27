@@ -4,6 +4,9 @@ import 'package:flutter/services.dart';
 import 'package:flutter_contacts/flutter_contacts.dart';
 import 'package:pretium/core/constants/app_colors.dart';
 import 'package:pretium/features/auth/widgets/phone_number_field.dart';
+import 'package:pretium/features/pay/screens/qr_scan_page.dart';
+import 'package:pretium/features/safari_tap/utils/payout_error_messages.dart';
+import 'package:pretium/features/safari_tap/utils/safaritap_profile_qr.dart';
 import 'package:pretium/features/safari_tap/models/safari_tap_bank.dart';
 import 'package:pretium/features/safari_tap/services/safari_tap_pay_api_service.dart';
 import 'package:pretium/features/send_money/screens/payment_method_screen.dart';
@@ -14,8 +17,8 @@ import 'package:pretium/repositories/wallet_repository.dart';
 import 'package:pretium/services/dashboard_session_cache.dart';
 import 'package:pretium/utils/firebase_utils.dart';
 import 'package:pretium/widgets/app_shimmer.dart';
-import 'package:pretium/widgets/bottom_safe_action_bar.dart';
 import 'package:pretium/widgets/currency_logo.dart';
+import 'package:pretium/widgets/money_form_widgets.dart';
 
 /// Single Send Money form: balance card, method, amount chips, recipient fields.
 class SendMoneyFormScreen extends StatefulWidget {
@@ -55,6 +58,8 @@ class _SendMoneyFormScreenState extends State<SendMoneyFormScreen> {
   List<SafariTapBank> _banks = const [];
   bool _loadingBanks = false;
   String? _selectedBankCode;
+  String? _recipientUserId;
+  bool _resolvingQr = false;
   String _countryCode = '254';
 
   static const _dialCodes = [
@@ -85,12 +90,13 @@ class _SendMoneyFormScreenState extends State<SendMoneyFormScreen> {
     _fullNameCtrl.text = widget.initialDetails.recipientFullName;
     _accountNumberCtrl.text = widget.initialDetails.recipientAccountNumber ?? '';
     _selectedBankCode = widget.initialDetails.recipientBankCode;
+    _recipientUserId = widget.initialDetails.recipientUserId;
 
     _hydratePhone(widget.initialDetails.recipientPhoneNumber);
 
     _amountCtrl.addListener(_emitUpdate);
     _fullNameCtrl.addListener(_emitUpdate);
-    _phoneCtrl.addListener(_emitUpdate);
+    _phoneCtrl.addListener(_onPhoneEdited);
     _accountNumberCtrl.addListener(_emitUpdate);
 
     _loadOwnedWallets();
@@ -121,7 +127,7 @@ class _SendMoneyFormScreenState extends State<SendMoneyFormScreen> {
   void dispose() {
     _amountCtrl.removeListener(_emitUpdate);
     _fullNameCtrl.removeListener(_emitUpdate);
-    _phoneCtrl.removeListener(_emitUpdate);
+    _phoneCtrl.removeListener(_onPhoneEdited);
     _accountNumberCtrl.removeListener(_emitUpdate);
     _amountCtrl.dispose();
     _fullNameCtrl.dispose();
@@ -283,6 +289,7 @@ class _SendMoneyFormScreenState extends State<SendMoneyFormScreen> {
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
+      useSafeArea: false,
       backgroundColor: Colors.transparent,
       builder: (context) => CurrencyPickerBottomSheet(
         currencies: currencies,
@@ -300,6 +307,7 @@ class _SendMoneyFormScreenState extends State<SendMoneyFormScreen> {
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
+      useSafeArea: false,
       backgroundColor: Colors.transparent,
       builder: (context) => BankPickerBottomSheet(
         banks: _banks,
@@ -345,6 +353,10 @@ class _SendMoneyFormScreenState extends State<SendMoneyFormScreen> {
     }
     setState(() {
       _method = method;
+      _recipientUserId = null;
+      if (method == PaymentMethod.truePay) {
+        _fullNameCtrl.clear();
+      }
       // Mobile Money and SafariTap wallet are Kenya (+254) only.
       if (kenyaOnly) _countryCode = '254';
     });
@@ -358,8 +370,12 @@ class _SendMoneyFormScreenState extends State<SendMoneyFormScreen> {
     _emitUpdate();
   }
 
-  bool get _needsPhone =>
-      _method == PaymentMethod.mobileMoney || _method == PaymentMethod.truePay;
+  bool get _needsPhone => _method == PaymentMethod.mobileMoney;
+
+  bool get _hasScannedWalletRecipient =>
+      _method == PaymentMethod.truePay &&
+      (_recipientUserId?.trim().isNotEmpty ?? false) &&
+      _fullNameCtrl.text.trim().isNotEmpty;
 
   Future<void> _pickFromContacts() async {
     try {
@@ -400,6 +416,88 @@ class _SendMoneyFormScreenState extends State<SendMoneyFormScreen> {
     }
   }
 
+  void _onPhoneEdited() {
+    if (_recipientUserId != null) {
+      _recipientUserId = null;
+    }
+    _emitUpdate();
+  }
+
+  Future<void> _scanSafariTapProfileQr() async {
+    if (_resolvingQr) return;
+    final code = await Navigator.of(context).push<String>(
+      MaterialPageRoute(builder: (_) => const QrScanPage(title: 'Scan SafariTap QR')),
+    );
+    if (!mounted || code == null || code.trim().isEmpty) return;
+
+    setState(() => _resolvingQr = true);
+    try {
+      final decodedId = parseSafariTapCustomerId(code);
+      final result = await SafariTapPayApiService().validateUser(
+        qrPayload: code.trim(),
+        customerId: decodedId,
+      );
+      if (!mounted) return;
+      if (result.self) {
+        setState(() {
+          _recipientUserId = null;
+          _fullNameCtrl.clear();
+          _resolvingQr = false;
+        });
+        _emitUpdate();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('You can’t send money to your own SafariTap wallet.'),
+          ),
+        );
+        return;
+      }
+      final name = result.fullName.trim();
+      final customerId = result.customerId.trim();
+      if (!result.valid || name.isEmpty || customerId.isEmpty) {
+        setState(() {
+          _recipientUserId = null;
+          _fullNameCtrl.clear();
+          _resolvingQr = false;
+        });
+        _emitUpdate();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not verify this SafariTap user.')),
+        );
+        return;
+      }
+      setState(() {
+        _recipientUserId = customerId;
+        _fullNameCtrl.text = name;
+        _resolvingQr = false;
+      });
+      _emitUpdate();
+    } on SafariTapPayApiException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _recipientUserId = null;
+        _fullNameCtrl.clear();
+        _resolvingQr = false;
+      });
+      _emitUpdate();
+      final message = e.statusCode == 404
+          ? 'No SafariTap user found for this QR.'
+          : safariTapPayoutErrorMessage(e);
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _recipientUserId = null;
+        _fullNameCtrl.clear();
+        _resolvingQr = false;
+      });
+      _emitUpdate();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not verify this SafariTap user.')),
+      );
+    }
+  }
+
   void _applyPhoneFromContact(String raw) {
     setState(() => _hydratePhone(raw));
     _emitUpdate();
@@ -431,6 +529,7 @@ class _SendMoneyFormScreenState extends State<SendMoneyFormScreen> {
         recipientBankName: _selectedBank?.name,
         recipientAccountNumber: _accountNumberCtrl.text,
         recipientBankCode: _selectedBankCode,
+        recipientUserId: _recipientUserId,
         verifiedBeneficiaryName: widget.initialDetails.verifiedBeneficiaryName,
       ),
     );
@@ -448,8 +547,9 @@ class _SendMoneyFormScreenState extends State<SendMoneyFormScreen> {
 
     switch (method) {
       case PaymentMethod.mobileMoney:
-      case PaymentMethod.truePay:
         return nameOk && phoneOk;
+      case PaymentMethod.truePay:
+        return _hasScannedWalletRecipient;
       case PaymentMethod.bank:
         return nameOk &&
             (_selectedBankCode?.isNotEmpty ?? false) &&
@@ -470,9 +570,7 @@ class _SendMoneyFormScreenState extends State<SendMoneyFormScreen> {
       );
       return;
     }
-    if ((_method == PaymentMethod.mobileMoney ||
-            _method == PaymentMethod.truePay) &&
-        _countryCode != '254') {
+    if (_method == PaymentMethod.mobileMoney && _countryCode != '254') {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
@@ -508,11 +606,10 @@ class _SendMoneyFormScreenState extends State<SendMoneyFormScreen> {
             child: ListView(
               padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
               children: [
-                _BalanceCard(
+                MoneyBalanceCard(
                   currency: _currency,
                   balance: _balance,
                   loading: _loadingBalance,
-                  // Always show the wallet dropdown when any funded wallet exists.
                   onWalletTap: _ownedCurrencyCodes.isNotEmpty
                       ? _showWalletPicker
                       : null,
@@ -527,21 +624,21 @@ class _SendMoneyFormScreenState extends State<SendMoneyFormScreen> {
                   ),
                 ),
                 const SizedBox(height: 12),
-                _MethodTile(
+                MoneyMethodTile(
                   icon: Icons.account_balance_wallet_rounded,
                   title: 'SafariTap wallet',
                   selected: _method == PaymentMethod.truePay,
                   onTap: () => _selectMethod(PaymentMethod.truePay),
                 ),
                 const SizedBox(height: 10),
-                _MethodTile(
+                MoneyMethodTile(
                   icon: Icons.phone_android_rounded,
                   title: 'Mobile Money',
                   selected: _method == PaymentMethod.mobileMoney,
                   onTap: () => _selectMethod(PaymentMethod.mobileMoney),
                 ),
                 const SizedBox(height: 10),
-                _MethodTile(
+                MoneyMethodTile(
                   icon: Icons.account_balance_rounded,
                   title: 'Bank Transfer',
                   selected: _method == PaymentMethod.bank,
@@ -576,7 +673,7 @@ class _SendMoneyFormScreenState extends State<SendMoneyFormScreen> {
                     fontSize: 22,
                     fontWeight: FontWeight.w700,
                   ),
-                  decoration: _fieldDecoration(
+                  decoration: moneyFieldDecoration(
                     context,
                     hint: '0',
                   ),
@@ -595,7 +692,7 @@ class _SendMoneyFormScreenState extends State<SendMoneyFormScreen> {
                   runSpacing: 8,
                   children: [
                     for (final chip in _quickAmounts)
-                      _AmountChip(
+                      MoneyAmountChip(
                         label: chip >= 1000
                             ? '${(chip / 1000).toStringAsFixed(chip % 1000 == 0 ? 0 : 1)}k'
                             : chip.toStringAsFixed(0),
@@ -604,14 +701,54 @@ class _SendMoneyFormScreenState extends State<SendMoneyFormScreen> {
                       ),
                   ],
                 ),
-                if (_method != null) ...[
+                if (_method == PaymentMethod.truePay) ...[
+                  const SizedBox(height: 24),
+                  Text(
+                    'SafariTap recipient',
+                    style: TextStyle(
+                      color: colors.textPrimary,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  TextFormField(
+                    controller: _fullNameCtrl,
+                    readOnly: true,
+                    enableInteractiveSelection: false,
+                    style: TextStyle(color: colors.textPrimary),
+                    decoration: moneyFieldDecoration(
+                      context,
+                      hint: 'Scan QR to add recipient',
+                      suffixIcon: IconButton(
+                        tooltip: 'Scan SafariTap QR',
+                        onPressed:
+                            _resolvingQr ? null : _scanSafariTapProfileQr,
+                        icon: _resolvingQr
+                            ? const ShimmerBusyIndicator(
+                                width: 18,
+                                height: 18,
+                              )
+                            : Icon(
+                                Icons.qr_code_2_rounded,
+                                color: primary,
+                              ),
+                      ),
+                    ),
+                    onTap: _resolvingQr ? null : _scanSafariTapProfileQr,
+                    validator: (v) {
+                      if (!_hasScannedWalletRecipient) {
+                        return 'Scan a SafariTap QR to continue';
+                      }
+                      return null;
+                    },
+                  ),
+                ] else if (_method != null) ...[
                   const SizedBox(height: 24),
                   Text(
                     _method == PaymentMethod.bank
                         ? 'Recipient details'
-                        : _method == PaymentMethod.truePay
-                            ? 'SafariTap recipient'
-                            : 'Mobile Money Number',
+                        : 'Mobile Money Number',
                     style: TextStyle(
                       color: colors.textPrimary,
                       fontSize: 14,
@@ -623,7 +760,7 @@ class _SendMoneyFormScreenState extends State<SendMoneyFormScreen> {
                     controller: _fullNameCtrl,
                     textCapitalization: TextCapitalization.words,
                     style: TextStyle(color: colors.textPrimary),
-                    decoration: _fieldDecoration(
+                    decoration: moneyFieldDecoration(
                       context,
                       hint: 'Full name',
                       suffixIcon: IconButton(
@@ -648,8 +785,7 @@ class _SendMoneyFormScreenState extends State<SendMoneyFormScreen> {
                       phoneController: _phoneCtrl,
                       initialCountryCode: _countryCode,
                       // Mobile Money + SafariTap wallet resolve recipients as Kenya 254… numbers.
-                      lockCountryCode: _method == PaymentMethod.truePay ||
-                          _method == PaymentMethod.mobileMoney,
+                      lockCountryCode: _method == PaymentMethod.mobileMoney,
                       onCountryCodeChanged: (code) {
                         if (_countryCode == code) return;
                         setState(() => _countryCode = code);
@@ -690,7 +826,7 @@ class _SendMoneyFormScreenState extends State<SendMoneyFormScreen> {
                           borderRadius: BorderRadius.circular(12),
                           child: InputDecorator(
                             isEmpty: selectedName == null,
-                            decoration: _fieldDecoration(
+                            decoration: moneyFieldDecoration(
                               context,
                               hint: 'Select bank',
                             ).copyWith(
@@ -709,11 +845,9 @@ class _SendMoneyFormScreenState extends State<SendMoneyFormScreen> {
                                     ),
                             ),
                             child: Text(
-                              selectedName ?? 'Select bank',
+                              selectedName ?? '',
                               style: TextStyle(
-                                color: selectedName == null
-                                    ? colors.textTertiary
-                                    : colors.textPrimary,
+                                color: colors.textPrimary,
                                 fontSize: 16,
                               ),
                               maxLines: 1,
@@ -729,7 +863,7 @@ class _SendMoneyFormScreenState extends State<SendMoneyFormScreen> {
                       keyboardType: TextInputType.number,
                       style: TextStyle(color: colors.textPrimary),
                       decoration:
-                          _fieldDecoration(context, hint: 'Account number'),
+                          moneyFieldDecoration(context, hint: 'Account number'),
                       validator: (v) {
                         if (v == null || v.trim().isEmpty) {
                           return 'Account number is required';
@@ -743,347 +877,14 @@ class _SendMoneyFormScreenState extends State<SendMoneyFormScreen> {
             ),
           ),
         ),
-        BottomSafeActionBar(
-          padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
-          child: SizedBox(
-            width: double.infinity,
-            height: 54,
-            child: ElevatedButton(
-              onPressed:
-                  (_canContinue && !widget.isValidating) ? _onContinue : null,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: primary,
-                foregroundColor: Colors.white,
-                disabledBackgroundColor: primary.withValues(alpha: 0.35),
-                disabledForegroundColor: Colors.white70,
-                elevation: 0,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(28),
-                ),
-              ),
-              child: widget.isValidating
-                  ? const ShimmerBusyIndicator(
-                      width: 96,
-                      height: 14,
-                      onPrimary: true,
-                    )
-                  : const Text(
-                      'Continue',
-                      style: TextStyle(
-                        fontSize: 17,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-            ),
-          ),
+        MoneyPrimaryButton(
+          label: 'Continue',
+          loading: widget.isValidating,
+          enabled: _canContinue && !widget.isValidating,
+          onPressed: _onContinue,
         ),
       ],
     );
   }
-
-  InputDecoration _fieldDecoration(
-    BuildContext context, {
-    String? hint,
-    Widget? suffixIcon,
-  }) {
-    final colors = AppColors.getThemeColors(context);
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final primary = Theme.of(context).colorScheme.primary;
-    final fill = isDark
-        ? colors.surface.withValues(alpha: 0.9)
-        : Colors.white.withValues(alpha: 0.95);
-    final borderColor =
-        isDark ? colors.border.withValues(alpha: 0.5) : const Color(0xFFE5E7EB);
-
-    OutlineInputBorder border([Color? color]) => OutlineInputBorder(
-          borderRadius: BorderRadius.circular(28),
-          borderSide: BorderSide(color: color ?? borderColor),
-        );
-
-    return InputDecoration(
-      hintText: hint,
-      hintStyle: TextStyle(color: colors.textTertiary),
-      filled: true,
-      fillColor: fill,
-      suffixIcon: suffixIcon,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
-      border: border(),
-      enabledBorder: border(),
-      focusedBorder: border(primary),
-      errorBorder: border(colors.error),
-      focusedErrorBorder: border(colors.error),
-    );
-  }
 }
 
-class _BalanceCard extends StatelessWidget {
-  const _BalanceCard({
-    required this.currency,
-    required this.balance,
-    required this.loading,
-    this.onWalletTap,
-  });
-
-  final String currency;
-  final double balance;
-  final bool loading;
-  final VoidCallback? onWalletTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final primary = Theme.of(context).colorScheme.primary;
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(20, 20, 20, 18),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            const Color(0xFF0F172A),
-            primary.withValues(alpha: 0.35),
-            const Color(0xFF111827),
-          ],
-        ),
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.2),
-            blurRadius: 16,
-            offset: const Offset(0, 6),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Available Balance',
-            style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.7),
-              fontSize: 13,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-          const SizedBox(height: 8),
-          if (loading)
-            const ShimmerBusyIndicator(width: 140, height: 28, onPrimary: true)
-          else
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Expanded(
-                  child: Text(
-                    _formatAmount(balance),
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 32,
-                      fontWeight: FontWeight.w800,
-                      height: 1,
-                    ),
-                  ),
-                ),
-                Material(
-                  color: Colors.transparent,
-                  child: InkWell(
-                    onTap: onWalletTap,
-                    borderRadius: BorderRadius.circular(20),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 6,
-                        vertical: 4,
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            currency,
-                            style: const TextStyle(
-                              color: Colors.white70,
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          if (onWalletTap != null) ...[
-                            const SizedBox(width: 2),
-                            const Icon(
-                              Icons.keyboard_arrow_down_rounded,
-                              color: Colors.white70,
-                              size: 22,
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          const SizedBox(height: 14),
-          InkWell(
-            onTap: onWalletTap,
-            borderRadius: BorderRadius.circular(8),
-            child: Row(
-              children: [
-                CurrencyLogo(code: currency, size: 18),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'Send from your $currency wallet',
-                    style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.65),
-                      fontSize: 12,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  static String _formatAmount(double value) {
-    final parts = value.toStringAsFixed(2).split('.');
-    final whole = parts[0];
-    final buf = StringBuffer();
-    for (var i = 0; i < whole.length; i++) {
-      final reverseIndex = whole.length - i;
-      buf.write(whole[i]);
-      if (reverseIndex > 1 && reverseIndex % 3 == 1) buf.write(',');
-    }
-    return '${buf.toString()}.${parts[1]}';
-  }
-}
-
-class _MethodTile extends StatelessWidget {
-  const _MethodTile({
-    required this.icon,
-    required this.title,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final String title;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = AppColors.getThemeColors(context);
-    final primary = Theme.of(context).colorScheme.primary;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 180),
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-          decoration: BoxDecoration(
-            color: selected
-                ? primary.withValues(alpha: isDark ? 0.16 : 0.10)
-                : (isDark ? colors.surface : Colors.white),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: selected
-                  ? primary
-                  : (isDark
-                      ? colors.border.withValues(alpha: 0.45)
-                      : const Color(0xFFE5E7EB)),
-              width: selected ? 1.6 : 1,
-            ),
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  color: selected
-                      ? primary.withValues(alpha: 0.18)
-                      : (isDark
-                          ? colors.background
-                          : const Color(0xFFF1F5F9)),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  icon,
-                  color: selected ? primary : colors.textSecondary,
-                  size: 20,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  title,
-                  style: TextStyle(
-                    color: selected ? primary : colors.textPrimary,
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-              Icon(
-                selected
-                    ? Icons.radio_button_checked_rounded
-                    : Icons.radio_button_off_rounded,
-                color: selected ? primary : colors.textTertiary,
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _AmountChip extends StatelessWidget {
-  const _AmountChip({
-    required this.label,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final primary = Theme.of(context).colorScheme.primary;
-    final colors = AppColors.getThemeColors(context);
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(20),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 160),
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-          decoration: BoxDecoration(
-            color: selected
-                ? primary
-                : (isDark ? colors.surface : const Color(0xFFF1F5F9)),
-            borderRadius: BorderRadius.circular(20),
-          ),
-          child: Text(
-            label,
-            style: TextStyle(
-              color: selected ? Colors.white : colors.textSecondary,
-              fontWeight: FontWeight.w700,
-              fontSize: 13,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}

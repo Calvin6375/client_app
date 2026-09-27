@@ -27,17 +27,16 @@ class MerchantValidationPanel extends StatelessWidget {
 
     return Container(
       width: double.infinity,
-      constraints: const BoxConstraints(minHeight: 128),
-      margin: const EdgeInsets.only(top: 20),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+      margin: const EdgeInsets.only(top: 24),
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
       decoration: BoxDecoration(
         color: isDark
-            ? colors.surface.withValues(alpha: 0.55)
-            : Colors.white.withValues(alpha: 0.7),
-        borderRadius: BorderRadius.circular(14),
+            ? colors.surface.withValues(alpha: 0.9)
+            : Colors.white.withValues(alpha: 0.95),
+        borderRadius: BorderRadius.circular(20),
         border: Border.all(
           color: isDark
-              ? colors.surfaceVariant.withValues(alpha: 0.55)
+              ? colors.border.withValues(alpha: 0.5)
               : const Color(0xFFE5E7EB),
         ),
       ),

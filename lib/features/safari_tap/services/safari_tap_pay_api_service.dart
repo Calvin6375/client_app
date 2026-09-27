@@ -9,6 +9,8 @@ import 'package:pretium/features/safari_tap/models/safari_tap_bank.dart';
 import 'package:pretium/features/safari_tap/models/safari_tap_merchant_resolve.dart';
 import 'package:pretium/features/safari_tap/models/safari_tap_payout.dart';
 import 'package:pretium/features/safari_tap/models/safari_tap_payout_quote.dart';
+import 'package:pretium/features/safari_tap/models/safari_tap_profile_qr.dart';
+import 'package:pretium/features/safari_tap/models/safari_tap_user_validate.dart';
 import 'package:pretium/utils/logger.dart';
 
 class SafariTapPayApiException implements Exception {
@@ -246,6 +248,55 @@ final class SafariTapPayApiService {
     return data
         .map((e) => SafariTapPayout.fromJson(Map<String, dynamic>.from(e as Map)))
         .toList();
+  }
+
+  /// Checks a scanned SafariTap profile QR before the send form is filled.
+  Future<SafariTapUserValidate> validateUser({
+    String? qrPayload,
+    String? customerId,
+  }) async {
+    final payload = <String, dynamic>{};
+    final scanned = qrPayload?.trim() ?? '';
+    final id = customerId?.trim() ?? '';
+    if (scanned.isNotEmpty) {
+      payload['qrPayload'] = scanned;
+    } else if (id.isNotEmpty) {
+      payload['customerId'] = id;
+    } else {
+      throw SafariTapPayApiException(
+        statusCode: 400,
+        code: 'VALIDATION_FAILED',
+        message: 'Scan a SafariTap QR to continue.',
+      );
+    }
+
+    Logger.info('SafariTapPayApi POST /safari-card/users/validate');
+    Future<http.Response> send({required bool forceRefresh}) async => _http.post(
+          CloudFunctionsApiConfig.safariTapUsersValidateUri(),
+          headers: await _headers(forceRefresh: forceRefresh),
+          body: await _codec.encodeJsonBody(jsonEncode(payload)),
+        );
+    final response = await send(forceRefresh: true);
+    final parsed = await _decodeResponse(response, send: send);
+    final data = parsed['data'] is Map
+        ? Map<String, dynamic>.from(parsed['data'] as Map)
+        : parsed;
+    return SafariTapUserValidate.fromJson(data);
+  }
+
+  /// Read-only profile QR. Auth uid comes from the Firebase token.
+  Future<SafariTapProfileQr> getProfileQr() async {
+    Logger.info('SafariTapPayApi GET /safari-card/profile-qr');
+    Future<http.Response> send({required bool forceRefresh}) async => _http.get(
+          CloudFunctionsApiConfig.safariTapProfileQrUri(),
+          headers: await _headers(forceRefresh: forceRefresh),
+        );
+    final response = await send(forceRefresh: true);
+    final parsed = await _decodeResponse(response, send: send);
+    final data = parsed['data'] is Map
+        ? Map<String, dynamic>.from(parsed['data'] as Map)
+        : parsed;
+    return SafariTapProfileQr.fromJson(data);
   }
 
   Future<List<SafariTapBank>> listBanks() async {

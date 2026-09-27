@@ -27,106 +27,112 @@ class CurrencyPickerBottomSheet extends StatelessWidget {
     final sheetColor =
         isDark ? colors.surface : Colors.white.withValues(alpha: 0.9);
 
-    return SafeArea(
-      child: Material(
-        color: sheetColor,
-        elevation: isDark ? 0 : 2,
-        shadowColor: Colors.black.withValues(alpha: 0.08),
-        shape: RoundedRectangleBorder(
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-          side: isDark
-              ? BorderSide.none
-              : const BorderSide(color: Color(0xFFE5E7EB)),
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: SizedBox(
-          height: sheetHeight(context),
+    return Material(
+      color: sheetColor,
+      elevation: isDark ? 0 : 2,
+      shadowColor: Colors.black.withValues(alpha: 0.08),
+      shape: RoundedRectangleBorder(
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+        side: isDark
+            ? BorderSide.none
+            : const BorderSide(color: Color(0xFFE5E7EB)),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxHeight: sheetHeight(context)),
+        child: Padding(
+          padding: EdgeInsets.only(bottom: MediaQuery.paddingOf(context).bottom),
           child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
-            const SizedBox(height: 8),
-            Container(
-              width: 48,
-              height: 5,
-              decoration: BoxDecoration(
-                color: colors.textTertiary,
-                borderRadius: BorderRadius.circular(3),
-              ),
-            ),
-            const SizedBox(height: 8),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              child: Row(
-                children: [
-                  Icon(Icons.account_balance_wallet_outlined, color: primary),
-                  const SizedBox(width: 8),
-                  Text(
-                    'Select wallet',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w700,
-                      fontSize: 16,
-                      color: colors.textPrimary,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Expanded(
-              child: ListView.separated(
-                itemCount: currencies.length,
-                separatorBuilder: (_, __) => Divider(
-                  height: 1,
-                  color: isDark ? colors.surfaceVariant : const Color(0xFFE5E7EB),
+              const SizedBox(height: 8),
+              Container(
+                width: 48,
+                height: 5,
+                decoration: BoxDecoration(
+                  color: colors.textTertiary,
+                  borderRadius: BorderRadius.circular(3),
                 ),
-                itemBuilder: (context, i) {
-                  final c = currencies[i];
-                  final isSelected = c.code == selectedCode;
-                  final logoSize = CurrencyLogo.hasAssetLogo(c.code) ? 26.0 : 24.0;
-                  return ListTile(
-                    leading: Container(
-                      width: 40,
-                      height: 40,
-                      alignment: Alignment.center,
-                      decoration: BoxDecoration(
-                        color: isDark
-                            ? colors.background
-                            : Colors.white.withValues(alpha: 0.95),
-                        shape: BoxShape.circle,
-                        border: Border.all(
+              ),
+              const SizedBox(height: 8),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: Row(
+                  children: [
+                    Icon(Icons.account_balance_wallet_outlined, color: primary),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Select wallet',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 16,
+                        color: colors.textPrimary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Flexible(
+                child: ListView.separated(
+                  shrinkWrap: true,
+                  physics: const ClampingScrollPhysics(),
+                  itemCount: currencies.length,
+                  separatorBuilder: (_, __) => Divider(
+                    height: 1,
+                    color: isDark ? colors.surfaceVariant : const Color(0xFFE5E7EB),
+                  ),
+                  itemBuilder: (context, i) {
+                    final c = currencies[i];
+                    final isSelected = c.code == selectedCode;
+                    final logoSize =
+                        CurrencyLogo.hasAssetLogo(c.code) ? 26.0 : 24.0;
+                    return ListTile(
+                      leading: Container(
+                        width: 40,
+                        height: 40,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
                           color: isDark
-                              ? colors.border.withValues(alpha: 0.45)
-                              : const Color(0xFFE5E7EB),
+                              ? colors.background
+                              : Colors.white.withValues(alpha: 0.95),
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: isDark
+                                ? colors.border.withValues(alpha: 0.45)
+                                : const Color(0xFFE5E7EB),
+                          ),
+                        ),
+                        child: CurrencyLogo(
+                          code: c.code,
+                          size: logoSize,
+                          fallbackEmoji: c.flagEmoji,
                         ),
                       ),
-                      child: CurrencyLogo(
-                        code: c.code,
-                        size: logoSize,
-                        // Prefer catalog flags/logos; only use model emoji if real.
-                        fallbackEmoji: c.flagEmoji,
+                      title: Text(
+                        c.code,
+                        style: TextStyle(
+                          color: colors.textPrimary,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
-                    ),
-                    title: Text(
-                      c.code,
-                      style: TextStyle(
-                        color: colors.textPrimary,
-                        fontWeight: FontWeight.w600,
+                      subtitle: Text(
+                        c.name.isNotEmpty
+                            ? c.name
+                            : CurrencyLogo.displayNameFor(c.code),
+                        style: TextStyle(color: colors.textSecondary),
                       ),
-                    ),
-                    subtitle: Text(
-                      c.name.isNotEmpty ? c.name : CurrencyLogo.displayNameFor(c.code),
-                      style: TextStyle(color: colors.textSecondary),
-                    ),
-                    trailing: isSelected
-                        ? Icon(Icons.check, color: primary)
-                        : null,
-                    onTap: () {
-                      Navigator.of(context).pop();
-                      onSelected(c);
-                    },
-                  );
-                },
+                      trailing: isSelected
+                          ? Icon(Icons.check, color: primary)
+                          : null,
+                      onTap: () {
+                        Navigator.of(context).pop();
+                        onSelected(c);
+                      },
+                    );
+                  },
+                ),
               ),
-            ),
-          ],
+            ],
           ),
         ),
       ),

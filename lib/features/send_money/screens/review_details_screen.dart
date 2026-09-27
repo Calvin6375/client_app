@@ -115,7 +115,11 @@ class ReviewDetailsScreen extends StatelessWidget {
                           _buildRecipientTile(
                             context,
                             details.recipientFullName,
-                            details.recipientPhoneNumber,
+                            details.recipientPhoneNumber.trim().isNotEmpty
+                                ? details.recipientPhoneNumber
+                                : (details.hasSafariTapUserId
+                                    ? 'SafariTap wallet'
+                                    : details.recipientPhoneNumber),
                             _recipientAmount,
                           ),
                           if (details.verifiedBeneficiaryName

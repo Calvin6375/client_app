@@ -99,6 +99,14 @@ final class CloudFunctionsApiConfig {
   static Uri safariTapBanksUri() =>
       Uri.parse('$baseSafariTapApiUrl/safari-card/banks');
 
+  /// Profile QR for SafariTap wallet send (`GET …/safari-card/profile-qr`).
+  static Uri safariTapProfileQrUri() =>
+      Uri.parse('$baseSafariTapApiUrl/safari-card/profile-qr');
+
+  /// Validate a scanned SafariTap profile QR (`POST …/safari-card/users/validate`).
+  static Uri safariTapUsersValidateUri() =>
+      Uri.parse('$baseSafariTapApiUrl/safari-card/users/validate');
+
   static String get expectedProjectId =>
       DefaultFirebaseOptions.currentPlatform.projectId;
 }

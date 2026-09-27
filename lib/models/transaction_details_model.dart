@@ -15,6 +15,8 @@ class TransactionDetails {
   String? recipientAccountNumber;
   /// Kenyan bank code from `GET /safari-card/banks` when paying by bank.
   String? recipientBankCode;
+  /// SafariTap wallet customer id from a scanned profile QR (`/u/{id}`).
+  String? recipientUserId;
   /// Name returned by validate-beneficiary before confirm.
   String verifiedBeneficiaryName;
 
@@ -30,6 +32,10 @@ class TransactionDetails {
     this.recipientBankName,
     this.recipientAccountNumber,
     this.recipientBankCode,
+    this.recipientUserId,
     this.verifiedBeneficiaryName = '',
   });
+
+  bool get hasSafariTapUserId =>
+      recipientUserId != null && recipientUserId!.trim().isNotEmpty;
 }
