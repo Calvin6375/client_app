@@ -1,17 +1,18 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:pretium/core/providers/service_providers.dart';
+import 'package:pretium/core/providers/wallet_accounts_provider.dart';
 import 'package:pretium/models/transaction_details_model.dart';
-import 'package:pretium/repositories/wallet_repository.dart';
-import 'package:pretium/features/swap/services/rates_service.dart';
 import 'package:pretium/features/swap/widgets/currency_picker_bottom_sheet.dart';
 import 'package:pretium/core/constants/app_colors.dart';
 import 'package:pretium/widgets/currency_logo.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:pretium/utils/firebase_utils.dart';
 import 'package:pretium/widgets/app_shimmer.dart';
 import 'package:pretium/widgets/bottom_safe_action_bar.dart';
 
-class SendAmountScreen extends StatefulWidget {
+class SendAmountScreen extends ConsumerStatefulWidget {
   final VoidCallback onNext;
   final Function(TransactionDetails) onUpdate;
   final TransactionDetails initialDetails;
@@ -26,19 +27,15 @@ class SendAmountScreen extends StatefulWidget {
   });
 
   @override
-  State<SendAmountScreen> createState() => _SendAmountScreenState();
+  ConsumerState<SendAmountScreen> createState() => _SendAmountScreenState();
 }
 
-class _SendAmountScreenState extends State<SendAmountScreen> {
+class _SendAmountScreenState extends ConsumerState<SendAmountScreen> {
   late final TextEditingController _fromCtrl;
   late String _fromCurrency;
   late String _toCurrency;
-  final WalletRepository _walletRepository = WalletRepository();
-  final RatesService _ratesService = RatesService();
-  double _fromBalance = 0.0;
-  double _toBalance = 0.0;
   double _rate = 1.0;
-  bool _loadingBalances = true;
+  StreamSubscription<Map<String, double>>? _ratesSub;
 
   // Available currencies for Send Money
   static const List<Currency> _availableCurrencies = [
@@ -71,104 +68,51 @@ class _SendAmountScreenState extends State<SendAmountScreen> {
             : (_fromCurrency == 'USD' ? 'USDT' : 'USD'));
 
     _fromCtrl.addListener(_onAmountChanged);
-    _loadBalances();
     if (widget.kenyaOnly) {
       _rate = 1.0;
     } else {
-      _loadRate();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _loadRate();
+      });
     }
   }
 
-  Future<void> _loadBalances() async {
-    if (!isFirebaseInitialized()) {
-      setState(() => _loadingBalances = false);
-      return;
-    }
+  @override
+  void dispose() {
+    _ratesSub?.cancel();
+    _fromCtrl.removeListener(_onAmountChanged);
+    _fromCtrl.dispose();
+    super.dispose();
+  }
 
-    try {
-      final user = FirebaseAuth.instance.currentUser;
-      if (user == null) {
-        setState(() => _loadingBalances = false);
-        return;
-      }
-
-      setState(() => _loadingBalances = true);
-
-      // Load wallets based on currencies
-      if (widget.kenyaOnly) {
-        final kesWallet =
-            await _walletRepository.getWalletBalance(user.uid, currency: 'KES');
-        if (!mounted) return;
-        _fromBalance = kesWallet?.balance ?? 0.0;
-        _toBalance = _fromBalance;
-      } else {
-        final fiatWallet = await _walletRepository.getWalletBalance(user.uid);
-        final cryptoWallet =
-            await _walletRepository.getCryptoWalletBalance(user.uid, 'USDT');
-
-        if (!mounted) return;
-
-        if (_fromCurrency == 'USD') {
-          _fromBalance = fiatWallet?.balance ?? 0.0;
-        } else if (_fromCurrency == 'USDT') {
-          _fromBalance = cryptoWallet?.balance ?? 0.0;
-        } else if (_fromCurrency == 'KES') {
-          final kesWallet =
-              await _walletRepository.getWalletBalance(user.uid, currency: 'KES');
-          _fromBalance = kesWallet?.balance ?? 0.0;
-        } else {
-          _fromBalance = 0.0;
-        }
-
-        if (_toCurrency == 'USD') {
-          _toBalance = fiatWallet?.balance ?? 0.0;
-        } else if (_toCurrency == 'USDT') {
-          _toBalance = cryptoWallet?.balance ?? 0.0;
-        } else if (_toCurrency == 'KES') {
-          final kesWallet =
-              await _walletRepository.getWalletBalance(user.uid, currency: 'KES');
-          _toBalance = kesWallet?.balance ?? 0.0;
-        } else {
-          _toBalance = 0.0;
-        }
-      }
-
-      setState(() => _loadingBalances = false);
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _loadingBalances = false);
-    }
+  double _balanceFor(String code) {
+    final snap = ref.read(walletAccountsProvider).valueOrNull;
+    final upper = code.toUpperCase();
+    return snap?.fiatWallets[upper]?.balance ??
+        snap?.cryptoWallets[upper]?.balance ??
+        0;
   }
 
   void _loadRate() {
-    // Calculate rate based on currency pair
-    // Always calculate through USDT as intermediary
     _updateRate();
-    
-    // Listen to live rate updates
-    _ratesService.ratesStream.listen((map) {
-      if (mounted) {
-        setState(() {
-          _updateRate();
-          _onAmountChanged(); // Recalculate received amount
-        });
-      }
+    _ratesSub?.cancel();
+    _ratesSub = ref.read(ratesServiceProvider).ratesStream.listen((_) {
+      if (!mounted) return;
+      setState(() {
+        _updateRate();
+        _onAmountChanged();
+      });
     });
   }
 
   void _updateRate() {
-    // Calculate rate through USDT as intermediary
+    final rates = ref.read(ratesServiceProvider);
     if (_fromCurrency == 'USDT' || _toCurrency == 'USDT') {
-      // Direct USDT pair
-      _rate = _ratesService.getRate(_fromCurrency, _toCurrency);
+      _rate = rates.getRate(_fromCurrency, _toCurrency);
     } else {
-      // Fiat-to-fiat: Calculate through USDT
-      // Example: KES -> USD = (KES -> USDT) * (USDT -> USD)
-      // RatesService already handles inverse rates, so we can call directly
-      
-      final fromToUsdt = _ratesService.getRate(_fromCurrency, 'USDT');
-      final usdtToTo = _ratesService.getRate('USDT', _toCurrency);
-      
+      final fromToUsdt = rates.getRate(_fromCurrency, 'USDT');
+      final usdtToTo = rates.getRate('USDT', _toCurrency);
       _rate = fromToUsdt * usdtToTo;
     }
   }
@@ -191,18 +135,8 @@ class _SendAmountScreenState extends State<SendAmountScreen> {
       final temp = _fromCurrency;
       _fromCurrency = _toCurrency;
       _toCurrency = temp;
-      
-      // Swap balances
-      final tempBalance = _fromBalance;
-      _fromBalance = _toBalance;
-      _toBalance = tempBalance;
-      
-      // Clear input
       _fromCtrl.clear();
-      
-      // Reload rate and balances
       _loadRate();
-      _loadBalances();
     });
     _onAmountChanged();
   }
@@ -223,7 +157,6 @@ class _SendAmountScreenState extends State<SendAmountScreen> {
               if (currency.code != _toCurrency) {
                 _fromCurrency = currency.code;
                 _fromCtrl.clear();
-                _loadBalances();
                 _loadRate();
                 _onAmountChanged();
               }
@@ -231,7 +164,6 @@ class _SendAmountScreenState extends State<SendAmountScreen> {
               // Prevent selecting the same currency for both from and to
               if (currency.code != _fromCurrency) {
                 _toCurrency = currency.code;
-                _loadBalances();
                 _loadRate();
                 _onAmountChanged();
               }
@@ -243,15 +175,11 @@ class _SendAmountScreenState extends State<SendAmountScreen> {
   }
 
   @override
-  void dispose() {
-    _fromCtrl.removeListener(_onAmountChanged);
-    _fromCtrl.dispose();
-    _ratesService.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
+    final accounts = ref.watch(walletAccountsProvider);
+    final fromBalance = _balanceFor(_fromCurrency);
+    final toBalance = _balanceFor(_toCurrency);
+    final loadingBalances = accounts.isLoading && accounts.valueOrNull == null;
     final primaryColor = Theme.of(context).colorScheme.primary;
     final amountToSend = double.tryParse(_fromCtrl.text.trim()) ?? 0;
     final canContinue = amountToSend > 0;
@@ -276,8 +204,8 @@ class _SendAmountScreenState extends State<SendAmountScreen> {
                   label: widget.kenyaOnly ? 'Amount (KES)' : 'You Send',
                   currency: _fromCurrency,
                   flagEmoji: _flagFor(_fromCurrency),
-                  balance: _fromBalance,
-                  loading: _loadingBalances,
+                  balance: fromBalance,
+                  loading: loadingBalances,
                   controller: _fromCtrl,
                   onCurrencyTap:
                       widget.kenyaOnly ? () {} : () => _showCurrencyPicker(true),
@@ -300,8 +228,8 @@ class _SendAmountScreenState extends State<SendAmountScreen> {
                     label: 'You Receive',
                     currency: _toCurrency,
                     flagEmoji: _flagFor(_toCurrency),
-                    balance: _toBalance,
-                    loading: _loadingBalances,
+                    balance: toBalance,
+                    loading: loadingBalances,
                     amount: (double.tryParse(_fromCtrl.text) ?? 0) * _rate,
                     onCurrencyTap: () => _showCurrencyPicker(false),
                   ),

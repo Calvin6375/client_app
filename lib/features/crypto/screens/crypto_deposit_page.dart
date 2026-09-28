@@ -1,16 +1,14 @@
 import 'dart:async';
 
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:pretium/app/route_names.dart';
 import 'package:pretium/core/constants/app_colors.dart';
 import 'package:pretium/features/crypto/models/deposit_watch_result.dart';
+import 'package:pretium/features/crypto/providers/usdc_deposit_watch_provider.dart';
 import 'package:pretium/features/crypto/screens/crypto_transactions_screen.dart';
-import 'package:pretium/features/crypto/services/crypto_api_service.dart';
-import 'package:pretium/services/home_wallet_focus.dart';
-import 'package:pretium/services/wallet_balance_refresh.dart';
+import 'package:pretium/core/providers/home_wallet_focus_provider.dart';
 import 'package:pretium/widgets/app_shimmer.dart';
 import 'package:pretium/widgets/truepay_qr_code.dart';
 
@@ -46,28 +44,17 @@ class CryptoDepositNetwork {
   ];
 }
 
-class CryptoDepositPage extends StatefulWidget {
+class CryptoDepositPage extends ConsumerStatefulWidget {
   const CryptoDepositPage({super.key, this.initialAsset = 'USDT'});
 
   final String initialAsset;
 
   @override
-  State<CryptoDepositPage> createState() => _CryptoDepositPageState();
+  ConsumerState<CryptoDepositPage> createState() => _CryptoDepositPageState();
 }
 
-class _CryptoDepositPageState extends State<CryptoDepositPage> {
+class _CryptoDepositPageState extends ConsumerState<CryptoDepositPage> {
   late int _tab;
-  final CryptoApiService _cryptoApi = CryptoApiService();
-
-  DepositWatchResult? _watch;
-  String? _watchError;
-  bool _watchLoading = false;
-  bool _watchStarted = false;
-  bool _credited = false;
-  bool _haveBaseline = false;
-  double _baselineUsdc = 0;
-  double _displayUsdc = 0;
-  StreamSubscription<DatabaseEvent>? _usdcSub;
 
   @override
   void initState() {
@@ -76,14 +63,11 @@ class _CryptoDepositPageState extends State<CryptoDepositPage> {
     final index = CryptoDepositNetwork.tabs.indexWhere((t) => t.asset == wanted);
     _tab = index >= 0 ? index : 0;
     if (CryptoDepositNetwork.tabs[_tab].usesUsdcWatch) {
-      _ensureUsdcWatch();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        ref.read(usdcDepositWatchProvider.notifier).startFromPrepare();
+      });
     }
-  }
-
-  @override
-  void dispose() {
-    _usdcSub?.cancel();
-    super.dispose();
   }
 
   CryptoDepositNetwork get _current => CryptoDepositNetwork.tabs[_tab];
@@ -91,78 +75,14 @@ class _CryptoDepositPageState extends State<CryptoDepositPage> {
   void _selectTab(int index) {
     setState(() => _tab = index);
     if (CryptoDepositNetwork.tabs[index].usesUsdcWatch) {
-      _ensureUsdcWatch();
+      ref.read(usdcDepositWatchProvider.notifier).startFromPrepare();
     }
-  }
-
-  Future<void> _ensureUsdcWatch() async {
-    if (_watchStarted && _watch != null) return;
-    _watchStarted = true;
-    setState(() {
-      _watchLoading = true;
-      _watchError = null;
-    });
-    try {
-      final watch = await _cryptoApi.prepareUsdcTopUp();
-      if (!mounted) return;
-      setState(() {
-        _watch = watch;
-        _watchLoading = false;
-      });
-      _listenUsdcLedger();
-    } on CryptoApiException catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _watchError = e.message ?? 'Failed to start USDC deposit watch';
-        _watchLoading = false;
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _watchError = e.toString();
-        _watchLoading = false;
-      });
-    }
-  }
-
-  void _listenUsdcLedger() {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) return;
-    _usdcSub?.cancel();
-    _usdcSub = FirebaseDatabase.instance
-        .ref('wallet/$uid/crypto/USDC')
-        .onValue
-        .listen((event) {
-      final value = event.snapshot.value;
-      final usdc = value is num ? value.toDouble() : 0.0;
-      if (!mounted) return;
-      if (!_haveBaseline) {
-        setState(() {
-          _haveBaseline = true;
-          _baselineUsdc = usdc;
-          _displayUsdc = usdc;
-        });
-        return;
-      }
-      final creditedNow = !_credited && usdc > _baselineUsdc + 0.000001;
-      setState(() {
-        _displayUsdc = usdc;
-        if (creditedNow) _credited = true;
-      });
-      if (creditedNow) {
-        unawaited(_goHomeWithUsdcWallet());
-      }
-    });
   }
 
   Future<void> _goHomeWithUsdcWallet() async {
-    try {
-      await _cryptoApi.getBalance();
-      await _cryptoApi.getTransactions(limit: 10);
-    } catch (_) {}
-    await WalletBalanceRefresh.afterSuccessfulTransaction();
+    await ref.read(usdcDepositWatchProvider.notifier).acknowledgeCredit();
     if (!mounted) return;
-    HomeWalletFocus.showCryptoWallet(currency: 'USDC');
+    ref.read(homeWalletFocusProvider.notifier).showCryptoWallet(currency: 'USDC');
     Navigator.of(context).pushNamedAndRemoveUntil(
       RouteNames.home,
       (route) => false,
@@ -177,14 +97,19 @@ class _CryptoDepositPageState extends State<CryptoDepositPage> {
     );
   }
 
-  Future<void> _retryWatch() async {
-    _watchStarted = false;
-    await _ensureUsdcWatch();
+  Future<void> _retryWatch() {
+    return ref.read(usdcDepositWatchProvider.notifier).retryPrepare();
   }
 
   @override
   Widget build(BuildContext context) {
     final colors = AppColors.getThemeColors(context);
+    final watchState = ref.watch(usdcDepositWatchProvider);
+    ref.listen(usdcDepositWatchProvider, (prev, next) {
+      if (next.credited && prev?.credited != true) {
+        unawaited(_goHomeWithUsdcWallet());
+      }
+    });
 
     return Scaffold(
       backgroundColor: colors.background,
@@ -222,11 +147,11 @@ class _CryptoDepositPageState extends State<CryptoDepositPage> {
           const SizedBox(height: 20),
           if (_current.usesUsdcWatch)
             _UsdcWatchBody(
-              loading: _watchLoading,
-              error: _watchError,
-              watch: _watch,
-              displayUsdc: _displayUsdc,
-              credited: _credited,
+              loading: watchState.loading,
+              error: watchState.error,
+              watch: watchState.watch,
+              displayUsdc: watchState.displayUsdc,
+              credited: watchState.credited,
               onRetry: _retryWatch,
               onCopy: _copy,
             )

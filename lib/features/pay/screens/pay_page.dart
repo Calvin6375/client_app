@@ -1,13 +1,10 @@
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:pretium/core/constants/app_colors.dart';
+import 'package:pretium/core/providers/service_providers.dart';
+import 'package:pretium/core/providers/wallet_accounts_provider.dart';
 import 'package:pretium/features/pay/screens/qr_scan_page.dart';
 import 'package:pretium/features/pay/screens/safari_tap_pay_views.dart';
-import 'package:pretium/features/safari_tap/services/safari_tap_pay_api_service.dart';
-import 'package:pretium/models/wallet_model.dart';
-import 'package:pretium/repositories/wallet_repository.dart';
-import 'package:pretium/services/dashboard_session_cache.dart';
-import 'package:pretium/utils/firebase_utils.dart';
 import 'package:pretium/widgets/money_form_widgets.dart';
 
 enum _PayOption { truePayMerchant, payBill, buyGoods, pochiLaBiashara }
@@ -15,84 +12,21 @@ enum _PayOption { truePayMerchant, payBill, buyGoods, pochiLaBiashara }
 const String _kPayAmountCurrency = 'KES';
 
 /// Kenya M-Pesa pay flows via `safariCardApi` (PayBill, Till, Pochi).
-class PayPage extends StatefulWidget {
+class PayPage extends ConsumerStatefulWidget {
   const PayPage({super.key, this.initialCurrency = 'KES'});
 
   final String initialCurrency;
 
   @override
-  State<PayPage> createState() => _PayPageState();
+  ConsumerState<PayPage> createState() => _PayPageState();
 }
 
-class _PayPageState extends State<PayPage> {
+class _PayPageState extends ConsumerState<PayPage> {
   _PayOption? _selected;
   final _truePayMerchantKey = GlobalKey<SafariTapTruePayMerchantViewState>();
   final _payBillKey = GlobalKey<SafariTapPayBillViewState>();
   final _buyGoodsKey = GlobalKey<SafariTapBuyGoodsViewState>();
   final _pochiKey = GlobalKey<SafariTapPochiViewState>();
-
-  final WalletRepository _walletRepository = WalletRepository();
-
-  final Map<String, double> _balances = {};
-  bool _loadingWallets = true;
-  final SafariTapPayApiService _payApi = SafariTapPayApiService();
-
-  @override
-  void initState() {
-    super.initState();
-    _hydrateFromCache();
-    _loadWallets();
-  }
-
-  void _hydrateFromCache() {
-    final snap = DashboardSessionCache.instance.readWalletLastKnown();
-    if (snap == null) return;
-
-    for (final code in snap.availableFiatCurrencies) {
-      if (code == _kPayAmountCurrency) {
-        _balances[code] = snap.fiatWallets[code]?.balance ?? 0;
-      }
-    }
-    if (_balances.containsKey(_kPayAmountCurrency)) {
-      _loadingWallets = false;
-    }
-  }
-
-  Future<void> _loadWallets() async {
-    if (!isFirebaseInitialized()) {
-      if (mounted) setState(() => _loadingWallets = false);
-      return;
-    }
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) {
-      if (mounted) setState(() => _loadingWallets = false);
-      return;
-    }
-
-    try {
-      final wallet =
-          await _walletRepository.getWalletBalance(user.uid, currency: _kPayAmountCurrency);
-      final bal = wallet?.balance ?? 0;
-
-      if (!mounted) return;
-      setState(() {
-        _balances[_kPayAmountCurrency] = bal;
-        _loadingWallets = false;
-      });
-
-      final existing = DashboardSessionCache.instance.readWalletLastKnown();
-      DashboardSessionCache.instance.recordWalletSnapshot(
-        fiatWallets: {_kPayAmountCurrency: Wallet(currencyCode: _kPayAmountCurrency, balance: bal)},
-        availableFiatCurrencies: const [_kPayAmountCurrency],
-        cryptoWallets: existing?.cryptoWallets ?? const {},
-        availableCryptoCurrencies: existing?.availableCryptoCurrencies ?? const [],
-        cachedFiatWallet: existing?.cachedFiatWallet,
-        cachedCryptoWallet: existing?.cachedCryptoWallet,
-      );
-    } catch (_) {
-      if (mounted) setState(() => _loadingWallets = false);
-    }
-  }
 
   void _openOption(_PayOption option) {
     setState(() => _selected = option);
@@ -111,6 +45,7 @@ class _PayPageState extends State<PayPage> {
       case _PayOption.buyGoods:
         return _buyGoodsKey.currentState?.handleBack() ?? false;
       case _PayOption.pochiLaBiashara:
+        return false;
       case null:
         return false;
     }
@@ -123,7 +58,15 @@ class _PayPageState extends State<PayPage> {
     }
   }
 
-  double get _kesBalance => _balances[_kPayAmountCurrency] ?? 0;
+  double get _kesBalance =>
+      ref.watch(walletAccountsProvider).valueOrNull?.fiatWallets[_kPayAmountCurrency]?.balance ??
+      0;
+
+  bool get _loadingWallets {
+    final accounts = ref.watch(walletAccountsProvider);
+    return accounts.isLoading &&
+        accounts.valueOrNull?.fiatWallets[_kPayAmountCurrency] == null;
+  }
 
   Future<void> _openQrScanner() async {
     final code = await Navigator.of(context).push<String>(
@@ -194,7 +137,7 @@ class _PayPageState extends State<PayPage> {
                     key: _truePayMerchantKey,
                     kesBalance: _kesBalance,
                     loadingBalance: _loadingWallets,
-                    payApi: _payApi,
+                    payApi: ref.read(safariTapPayApiProvider),
                     onPaid: () => Navigator.of(context).pop(true),
                     onScanQr: _openQrScanner,
                     onFlowStepChanged: () {
@@ -205,7 +148,7 @@ class _PayPageState extends State<PayPage> {
                     key: _payBillKey,
                     kesBalance: _kesBalance,
                     loadingBalance: _loadingWallets,
-                    payApi: _payApi,
+                    payApi: ref.read(safariTapPayApiProvider),
                     onPaid: () => Navigator.of(context).pop(true),
                     onScanQr: _openQrScanner,
                     onFlowStepChanged: () {
@@ -216,7 +159,7 @@ class _PayPageState extends State<PayPage> {
                     key: _buyGoodsKey,
                     kesBalance: _kesBalance,
                     loadingBalance: _loadingWallets,
-                    payApi: _payApi,
+                    payApi: ref.read(safariTapPayApiProvider),
                     onPaid: () => Navigator.of(context).pop(true),
                     onScanQr: _openQrScanner,
                     onFlowStepChanged: () {
@@ -227,7 +170,7 @@ class _PayPageState extends State<PayPage> {
                     key: _pochiKey,
                     kesBalance: _kesBalance,
                     loadingBalance: _loadingWallets,
-                    payApi: _payApi,
+                    payApi: ref.read(safariTapPayApiProvider),
                     onPaid: () => Navigator.of(context).pop(true),
                     onScanQr: _openQrScanner,
                   ),

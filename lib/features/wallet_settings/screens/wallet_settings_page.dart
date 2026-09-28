@@ -2,111 +2,64 @@
 
 import 'dart:typed_data';
 
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:pretium/core/constants/app_colors.dart';
+import 'package:pretium/core/providers/auth_providers.dart';
+import 'package:pretium/core/providers/biometric_enabled_provider.dart';
+import 'package:pretium/core/providers/recent_transactions_provider.dart';
+import 'package:pretium/core/providers/user_profile_provider.dart';
+import 'package:pretium/core/providers/wallet_accounts_provider.dart';
 import 'package:pretium/core/theme/theme_provider.dart';
 import 'package:pretium/features/topup/utils/receipt_image_export.dart';
 import 'package:pretium/models/user_model.dart';
-import 'package:pretium/repositories/user_repository.dart';
-import 'package:pretium/repositories/wallet_repository.dart';
 import 'package:pretium/services/auth_service.dart';
-import 'package:pretium/services/dashboard_session_cache.dart';
 import 'package:pretium/services/biometric_session_service.dart';
 import 'package:pretium/utils/async_action_guard.dart';
 import 'package:pretium/utils/share_image.dart';
 import 'package:pretium/app/route_names.dart';
-import 'package:pretium/features/safari_tap/models/safari_tap_profile_qr.dart';
-import 'package:pretium/features/safari_tap/services/safari_tap_pay_api_service.dart';
+import 'package:pretium/features/wallet_settings/providers/user_settings_provider.dart';
 import 'package:pretium/widgets/app_shimmer.dart';
 import 'package:pretium/widgets/tappable_user_avatar.dart';
 import 'package:pretium/widgets/truepay_qr_code.dart';
 
-class WalletSettingsPage extends StatefulWidget {
+class WalletSettingsPage extends ConsumerStatefulWidget {
   const WalletSettingsPage({super.key});
 
   @override
-  State<WalletSettingsPage> createState() => _WalletSettingsPageState();
+  ConsumerState<WalletSettingsPage> createState() => _WalletSettingsPageState();
 }
 
-class _WalletSettingsPageState extends State<WalletSettingsPage> {
-  final UserRepository _userRepository = UserRepository();
-  final WalletRepository _walletRepository = WalletRepository();
+class _WalletSettingsPageState extends ConsumerState<WalletSettingsPage> {
   final AuthService _authService = AuthService();
   final BiometricSessionService _biometricSession =
       BiometricSessionService.instance;
   final _biometricToggleGuard = AsyncActionGuard();
   final _signOutGuard = AsyncActionGuard();
 
-  bool _biometricEnabled = false;
   bool _pushNotificationsEnabled = true;
-  double _kesBalance = 0;
-  String _userName = '';
-  String _userEmail = '';
-  UserModel? _profile;
-  bool _loading = true;
-  SafariTapProfileQr? _profileQr;
-  bool _loadingQr = false;
 
-  @override
-  void initState() {
-    super.initState();
-    _loadData();
+  String _resolvedUserName(UserModel? profile) {
+    final name = profile?.fullName.trim() ?? '';
+    return name.isNotEmpty ? name : 'User';
   }
 
-  Future<void> _loadData() async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) {
-      setState(() => _loading = false);
-      return;
-    }
-    try {
-      final profile = await _userRepository.getUserProfile(user.uid);
-      final cachedKes =
-          DashboardSessionCache.instance.readWalletLastKnown()?.fiatWallets['KES']?.balance;
-      final wallet = await _walletRepository.getWalletBalance(
-        user.uid,
-        currency: 'KES',
-      );
-      final biometricEnabled = await _biometricSession.isBiometricLoginEnabled();
-      if (mounted) {
-        setState(() {
-          _profile = profile;
-          _userName = profile?.fullName ?? 'User';
-          _userEmail = profile?.email ?? user.email ?? '';
-          _kesBalance = wallet?.balance ?? cachedKes ?? 0;
-          _biometricEnabled = biometricEnabled;
-          _loading = false;
-        });
-      }
-    } catch (_) {
-      if (mounted) setState(() => _loading = false);
-    }
-  }
-
-  Future<void> _loadProfileQr() async {
-    if (_loadingQr) return;
-    setState(() => _loadingQr = true);
-    try {
-      final qr = await SafariTapPayApiService().getProfileQr();
-      if (!mounted) return;
-      setState(() {
-        _profileQr = qr;
-        _loadingQr = false;
-      });
-    } catch (_) {
-      if (mounted) setState(() => _loadingQr = false);
-    }
+  String _resolvedUserEmail(UserModel? profile) {
+    final fromProfile = profile?.email.trim() ?? '';
+    if (fromProfile.isNotEmpty) return fromProfile;
+    return ref.read(currentUserProvider)?.email ?? '';
   }
 
   Future<void> _showProfileQr() async {
-    if (_loadingQr) return;
-    if (_profileQr == null || _profileQr!.qrPayload.trim().isEmpty) {
-      await _loadProfileQr();
+    final settings = ref.read(userSettingsProvider);
+    if (settings.loadingQr) return;
+    if (settings.profileQr == null ||
+        settings.profileQr!.qrPayload.trim().isEmpty) {
+      await ref.read(userSettingsProvider.notifier).loadProfileQr();
       if (!mounted) return;
     }
-    final payload = _profileQr?.qrPayload.trim() ?? '';
+    final qr = ref.read(userSettingsProvider).profileQr;
+    final payload = qr?.qrPayload.trim() ?? '';
     if (payload.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Your receive QR is not available yet.')),
@@ -118,9 +71,9 @@ class _WalletSettingsPageState extends State<WalletSettingsPage> {
       builder: (ctx) {
         return _SafariTapQrDialog(
           payload: payload,
-          displayName: _profileQr?.displayName.isNotEmpty == true
-              ? _profileQr!.displayName
-              : _userName,
+          displayName: qr?.displayName.isNotEmpty == true
+              ? qr!.displayName
+              : _resolvedUserName(ref.read(userProfileProvider).valueOrNull),
         );
       },
     );
@@ -130,7 +83,9 @@ class _WalletSettingsPageState extends State<WalletSettingsPage> {
     await _biometricToggleGuard.run(() async {
       if (!enabled) {
         await _biometricSession.disableBiometricLogin();
-        if (mounted) setState(() => _biometricEnabled = false);
+        if (mounted) {
+          ref.read(biometricEnabledProvider.notifier).setLocal(false);
+        }
         return;
       }
 
@@ -151,10 +106,12 @@ class _WalletSettingsPageState extends State<WalletSettingsPage> {
       if (!verified) return;
 
       await _biometricSession.enableBiometricLogin(
-        email: _userEmail,
+        email: _resolvedUserEmail(ref.read(userProfileProvider).valueOrNull),
         password: password,
       );
-      if (mounted) setState(() => _biometricEnabled = true);
+      if (mounted) {
+        ref.read(biometricEnabledProvider.notifier).setLocal(true);
+      }
     });
   }
 
@@ -186,6 +143,10 @@ class _WalletSettingsPageState extends State<WalletSettingsPage> {
       );
       if (confirm == true) {
         await _authService.signOut();
+        ref.invalidate(walletAccountsProvider);
+        ref.invalidate(recentTransactionsProvider);
+        ref.invalidate(userProfileProvider);
+        ref.invalidate(biometricEnabledProvider);
         if (mounted) {
           Navigator.of(context).pushNamedAndRemoveUntil(
             RouteNames.login,
@@ -200,6 +161,19 @@ class _WalletSettingsPageState extends State<WalletSettingsPage> {
   Widget build(BuildContext context) {
     final colors = AppColors.getThemeColors(context);
     final primary = Theme.of(context).colorScheme.primary;
+    final themeMode = ref.watch(themeControllerProvider);
+    final profileAsync = ref.watch(userProfileProvider);
+    final walletsAsync = ref.watch(walletAccountsProvider);
+    final biometricAsync = ref.watch(biometricEnabledProvider);
+    final profile = profileAsync.valueOrNull;
+    final userName = _resolvedUserName(profile);
+    final userEmail = _resolvedUserEmail(profile);
+    final kesBalance =
+        walletsAsync.valueOrNull?.fiatWallets['KES']?.balance ?? 0;
+    final biometricEnabled = biometricAsync.valueOrNull ?? false;
+    final loading = profileAsync.isLoading &&
+        walletsAsync.isLoading &&
+        biometricAsync.isLoading;
 
     return Scaffold(
       backgroundColor: colors.background,
@@ -228,7 +202,7 @@ class _WalletSettingsPageState extends State<WalletSettingsPage> {
           ),
         ],
       ),
-      body: _loading
+      body: loading
           ? const SettingsPageShimmer()
           : SingleChildScrollView(
               padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -240,13 +214,13 @@ class _WalletSettingsPageState extends State<WalletSettingsPage> {
                     child: Column(
                       children: [
                         TappableUserAvatar(
-                          initial: _userName.isNotEmpty
-                              ? _userName[0].toUpperCase()
+                          initial: userName.isNotEmpty
+                              ? userName[0].toUpperCase()
                               : '?',
                           radius: 44,
                           pulse: true,
                           tooltip: 'Show receive QR',
-                          badgeIcon: _loadingQr
+                          badgeIcon: ref.watch(userSettingsProvider).loadingQr
                               ? Icons.hourglass_top_rounded
                               : Icons.qr_code_2_rounded,
                           onTap: _showProfileQr,
@@ -262,7 +236,7 @@ class _WalletSettingsPageState extends State<WalletSettingsPage> {
                         ),
                         const SizedBox(height: 10),
                         Text(
-                          _userName,
+                          userName,
                           style: TextStyle(
                             color: colors.textPrimary,
                             fontWeight: FontWeight.w600,
@@ -293,7 +267,7 @@ class _WalletSettingsPageState extends State<WalletSettingsPage> {
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          'KES ${_kesBalance.toStringAsFixed(2)}',
+                          'KES ${kesBalance.toStringAsFixed(2)}',
                           style: TextStyle(
                             color: colors.textPrimary,
                             fontWeight: FontWeight.bold,
@@ -312,8 +286,8 @@ class _WalletSettingsPageState extends State<WalletSettingsPage> {
                         Navigator.of(context).push<void>(
                           MaterialPageRoute<void>(
                             builder: (_) => _ProfileDetailsPage(
-                              profile: _profile,
-                              fallbackEmail: _userEmail,
+                              profile: profile,
+                              fallbackEmail: userEmail,
                             ),
                           ),
                         );
@@ -378,7 +352,7 @@ class _WalletSettingsPageState extends State<WalletSettingsPage> {
                     icon: Icons.lock_outline,
                     title: 'Biometric Authentication',
                     trailing: Switch(
-                      value: _biometricEnabled,
+                      value: biometricEnabled,
                       onChanged: _toggleBiometric,
                       activeThumbColor: primary,
                     ),
@@ -397,17 +371,15 @@ class _WalletSettingsPageState extends State<WalletSettingsPage> {
                   _SettingsTile(
                     icon: Icons.dark_mode_outlined,
                     title: 'Dark Mode',
-                    trailing: Consumer<ThemeProvider>(
-                      builder: (context, themeProvider, _) {
-                        final isDark = themeProvider.themeMode == ThemeMode.dark ||
-                            (themeProvider.themeMode == ThemeMode.system &&
-                                MediaQuery.platformBrightnessOf(context) == Brightness.dark);
-                        return Switch(
-                          value: isDark,
-                          onChanged: (_) => themeProvider.toggleTheme(),
-                          activeThumbColor: primary,
-                        );
-                      },
+                    trailing: Switch(
+                      value: themeMode == ThemeMode.dark ||
+                          (themeMode == ThemeMode.system &&
+                              MediaQuery.platformBrightnessOf(context) ==
+                                  Brightness.dark),
+                      onChanged: (_) => ref
+                          .read(themeControllerProvider.notifier)
+                          .toggleTheme(),
+                      activeThumbColor: primary,
                     ),
                   ),
                   const SizedBox(height: 32),

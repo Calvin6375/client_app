@@ -1,8 +1,10 @@
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_contacts/flutter_contacts.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:pretium/core/constants/app_colors.dart';
+import 'package:pretium/core/providers/owned_wallet_balances.dart';
+import 'package:pretium/core/providers/wallet_accounts_provider.dart';
 import 'package:pretium/features/auth/widgets/phone_number_field.dart';
 import 'package:pretium/features/pay/screens/qr_scan_page.dart';
 import 'package:pretium/features/safari_tap/utils/payout_error_messages.dart';
@@ -13,15 +15,12 @@ import 'package:pretium/features/send_money/screens/payment_method_screen.dart';
 import 'package:pretium/features/send_money/widgets/bank_picker_bottom_sheet.dart';
 import 'package:pretium/features/swap/widgets/currency_picker_bottom_sheet.dart';
 import 'package:pretium/models/transaction_details_model.dart';
-import 'package:pretium/repositories/wallet_repository.dart';
-import 'package:pretium/services/dashboard_session_cache.dart';
-import 'package:pretium/utils/firebase_utils.dart';
 import 'package:pretium/widgets/app_shimmer.dart';
 import 'package:pretium/widgets/currency_logo.dart';
 import 'package:pretium/widgets/money_form_widgets.dart';
 
 /// Single Send Money form: balance card, method, amount chips, recipient fields.
-class SendMoneyFormScreen extends StatefulWidget {
+class SendMoneyFormScreen extends ConsumerStatefulWidget {
   const SendMoneyFormScreen({
     super.key,
     required this.onContinue,
@@ -36,10 +35,11 @@ class SendMoneyFormScreen extends StatefulWidget {
   final bool isValidating;
 
   @override
-  State<SendMoneyFormScreen> createState() => _SendMoneyFormScreenState();
+  ConsumerState<SendMoneyFormScreen> createState() =>
+      _SendMoneyFormScreenState();
 }
 
-class _SendMoneyFormScreenState extends State<SendMoneyFormScreen> {
+class _SendMoneyFormScreenState extends ConsumerState<SendMoneyFormScreen> {
   static const _quickAmounts = [500.0, 1000.0, 2500.0, 5000.0, 10000.0];
 
   final _formKey = GlobalKey<FormState>();
@@ -47,8 +47,6 @@ class _SendMoneyFormScreenState extends State<SendMoneyFormScreen> {
   final _fullNameCtrl = TextEditingController();
   final _phoneCtrl = TextEditingController();
   final _accountNumberCtrl = TextEditingController();
-  final _walletRepository = WalletRepository();
-
   PaymentMethod? _method;
   String _currency = 'KES';
   double _balance = 0;
@@ -99,7 +97,6 @@ class _SendMoneyFormScreenState extends State<SendMoneyFormScreen> {
     _phoneCtrl.addListener(_onPhoneEdited);
     _accountNumberCtrl.addListener(_emitUpdate);
 
-    _loadOwnedWallets();
     if (_method == PaymentMethod.bank) _loadBanks();
   }
 
@@ -146,98 +143,24 @@ class _SendMoneyFormScreenState extends State<SendMoneyFormScreen> {
     return double.tryParse(raw) ?? 0;
   }
 
-  /// Same wallet source as home / Exchange: session cache first, then
-  /// `GET /api/accounts` (`data.fiat`).
-  Future<void> _loadOwnedWallets() async {
-    if (!isFirebaseInitialized()) {
-      if (mounted) setState(() => _loadingBalance = false);
+  DateTime? _appliedWalletAt;
+
+  void _applyOwnedWallets(OwnedWalletBalances owned, {required bool loading}) {
+    if (owned.fiatCodes.isEmpty) {
+      _loadingBalance = loading;
       return;
     }
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) {
-      if (mounted) setState(() => _loadingBalance = false);
-      return;
+    if (!owned.fiatCodes.contains(_currency)) {
+      _currency = owned.fiatCodes.first;
     }
-
-    try {
-      setState(() => _loadingBalance = true);
-
-      final codes = <String>{};
-      final balances = <String, double>{};
-
-      // Prefer the wallets already resolved for the home wallet carousel.
-      final snap = DashboardSessionCache.instance.readWalletLastKnown();
-      if (snap != null) {
-        for (final code in snap.availableFiatCurrencies) {
-          final upper = code.toUpperCase();
-          if (upper.isEmpty) continue;
-          final bal = snap.fiatWallets[upper]?.balance ??
-              snap.fiatWallets[code]?.balance ??
-              0;
-          if (bal <= 0) continue;
-          codes.add(upper);
-          balances[upper] = bal;
-        }
-      }
-
-      // Same as Exchange: owned fiat accounts from GET /api/accounts.
-      final fiat = await _walletRepository.listOwnedFiatWallets(user.uid);
-      for (final e in fiat.entries) {
-        final upper = e.key.toUpperCase();
-        if (upper.isEmpty || e.value.balance <= 0) continue;
-        codes.add(upper);
-        balances[upper] = e.value.balance;
-      }
-
-      // If still empty, probe known currencies (balance > 0 only).
-      if (codes.isEmpty) {
-        for (final currency in const ['KES', 'USD', 'NGN', 'GHS', 'UGX']) {
-          try {
-            final wallet = await _walletRepository.getWalletBalance(
-              user.uid,
-              currency: currency,
-            );
-            if (wallet != null && wallet.balance > 0) {
-              codes.add(currency);
-              balances[currency] = wallet.balance;
-            }
-          } catch (_) {}
-        }
-      }
-
-      if (!mounted) return;
-
-      // Only wallets with money are selectable / shown in the picker.
-      final ordered = codes.where((c) => (balances[c] ?? 0) > 0).toList()
-        ..sort((a, b) {
-          if (a == 'KES') return -1;
-          if (b == 'KES') return 1;
-          return a.compareTo(b);
-        });
-
-      if (ordered.isEmpty) {
-        setState(() => _loadingBalance = false);
-        return;
-      }
-
-      if (!ordered.contains(_currency)) {
-        _currency = ordered.first;
-      }
-
-      setState(() {
-        _ownedCurrencyCodes
-          ..clear()
-          ..addAll(ordered);
-        _ownedBalances
-          ..clear()
-          ..addAll(balances);
-        _balance = _ownedBalances[_currency] ?? 0;
-        _loadingBalance = false;
-      });
-      _emitUpdate();
-    } catch (_) {
-      if (mounted) setState(() => _loadingBalance = false);
-    }
+    _ownedCurrencyCodes
+      ..clear()
+      ..addAll(owned.fiatCodes);
+    _ownedBalances
+      ..clear()
+      ..addAll(owned.fiatBalances);
+    _balance = _ownedBalances[_currency] ?? 0;
+    _loadingBalance = false;
   }
 
   Future<void> _selectWallet(String code) async {
@@ -258,19 +181,6 @@ class _SendMoneyFormScreenState extends State<SendMoneyFormScreen> {
       }
     });
     _emitUpdate();
-
-    if (!isFirebaseInitialized()) return;
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return;
-    try {
-      final wallet =
-          await _walletRepository.getWalletBalance(user.uid, currency: upper);
-      if (!mounted || wallet == null) return;
-      setState(() {
-        _balance = wallet.balance;
-        _ownedBalances[upper] = _balance;
-      });
-    } catch (_) {}
   }
 
   /// Same picker sheet as Exchange (`CurrencyPickerBottomSheet`).
@@ -595,6 +505,21 @@ class _SendMoneyFormScreenState extends State<SendMoneyFormScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final accounts = ref.watch(walletAccountsProvider);
+    final snap = accounts.valueOrNull;
+    if (snap != null && snap.refreshedAt != _appliedWalletAt) {
+      _applyOwnedWallets(
+        OwnedWalletBalances.fundedFiat(snap),
+        loading: accounts.isLoading,
+      );
+      _appliedWalletAt = snap.refreshedAt;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _emitUpdate();
+      });
+    } else if (snap == null) {
+      _loadingBalance = accounts.isLoading;
+    }
+
     final colors = AppColors.getThemeColors(context);
     final primary = Theme.of(context).colorScheme.primary;
 

@@ -1,5 +1,8 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:pretium/core/providers/service_providers.dart';
+import 'package:pretium/features/auth/providers/auth_flow_provider.dart';
 import 'package:pretium/features/auth/widgets/custom_text_field.dart';
 import 'package:pretium/features/auth/widgets/wallet_icon_header.dart';
 import 'package:pretium/services/auth_service.dart';
@@ -8,20 +11,17 @@ import 'package:pretium/utils/async_action_guard.dart';
 import 'package:pretium/widgets/app_shimmer.dart';
 
 /// Password reset via [AuthService.sendPasswordResetEmail] (Firebase Auth).
-class ForgotPasswordPage extends StatefulWidget {
+class ForgotPasswordPage extends ConsumerStatefulWidget {
   const ForgotPasswordPage({super.key, this.initialEmail = ''});
 
   final String initialEmail;
 
   @override
-  State<ForgotPasswordPage> createState() => _ForgotPasswordPageState();
+  ConsumerState<ForgotPasswordPage> createState() => _ForgotPasswordPageState();
 }
 
-class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
+class _ForgotPasswordPageState extends ConsumerState<ForgotPasswordPage> {
   final TextEditingController _emailController = TextEditingController();
-  final AuthService _authService = AuthService();
-  bool _isLoading = false;
-  bool _sentNeutralSuccess = false;
 
   static const _neutralSuccessCopy =
       'If an account exists for this email, you will receive a reset link.';
@@ -51,17 +51,18 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
 
     await runGuardedAsync(
       this,
-      isSubmitting: () => _isLoading,
-      setSubmitting: (value) => setState(() => _isLoading = value),
+      isSubmitting: () => ref.read(forgotPasswordFlowProvider).isLoading,
+      setSubmitting: (value) =>
+          ref.read(forgotPasswordFlowProvider.notifier).setLoading(value),
       action: () async {
         try {
-          await _authService.sendPasswordResetEmail(email);
+          await ref.read(authServiceProvider).sendPasswordResetEmail(email);
           if (!mounted) return;
-          setState(() => _sentNeutralSuccess = true);
+          ref.read(forgotPasswordFlowProvider.notifier).markSent();
         } on FirebaseAuthException catch (e) {
           if (e.code == 'user-not-found') {
             if (!mounted) return;
-            setState(() => _sentNeutralSuccess = true);
+            ref.read(forgotPasswordFlowProvider.notifier).markSent();
             return;
           }
           final message = AuthService.getPasswordResetErrorMessage(e);
@@ -87,6 +88,7 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
 
   @override
   Widget build(BuildContext context) {
+    final flow = ref.watch(forgotPasswordFlowProvider);
     final primary = Theme.of(context).colorScheme.primary;
 
     return Scaffold(
@@ -104,7 +106,7 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
               WalletIconHeader(color: primary),
               const SizedBox(height: 48),
               Text(
-                _sentNeutralSuccess ? 'Check your email' : 'Reset password',
+                flow.sentNeutralSuccess ? 'Check your email' : 'Reset password',
                 textAlign: TextAlign.center,
                 style: const TextStyle(
                   fontSize: 24,
@@ -113,7 +115,7 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
               ),
               const SizedBox(height: 12),
               Text(
-                _sentNeutralSuccess
+                flow.sentNeutralSuccess
                     ? _neutralSuccessCopy
                     : 'Enter the email for your account. We will send a reset link.',
                 textAlign: TextAlign.center,
@@ -123,7 +125,7 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
                 ),
               ),
               const SizedBox(height: 40),
-              if (!_sentNeutralSuccess) ...[
+              if (!flow.sentNeutralSuccess) ...[
                 CustomTextField(
                   controller: _emailController,
                   labelText: 'Email',
@@ -144,9 +146,9 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
                         borderRadius: BorderRadius.circular(12),
                       ),
                     ),
-                    onPressed: _isLoading ? null : _submit,
+                    onPressed: flow.isLoading ? null : _submit,
                     child:
-                        _isLoading
+                        flow.isLoading
                             ? const ShimmerBusyIndicator(onPrimary: true)
                             : const Text(
                               'Send reset link',

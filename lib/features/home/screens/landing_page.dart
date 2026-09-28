@@ -2,12 +2,14 @@ import 'dart:async';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:pretium/core/providers/recent_transactions_provider.dart';
+import 'package:pretium/core/providers/wallet_accounts_provider.dart';
 import 'package:pretium/features/pay/screens/pay_page.dart';
 import 'package:pretium/core/constants/app_colors.dart';
 import 'package:pretium/app/route_names.dart';
 import 'package:pretium/services/app_access_guard.dart';
-import 'package:pretium/services/home_wallet_focus.dart';
-import 'package:pretium/services/wallet_balance_refresh.dart';
+import 'package:pretium/core/providers/home_wallet_focus_provider.dart';
 import 'package:pretium/widgets/app_shimmer.dart';
 import '/widgets/header_widget.dart';
 import '/widgets/wallet_card.dart';
@@ -25,19 +27,14 @@ class LandingPage extends StatelessWidget {
   }
 }
 
-class DashboardScreen extends StatefulWidget {
+class DashboardScreen extends ConsumerStatefulWidget {
   const DashboardScreen({super.key});
   
   @override
-  State<DashboardScreen> createState() => _DashboardScreenState();
+  ConsumerState<DashboardScreen> createState() => _DashboardScreenState();
 }
 
-class _DashboardScreenState extends State<DashboardScreen> {
-  int _selectedIndex = 0;
-  int _selectedTab = 0; // For pill-shaped tabs: 0 = Fiat, 1 = Crypto
-  String? _focusCryptoCurrency;
-  final GlobalKey<State<WalletCard>> _walletCardKey = GlobalKey<State<WalletCard>>();
-  final GlobalKey<State<PlaceholderTransactions>> _transactionsKey = GlobalKey<State<PlaceholderTransactions>>();
+class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   bool _accessChecked = false;
   bool _navVisible = true;
   Timer? _navRevealTimer;
@@ -47,7 +44,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   @override
   void initState() {
-    WalletBalanceRefresh.revision.addListener(_onBalancesRefreshed);
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) => _verifyCustomerAccess());
   }
@@ -55,7 +51,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
   @override
   void dispose() {
     _navRevealTimer?.cancel();
-    WalletBalanceRefresh.revision.removeListener(_onBalancesRefreshed);
     super.dispose();
   }
 
@@ -88,15 +83,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return false;
   }
 
-  void _onBalancesRefreshed() {
-    if (!mounted) return;
-    final txState = _transactionsKey.currentState;
-    if (txState == null) return;
-    try {
-      (txState as dynamic).refreshTransactions();
-    } catch (_) {}
-  }
-
   Future<void> _verifyCustomerAccess() async {
     final guard = AppAccessGuard();
     final access = await guard.evaluate();
@@ -105,28 +91,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
       await guard.enforceDeniedAccess(context, access);
       return;
     }
-    setState(() {
-      _accessChecked = true;
-      _applyPendingHomeFocus();
-    });
-  }
-
-  void _applyPendingHomeFocus() {
-    final focus = HomeWalletFocus.take();
-    if (focus == null) return;
-    _selectedTab = focus.walletTab;
-    _focusCryptoCurrency = focus.cryptoCurrency;
+    setState(() => _accessChecked = true);
+    ref.read(dashboardNavProvider.notifier).applyPendingFocus();
   }
 
   Future<void> _silentRefreshBalance() async {
-    final walletCardState = _walletCardKey.currentState;
-    if (walletCardState == null) return;
-    try {
-      await (walletCardState as dynamic).refreshBalance(
-        silent: true,
-        forceRefresh: true,
-      );
-    } catch (_) {}
+    await ref.read(walletAccountsProvider.notifier).refresh(force: true);
   }
 
   Future<void> _openAndRefreshOnReturn(Future<dynamic> Function() openRoute) async {
@@ -136,30 +106,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   void _onItemTapped(int index) {
-    setState(() {
-      _selectedIndex = index;
-    });
+    ref.read(dashboardNavProvider.notifier).selectIndex(index);
   }
 
   Future<void> _handleRefresh() async {
-    // Refresh wallet balance when user pulls down
-    final walletCardState = _walletCardKey.currentState;
-    if (walletCardState != null) {
-      try {
-        await (walletCardState as dynamic).refreshBalance(forceRefresh: true);
-      } catch (e) {
-        // If method doesn't exist, ignore
-      }
-    }
-    // Refresh recent transactions (get transaction endpoint)
-    final transactionsState = _transactionsKey.currentState;
-    if (transactionsState != null) {
-      try {
-        await (transactionsState as dynamic).refreshTransactions();
-      } catch (e) {
-        // If method doesn't exist, ignore
-      }
-    }
+    await Future.wait([
+      ref.read(walletAccountsProvider.notifier).refresh(force: true),
+      ref.read(recentTransactionsProvider.notifier).refresh(),
+    ]);
     await Future.delayed(const Duration(milliseconds: 500));
   }
 
@@ -172,6 +126,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       );
     }
 
+    final nav = ref.watch(dashboardNavProvider);
     final colors = AppColors.getThemeColors(context);
     final primary = Theme.of(context).colorScheme.primary;
     final bottomInset = MediaQuery.of(context).padding.bottom;
@@ -261,21 +216,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                   ),
                                   const SizedBox(height: 12),
                                   WalletCard(
-                                    key: _walletCardKey,
-                                    selectedTab: _selectedTab,
-                                    focusCryptoCurrency: _focusCryptoCurrency,
+                                    selectedTab: nav.selectedTab,
+                                    focusCryptoCurrency: nav.focusCryptoCurrency,
                                   ),
                                   const SizedBox(height: 12),
                                   FinancialServices(
                                     swapInitialCurrency:
-                                        _selectedTab == 0 ? 'USD' : 'USDT',
+                                        nav.selectedTab == 0 ? 'USD' : 'USDT',
                                   ),
                                   const SizedBox(height: 24),
                                   const RecentTransactionsHeader(),
                                   const SizedBox(height: 8),
-                                  PlaceholderTransactions(
-                                    key: _transactionsKey,
-                                  ),
+                                  const PlaceholderTransactions(),
                                 ],
                               ),
                             ),
@@ -328,7 +280,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
         () => Navigator.of(context).push(
           MaterialPageRoute(
             builder: (context) => PayPage(
-              initialCurrency: _selectedTab == 0 ? 'KES' : 'USD',
+              initialCurrency:
+                  ref.read(dashboardNavProvider).selectedTab == 0 ? 'KES' : 'USD',
             ),
           ),
         ),
@@ -392,7 +345,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               Expanded(
                                 child: _FloatingNavItem(
                                   icon: Icons.account_balance_wallet_outlined,
-                                  isSelected: _selectedIndex == 0,
+                                  isSelected:
+                                      ref.watch(dashboardNavProvider).selectedIndex == 0,
                                   primary: primary,
                                   inactiveColor: colors.textTertiary,
                                   onTap: () {
@@ -408,7 +362,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               Expanded(
                                 child: _FloatingNavItem(
                                   icon: Icons.history_outlined,
-                                  isSelected: _selectedIndex == 2,
+                                  isSelected:
+                                      ref.watch(dashboardNavProvider).selectedIndex == 2,
                                   primary: primary,
                                   inactiveColor: colors.textTertiary,
                                   onTap: () {
@@ -446,14 +401,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Widget _buildPillTab(String label, int index) {
     final colors = AppColors.getThemeColors(context);
     final primary = Theme.of(context).colorScheme.primary;
-    final isSelected = _selectedTab == index;
+    final isSelected = ref.watch(dashboardNavProvider).selectedTab == index;
     
     return Expanded(
       child: GestureDetector(
         onTap: () {
-          setState(() {
-            _selectedTab = index;
-          });
+          ref.read(dashboardNavProvider.notifier).selectTab(index);
         },
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),

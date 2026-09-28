@@ -1,115 +1,41 @@
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:pretium/core/constants/app_colors.dart';
-import 'package:pretium/models/transaction_model.dart';
+import 'package:pretium/core/providers/auth_providers.dart';
+import 'package:pretium/core/providers/recent_transactions_provider.dart';
 import 'package:pretium/features/transactions/screens/transaction_detail_page.dart';
 import 'package:pretium/features/transactions/widgets/transaction_list_tile.dart';
-import 'package:pretium/services/dashboard_session_cache.dart';
-import 'package:pretium/services/transactions_service.dart';
 import 'package:pretium/widgets/app_shimmer.dart';
 
-class PlaceholderTransactions extends StatefulWidget {
+class PlaceholderTransactions extends ConsumerWidget {
   const PlaceholderTransactions({super.key});
 
   @override
-  State<PlaceholderTransactions> createState() => _PlaceholderTransactionsState();
-}
-
-class _PlaceholderTransactionsState extends State<PlaceholderTransactions> {
-  final TransactionsService _transactionsService = TransactionsService();
-  TransactionsResponse? _transactionsResponse;
-  bool _isLoading = true;
-  String? _error;
-
-  @override
-  void initState() {
-    super.initState();
-    final cached = DashboardSessionCache.instance.copyRecentTransactionsIfFresh();
-    if (cached != null) {
-      _transactionsResponse = cached;
-      _isLoading = false;
-      return;
-    }
-    _loadTransactions();
-  }
-
-  /// Call this from the parent (e.g. pull-to-refresh) to reload transactions.
-  Future<void> refreshTransactions() async {
-    await _loadTransactions(forceNetwork: true);
-  }
-
-  Future<void> _loadTransactions({bool forceNetwork = false}) async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) {
-      setState(() {
-        _isLoading = false;
-      });
-      return;
-    }
-
-    if (!forceNetwork) {
-      final cached = DashboardSessionCache.instance.copyRecentTransactionsIfFresh();
-      if (cached != null) {
-        if (mounted) {
-          setState(() {
-            _transactionsResponse = cached;
-            _isLoading = false;
-            _error = null;
-          });
-        }
-        return;
-      }
-    }
-
-    setState(() {
-      _isLoading = true;
-      _error = null;
-    });
-
-    try {
-      final response = await _transactionsService.getTransactions(limit: 5);
-      if (mounted) {
-        DashboardSessionCache.instance.recordTransactions(response);
-        setState(() {
-          _transactionsResponse = response;
-          _isLoading = false;
-        });
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _error = e.toString();
-          _isLoading = false;
-        });
-      }
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final user = FirebaseAuth.instance.currentUser;
-
+  Widget build(BuildContext context, WidgetRef ref) {
+    final user = ref.watch(currentUserProvider);
     if (user == null) {
       return const TransactionListShimmer(itemCount: 3);
     }
 
-    if (_isLoading) {
+    final asyncTx = ref.watch(recentTransactionsProvider);
+    if (asyncTx.isLoading && !asyncTx.hasValue) {
       return const TransactionListShimmer(itemCount: 3);
     }
 
-    if (_error != null) {
-      return _ErrorTransactions(error: _error!, onRetry: _loadTransactions);
+    if (asyncTx.hasError && !asyncTx.hasValue) {
+      return _ErrorTransactions(
+        error: asyncTx.error.toString(),
+        onRetry: () => ref.read(recentTransactionsProvider.notifier).refresh(),
+      );
     }
 
-    if (_transactionsResponse == null || 
-        _transactionsResponse!.transactions.isEmpty) {
+    final response = asyncTx.valueOrNull;
+    if (response == null || response.transactions.isEmpty) {
       return const _EmptyTransactions();
     }
 
-    final transactions = _transactionsResponse!.transactions;
-
     return Column(
-      children: transactions.map((transaction) {
+      children: response.transactions.map((transaction) {
         return TransactionListTile(
           transaction: transaction,
           style: TransactionListTileStyle.compact,
@@ -145,7 +71,7 @@ class _EmptyTransactions extends StatelessWidget {
 class _ErrorTransactions extends StatelessWidget {
   final String error;
   final VoidCallback onRetry;
-  
+
   const _ErrorTransactions({required this.error, required this.onRetry});
 
   @override

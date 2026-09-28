@@ -3,146 +3,48 @@
 // African currencies → Paystack; USD, GBP, EUR, and other non-African → Transak.
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:pretium/features/crypto/screens/crypto_deposit_page.dart';
-import 'package:pretium/repositories/wallet_repository.dart';
-import 'package:pretium/repositories/user_repository.dart';
+import 'package:pretium/core/providers/user_profile_provider.dart';
+import 'package:pretium/core/providers/wallet_accounts_provider.dart';
 import 'package:pretium/services/payment_service.dart';
-import 'package:pretium/services/dashboard_session_cache.dart';
 import 'package:pretium/services/wallet_balance_refresh.dart';
-import 'package:pretium/services/countries_api_service.dart';
-import 'package:pretium/models/wallet_model.dart';
-import 'package:pretium/utils/firebase_utils.dart';
 import 'package:pretium/core/constants/app_colors.dart';
 import 'package:pretium/features/topup/models/topup_deposit_country.dart';
-import 'package:pretium/features/topup/models/topup_quote.dart';
+import 'package:pretium/features/topup/providers/topup_flow_provider.dart';
 import 'package:pretium/features/topup/screens/deposit_review_screen.dart';
 import 'package:pretium/features/topup/screens/payment_checkout_webview_page.dart';
-import 'package:pretium/features/topup/services/topup_quote_api_service.dart';
 import 'package:pretium/widgets/app_shimmer.dart';
 import 'package:pretium/widgets/bottom_safe_action_bar.dart';
 
-/// Fiat codes for the Deposit currency picker.
-/// Prefers [apiCodes] from `GET /api/countries`; falls back to the static catalog.
-/// When [excludeAfrican] is true (International Topup), African fiat is omitted.
-/// Otherwise African fiat is dropped except KES and ETB; AED is never shown.
-List<String> _topupFiatCurrencyCodes({
-  List<String>? apiCodes,
-  String? includeCode,
-  bool excludeAfrican = false,
-}) {
-  final codes = <String>{
-    if (apiCodes != null && apiCodes.isNotEmpty)
-      ...apiCodes
-    else ...[
-      ...TopupDepositCountry.depositCurrencyCodes,
-      'EUR',
-      'GBP',
-    ],
-  };
-
-  final extra = includeCode?.trim().toUpperCase();
-  if (extra != null && extra.isNotEmpty) {
-    final extraAllowed = excludeAfrican
-        ? !TopupDepositCountry.isAfricanCurrency(extra)
-        : TopupDepositCountry.isAllowedOnDepositSelector(extra);
-    if (extraAllowed) codes.add(extra);
-  }
-
-  final list = codes.toList()..sort();
-  if (excludeAfrican) {
-    return list
-        .where((c) => !TopupDepositCountry.isAfricanCurrency(c))
-        .toList();
-  }
-  return list
-      .where(TopupDepositCountry.isAllowedOnDepositSelector)
-      .toList();
-}
-
-String _coerceTopupFiatCurrency(String? code) {
-  final u = code?.trim().toUpperCase() ?? '';
-  if (u.isEmpty) return 'USD';
-  return TopupDepositCountry.resolve(u).code;
-}
-
-enum _TopUpPaymentMethod {
-  cardMobileMoney,
-  directFiatDeposit,
-  cryptoDeposit,
-}
-
-enum _TopUpStep { form, review }
-
-// Top Up main screen composed of smaller widgets
-class TopUpPage extends StatefulWidget {
+class TopUpPage extends ConsumerStatefulWidget {
   const TopUpPage({super.key, this.initialDepositCountry});
 
   /// When set, pre-selects that currency in Set amount and is passed to direct fiat deposit.
   final TopupDepositCountry? initialDepositCountry;
 
   @override
-  State<TopUpPage> createState() => _TopUpPageState();
+  ConsumerState<TopUpPage> createState() => _TopUpPageState();
 }
 
-class _TopUpPageState extends State<TopUpPage> {
+class _TopUpPageState extends ConsumerState<TopUpPage> {
   final TextEditingController _amountCtrl = TextEditingController();
   final TextEditingController _emailCtrl = TextEditingController();
   final TextEditingController _firstNameCtrl = TextEditingController();
   final TextEditingController _lastNameCtrl = TextEditingController();
 
-  final WalletRepository _walletRepository = WalletRepository();
-  final UserRepository _userRepository = UserRepository();
-  final CountriesApiService _countriesApi = CountriesApiService();
-  final TopupQuoteApiService _quoteApi = TopupQuoteApiService();
-
   bool _hideBalance = false;
-  /// Per-currency fiat balances so Available matches the selected currency.
-  final Map<String, double> _fiatBalances = {};
-  String _selectedCurrency = 'USD';
-  bool _isProcessingPayment = false;
-  bool _isLoadingBalance = false;
-  bool _hasBalanceData = false;
-  bool _loadingCountries = true;
-  List<String> _apiFiatCurrencies = const [];
-  _TopUpPaymentMethod _selectedMethod = _TopUpPaymentMethod.directFiatDeposit;
-  _TopUpStep _step = _TopUpStep.form;
+  bool _profileFilled = false;
 
-  TopupQuote? _quote;
-  bool _isLoadingQuote = false;
-  String? _quoteError;
-  int _quoteRequestId = 0;
-
-  /// Minimum Set amount for Fiat Option actions when currency is KES.
   static const double _kesFiatOptionMinimumAmount = 150;
 
-  double get _availableBalanceForSelected =>
-      _fiatBalances[_selectedCurrency] ?? 0.0;
+  TopUpFlowState get _flow => ref.read(topUpFlowProvider);
+  TopUpFlowNotifier get _flowN => ref.read(topUpFlowProvider.notifier);
 
-  bool get _isInternationalTopup =>
-      _selectedMethod == _TopUpPaymentMethod.cardMobileMoney;
-
-  List<String> get _depositPickerCurrencies => _topupFiatCurrencyCodes(
-        apiCodes: _apiFiatCurrencies,
-        includeCode: _selectedCurrency,
-        excludeAfrican: _isInternationalTopup,
-      );
-
-  void _selectPaymentMethod(_TopUpPaymentMethod method) {
-    setState(() {
-      _selectedMethod = method;
-      if (method == _TopUpPaymentMethod.cardMobileMoney &&
-          TopupDepositCountry.isAfricanCurrency(_selectedCurrency)) {
-        final international = _topupFiatCurrencyCodes(
-          apiCodes: _apiFiatCurrencies,
-          excludeAfrican: true,
-        );
-        _selectedCurrency = international.contains('USD')
-            ? 'USD'
-            : (international.isNotEmpty ? international.first : 'USD');
-      }
-    });
-    if (method == _TopUpPaymentMethod.cryptoDeposit) {
+  void _selectPaymentMethod(TopUpPaymentMethod method) {
+    _flowN.selectMethod(method);
+    if (method == TopUpPaymentMethod.cryptoDeposit) {
       _openCryptoDeposit();
     }
   }
@@ -151,186 +53,33 @@ class _TopUpPageState extends State<TopUpPage> {
     await Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
         builder: (_) => CryptoDepositPage(
-          initialAsset: _selectedCurrency == 'USDC' ? 'USDC' : 'USDT',
+          initialAsset:
+              _flow.selectedCurrency == 'USDC' ? 'USDC' : 'USDT',
         ),
       ),
     );
     if (!mounted) return;
     await WalletBalanceRefresh.afterSuccessfulTransaction();
-    await _loadWalletBalance(silent: true);
+    await ref.read(walletAccountsProvider.notifier).refresh(force: true);
   }
 
   @override
   void initState() {
     super.initState();
-    final country = widget.initialDepositCountry;
-    if (country != null) {
-      _selectedCurrency = _coerceTopupFiatCurrency(country.code);
-    }
-    _hydrateBalancesFromCache();
-    _loadWalletBalance(silent: _hasBalanceData);
-    _loadUserProfile();
-    _loadDepositCurrencies();
-  }
-
-  Future<void> _loadDepositCurrencies() async {
-    final cached = CountriesApiService.cached;
-    if (cached != null && cached.fiatCodes.isNotEmpty) {
-      _applyDepositCurrencies(cached.fiatCodes);
-    }
-
-    try {
-      final catalog = await _countriesApi.fetchCountries();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      _applyDepositCurrencies(catalog.fiatCodes);
-    } catch (e) {
-      debugPrint('TopUpPage - Failed to load /api/countries: $e');
-      if (!mounted) return;
-      setState(() => _loadingCountries = false);
-    }
-  }
-
-  void _applyDepositCurrencies(List<String> fiatCodes) {
-    setState(() {
-      _apiFiatCurrencies = List<String>.from(fiatCodes);
-      _loadingCountries = false;
-      final allowed = _topupFiatCurrencyCodes(
-        apiCodes: _apiFiatCurrencies,
-        includeCode: _selectedCurrency,
-      );
-      if (!allowed.contains(_selectedCurrency) && allowed.isNotEmpty) {
-        _selectedCurrency = allowed.first;
-      }
+      _flowN.configureInitialCurrency(widget.initialDepositCountry?.code);
     });
   }
 
-  void _hydrateBalancesFromCache() {
-    final snap = DashboardSessionCache.instance.readWalletLastKnown();
-    if (snap == null) return;
-
-    for (final entry in snap.fiatWallets.entries) {
-      _fiatBalances[entry.key] = entry.value.balance;
-    }
-    _hasBalanceData = _fiatBalances.isNotEmpty;
-
-    // Only pick a default currency from cache when the caller did not preset one.
-    if (widget.initialDepositCountry == null &&
-        snap.availableFiatCurrencies.isNotEmpty) {
-      _selectedCurrency =
-          _coerceTopupFiatCurrency(snap.availableFiatCurrencies.first);
-    }
-  }
-
-  Future<void> _loadUserProfile() async {
-    if (!isFirebaseInitialized()) return;
-
-    try {
-      final user = FirebaseAuth.instance.currentUser;
-      if (user == null) return;
-
-      final userProfile = await _userRepository.getUserProfile(user.uid);
-      if (userProfile != null && mounted) {
-        // Auto-fill user data from Firestore
-        _emailCtrl.text = userProfile.email;
-        _firstNameCtrl.text = userProfile.firstName;
-        _lastNameCtrl.text = userProfile.lastName;
-      }
-    } catch (e) {
-      debugPrint('Failed to load user profile on TopUpPage: $e');
-      // Continue without auto-filling if profile load fails
-    }
-  }
-
-  Future<void> _loadWalletBalance({bool silent = false}) async {
-    if (_isLoadingBalance || !isFirebaseInitialized()) return;
-
-    if (!silent) {
-      setState(() {
-        _isLoadingBalance = true;
-      });
-    }
-
-    try {
-      final user = FirebaseAuth.instance.currentUser;
-      if (user == null) return;
-
-      final accounts = await _walletRepository.fetchAccounts(forceRefresh: true);
-      final fiatWallets = <String, Wallet>{
-        ...accounts.fiatWallets,
-        for (final e in accounts.fiatBalances.entries)
-          if (!accounts.fiatWallets.containsKey(e.key))
-            e.key: Wallet(currencyCode: e.key, balance: e.value),
-      };
-      // Ensure USD is present so the dropdown always has a balance entry.
-      fiatWallets.putIfAbsent(
-        'USD',
-        () => accounts.fiatWallet('USD') ?? Wallet(currencyCode: 'USD', balance: 0),
-      );
-
-      final availableCurrencies = accounts.fiatWallets.keys.toList();
-      if (availableCurrencies.isEmpty) {
-        availableCurrencies.addAll(fiatWallets.keys);
-      }
-      if (!availableCurrencies.contains('USD')) {
-        availableCurrencies.insert(0, 'USD');
-      }
-
-      final cryptoWallet = accounts.cryptoWallet('USDT') ??
-          Wallet(currencyCode: 'USDT', balance: 0);
-
-      final existing = DashboardSessionCache.instance.readWalletLastKnown();
-      final cryptoWallets = <String, Wallet>{
-        ...?existing?.cryptoWallets,
-        ...accounts.cryptoWallets,
-        'USDT': cryptoWallet,
-      };
-
-      DashboardSessionCache.instance.recordWalletSnapshot(
-        fiatWallets: {
-          ...?existing?.fiatWallets,
-          ...fiatWallets,
-        },
-        availableFiatCurrencies: availableCurrencies.isNotEmpty
-            ? availableCurrencies
-            : (existing?.availableFiatCurrencies ?? ['USD']),
-        cryptoWallets: cryptoWallets,
-        availableCryptoCurrencies: existing?.availableCryptoCurrencies.isNotEmpty == true
-            ? existing!.availableCryptoCurrencies
-            : const ['USDT', 'USDC'],
-        cachedFiatWallet: fiatWallets[_selectedCurrency] ??
-            fiatWallets[availableCurrencies.isNotEmpty
-                ? availableCurrencies.first
-                : 'USD'] ??
-            existing?.cachedFiatWallet,
-        cachedCryptoWallet: cryptoWallets['USDT'] ?? existing?.cachedCryptoWallet,
-      );
-
-      if (!mounted) return;
-
-      setState(() {
-        _fiatBalances
-          ..clear()
-          ..addEntries(
-            fiatWallets.entries.map((e) => MapEntry(e.key, e.value.balance)),
-          );
-        _hasBalanceData = true;
-        // Keep the user's selected currency; do not overwrite after init.
-      });
-    } catch (e) {
-      debugPrint('Failed to load wallet balances on TopUpPage: $e');
-      if (!mounted || silent) return;
-      setState(() {
-        if (!_hasBalanceData) {
-          _fiatBalances.clear();
-        }
-      });
-    } finally {
-      if (mounted && !silent) {
-        setState(() {
-          _isLoadingBalance = false;
-        });
-      }
-    }
+  void _fillProfileIfNeeded() {
+    if (_profileFilled) return;
+    final profile = ref.read(userProfileProvider).valueOrNull;
+    if (profile == null) return;
+    _profileFilled = true;
+    if (_emailCtrl.text.isEmpty) _emailCtrl.text = profile.email;
+    if (_firstNameCtrl.text.isEmpty) _firstNameCtrl.text = profile.firstName;
+    if (_lastNameCtrl.text.isEmpty) _lastNameCtrl.text = profile.lastName;
   }
 
   @override
@@ -349,42 +98,28 @@ class _TopUpPageState extends State<TopUpPage> {
 
   /// Fiat Option (Paystack, Transak, direct fiat): KES requires at least [_kesFiatOptionMinimumAmount].
   bool _meetsKesFiatOptionMinimum() {
-    if (_selectedCurrency != 'KES') return true;
+    if (_flow.selectedCurrency != 'KES') return true;
     return _parsedSetAmount() >= _kesFiatOptionMinimumAmount;
   }
 
-  String get _cardMobileMoneyProvider =>
-      TopupDepositCountry.cardMobileMoneyProviderFor(_selectedCurrency);
-
-  String get _providerDisplayLabel {
-    switch (_cardMobileMoneyProvider) {
-      case 'paystack':
-        return 'Paystack';
-      case 'transak':
-        return 'Transak';
-      default:
-        return _cardMobileMoneyProvider;
-    }
-  }
-
   String get _paymentMethodTitle {
-    switch (_selectedMethod) {
-      case _TopUpPaymentMethod.directFiatDeposit:
+    switch (_flow.method) {
+      case TopUpPaymentMethod.directFiatDeposit:
         return 'Local Topup';
-      case _TopUpPaymentMethod.cardMobileMoney:
+      case TopUpPaymentMethod.cardMobileMoney:
         return 'International Topup';
-      case _TopUpPaymentMethod.cryptoDeposit:
+      case TopUpPaymentMethod.cryptoDeposit:
         return 'Crypto Deposit';
     }
   }
 
   String get _paymentMethodSubtitle {
-    switch (_selectedMethod) {
-      case _TopUpPaymentMethod.directFiatDeposit:
+    switch (_flow.method) {
+      case TopUpPaymentMethod.directFiatDeposit:
         return 'Local bank or card or mobile money';
-      case _TopUpPaymentMethod.cardMobileMoney:
+      case TopUpPaymentMethod.cardMobileMoney:
         return 'International bank or card, Apple Pay or Google Pay';
-      case _TopUpPaymentMethod.cryptoDeposit:
+      case TopUpPaymentMethod.cryptoDeposit:
         return 'Crypto or stablecoin to a wallet address';
     }
   }
@@ -420,67 +155,21 @@ class _TopUpPageState extends State<TopUpPage> {
   }
 
   void _goToReview() {
-    setState(() {
-      _step = _TopUpStep.review;
-      _quote = null;
-      _quoteError = null;
-      _isLoadingQuote = true;
-    });
-    _loadTopupQuote();
+    _flowN.goToReview();
+    _flowN.loadQuote(amount: _parsedSetAmount());
   }
 
   void _goToForm() {
-    if (_isProcessingPayment) return;
-    _quoteRequestId++;
-    setState(() {
-      _step = _TopUpStep.form;
-      _isLoadingQuote = false;
-      _quoteError = null;
-    });
+    if (_flow.isProcessingPayment) return;
+    _flowN.goToForm();
   }
 
-  Future<void> _loadTopupQuote() async {
-    final requestId = ++_quoteRequestId;
-    final amount = _parsedSetAmount();
-    final currency = _selectedCurrency;
-
-    setState(() {
-      _isLoadingQuote = true;
-      _quoteError = null;
-    });
-
-    try {
-      final quote = await _quoteApi.fetchQuote(
-        amount: amount,
-        currency: currency,
-      );
-      if (!mounted || requestId != _quoteRequestId) return;
-      setState(() {
-        _quote = quote;
-        _isLoadingQuote = false;
-        _quoteError = null;
-      });
-    } catch (e) {
-      if (!mounted || requestId != _quoteRequestId) return;
-      final message = e is TopupQuoteApiException
-          ? e.message
-          : 'Unable to load deposit quote. Please try again.';
-      setState(() {
-        _isLoadingQuote = false;
-        _quoteError = message;
-        // Keep Confirm disabled until a successful quote; show Free/amount fallback
-        // values only as placeholders while the user retries.
-        _quote = TopupQuote.fallback(
-          amount: amount,
-          currency: currency,
-          checkoutProvider: _providerDisplayLabel,
-        );
-      });
-    }
+  Future<void> _loadTopupQuote() {
+    return _flowN.loadQuote(amount: _parsedSetAmount());
   }
 
   void _onBackPressed() {
-    if (_step == _TopUpStep.review) {
+    if (_flow.step == TopUpStep.review) {
       _goToForm();
       return;
     }
@@ -490,7 +179,7 @@ class _TopUpPageState extends State<TopUpPage> {
   /// Card checkout: createPayment (Cloud Function) → open hosted checkout in-app.
   Future<void> _processFiatTopUp() async {
     if (!_validateFiatDepositForm()) return;
-    if (_isProcessingPayment) return;
+    if (_flow.isProcessingPayment) return;
 
     final amount = _parsedSetAmount();
     final user = FirebaseAuth.instance.currentUser;
@@ -498,24 +187,22 @@ class _TopUpPageState extends State<TopUpPage> {
         ? _emailCtrl.text.trim()
         : user?.email;
 
-    setState(() {
-      _isProcessingPayment = true;
-    });
+    _flowN.setProcessing(true);
 
     try {
       String? userPhoneNumber;
       try {
         if (user != null) {
-          final userProfile = await _userRepository.getUserProfile(user.uid);
-          userPhoneNumber = userProfile?.phoneNumber;
+          userPhoneNumber =
+              ref.read(userProfileProvider).valueOrNull?.phoneNumber;
         }
       } catch (_) {}
 
       final paymentService = PaymentService();
       final result = await paymentService.createPayment(
         amount: amount,
-        currency: _selectedCurrency,
-        provider: _cardMobileMoneyProvider,
+        currency: _flow.selectedCurrency,
+        provider: _flow.cardMobileMoneyProvider,
         email: email!,
         firstName: _firstNameCtrl.text.trim().isNotEmpty
             ? _firstNameCtrl.text.trim()
@@ -554,27 +241,27 @@ class _TopUpPageState extends State<TopUpPage> {
       );
       // Checkout may have settled while the WebView was open — refresh ledger.
       await WalletBalanceRefresh.afterSuccessfulTransaction();
-      if (mounted) await _loadWalletBalance(silent: true);
+      if (mounted) {
+        await ref.read(walletAccountsProvider.notifier).refresh(force: true);
+      }
     } catch (e) {
       _showError('Error processing payment: $e');
     } finally {
       if (mounted) {
-        setState(() {
-          _isProcessingPayment = false;
-        });
+        _flowN.setProcessing(false);
       }
     }
   }
 
   void _onNextPressed() {
-    if (_isProcessingPayment) return;
-    switch (_selectedMethod) {
-      case _TopUpPaymentMethod.cardMobileMoney:
-      case _TopUpPaymentMethod.directFiatDeposit:
+    if (_flow.isProcessingPayment) return;
+    switch (_flow.method) {
+      case TopUpPaymentMethod.cardMobileMoney:
+      case TopUpPaymentMethod.directFiatDeposit:
         if (_validateFiatDepositForm()) {
           _goToReview();
         }
-      case _TopUpPaymentMethod.cryptoDeposit:
+      case TopUpPaymentMethod.cryptoDeposit:
         _openCryptoDeposit();
     }
   }
@@ -601,8 +288,11 @@ class _TopUpPageState extends State<TopUpPage> {
 
   @override
   Widget build(BuildContext context) {
+    ref.watch(topUpFlowProvider);
+    ref.watch(userProfileProvider);
+    _fillProfileIfNeeded();
     final colors = AppColors.getThemeColors(context);
-    final isReview = _step == _TopUpStep.review;
+    final isReview = _flow.step == TopUpStep.review;
 
     return PopScope(
       canPop: !isReview,
@@ -650,17 +340,17 @@ class _TopUpPageState extends State<TopUpPage> {
   Widget _buildReviewStep() {
     final amount = _parsedSetAmount();
     final fallbackAmount =
-        '${amount.toStringAsFixed(2)} $_selectedCurrency';
+        '${amount.toStringAsFixed(2)} ${_flow.selectedCurrency}';
 
     return DepositReviewScreen(
-      quote: _quote,
-      isLoadingQuote: _isLoadingQuote,
-      quoteError: _quoteError,
-      onRetryQuote: _isLoadingQuote ? null : _loadTopupQuote,
+      quote: _flow.quote,
+      isLoadingQuote: _flow.isLoadingQuote,
+      quoteError: _flow.quoteError,
+      onRetryQuote: _flow.isLoadingQuote ? null : _loadTopupQuote,
       fallbackAmountLabel: fallbackAmount,
       paymentMethodTitle: _paymentMethodTitle,
       paymentMethodSubtitle: _paymentMethodSubtitle,
-      isSubmitting: _isProcessingPayment,
+      isSubmitting: _flow.isProcessingPayment,
       onEditDepositDetails: _goToForm,
       onEditPaymentMethod: _goToForm,
       onConfirm: _processFiatTopUp,
@@ -671,9 +361,9 @@ class _TopUpPageState extends State<TopUpPage> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final primary = Theme.of(context).colorScheme.primary;
     final availableLabel = _hideBalance
-        ? 'Available: •••• $_selectedCurrency'
-        : 'Available: ${_availableBalanceForSelected.toStringAsFixed(2)} $_selectedCurrency';
-    final nextLabel = _selectedMethod == _TopUpPaymentMethod.cryptoDeposit
+        ? 'Available: •••• ${_flow.selectedCurrency}'
+        : 'Available: ${_flow.availableBalance.toStringAsFixed(2)} ${_flow.selectedCurrency}';
+    final nextLabel = _flow.method == TopUpPaymentMethod.cryptoDeposit
         ? 'Continue'
         : 'Next';
 
@@ -707,15 +397,14 @@ class _TopUpPageState extends State<TopUpPage> {
                 const SizedBox(height: 8),
                 _DepositAmountField(
                   controller: _amountCtrl,
-                  selectedCurrency: _selectedCurrency,
-                  currencies: _depositPickerCurrencies,
-                  loadingCurrencies: _loadingCountries,
-                  onCurrencyChanged: (currency) {
-                    setState(() => _selectedCurrency = currency);
-                  },
+                  selectedCurrency: _flow.selectedCurrency,
+                  currencies: _flow.depositPickerCurrencies,
+                  loadingCurrencies: _flow.loadingCountries,
+                  onCurrencyChanged: _flowN.selectCurrency,
                 ),
                 const SizedBox(height: 8),
-                if (_isLoadingBalance && !_hasBalanceData)
+                if (ref.watch(walletAccountsProvider).isLoading &&
+                    _flow.fiatBalances.isEmpty)
                   const ShimmerBusyIndicator(width: 96, height: 12)
                 else
                   Text(
@@ -740,9 +429,9 @@ class _TopUpPageState extends State<TopUpPage> {
                   subtitle: 'Local bank or card or mobile money',
                   brandIcon: Icons.account_balance_outlined,
                   selected:
-                      _selectedMethod == _TopUpPaymentMethod.directFiatDeposit,
+                      _flow.method == TopUpPaymentMethod.directFiatDeposit,
                   onTap: () =>
-                      _selectPaymentMethod(_TopUpPaymentMethod.directFiatDeposit),
+                      _selectPaymentMethod(TopUpPaymentMethod.directFiatDeposit),
                 ),
                 const SizedBox(height: 12),
                 _PaymentMethodTile(
@@ -751,9 +440,9 @@ class _TopUpPageState extends State<TopUpPage> {
                       'International bank or card, Apple Pay or Google Pay.',
                   brandIcon: Icons.payment,
                   selected:
-                      _selectedMethod == _TopUpPaymentMethod.cardMobileMoney,
+                      _flow.method == TopUpPaymentMethod.cardMobileMoney,
                   onTap: () =>
-                      _selectPaymentMethod(_TopUpPaymentMethod.cardMobileMoney),
+                      _selectPaymentMethod(TopUpPaymentMethod.cardMobileMoney),
                 ),
                 const SizedBox(height: 12),
                 _PaymentMethodTile(
@@ -762,9 +451,9 @@ class _TopUpPageState extends State<TopUpPage> {
                       'Send any crypto or stablecoin from any network to a wallet address',
                   brandIcon: Icons.currency_bitcoin,
                   selected:
-                      _selectedMethod == _TopUpPaymentMethod.cryptoDeposit,
+                      _flow.method == TopUpPaymentMethod.cryptoDeposit,
                   onTap: () =>
-                      _selectPaymentMethod(_TopUpPaymentMethod.cryptoDeposit),
+                      _selectPaymentMethod(TopUpPaymentMethod.cryptoDeposit),
                 ),
               ],
             ),
@@ -785,8 +474,8 @@ class _TopUpPageState extends State<TopUpPage> {
                 ),
                 elevation: 0,
               ),
-              onPressed: _isProcessingPayment ? null : _onNextPressed,
-              child: _isProcessingPayment
+              onPressed: _flow.isProcessingPayment ? null : _onNextPressed,
+              child: _flow.isProcessingPayment
                   ? const ShimmerBusyIndicator(onPrimary: true)
                   : Text(
                       nextLabel,

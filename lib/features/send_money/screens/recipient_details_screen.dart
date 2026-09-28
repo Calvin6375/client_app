@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:pretium/features/send_money/providers/kenya_banks_provider.dart';
 import 'package:pretium/features/send_money/screens/payment_method_screen.dart';
 import 'package:pretium/models/transaction_details_model.dart';
 import 'package:pretium/core/constants/app_colors.dart';
 import 'package:pretium/features/auth/widgets/phone_number_field.dart';
 import 'package:pretium/features/safari_tap/models/safari_tap_bank.dart';
-import 'package:pretium/features/safari_tap/services/safari_tap_pay_api_service.dart';
 import 'package:pretium/widgets/app_shimmer.dart';
 import 'package:pretium/widgets/bottom_safe_action_bar.dart';
 
@@ -66,7 +67,7 @@ String _defaultDialCodeForCurrency(String currency) {
   }
 }
 
-class RecipientDetailsScreen extends StatefulWidget {
+class RecipientDetailsScreen extends ConsumerStatefulWidget {
   final PaymentMethod paymentMethod;
   final VoidCallback onNext;
   final Function(TransactionDetails) onUpdate;
@@ -83,10 +84,11 @@ class RecipientDetailsScreen extends StatefulWidget {
   });
 
   @override
-  State<RecipientDetailsScreen> createState() => _RecipientDetailsScreenState();
+  ConsumerState<RecipientDetailsScreen> createState() =>
+      _RecipientDetailsScreenState();
 }
 
-class _RecipientDetailsScreenState extends State<RecipientDetailsScreen> {
+class _RecipientDetailsScreenState extends ConsumerState<RecipientDetailsScreen> {
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _fullNameCtrl;
   late final TextEditingController _phoneCtrl;
@@ -95,15 +97,10 @@ class _RecipientDetailsScreenState extends State<RecipientDetailsScreen> {
   late String _selectedCountryCode;
   String? _selectedMobileNetwork;
   String? _selectedBankCode;
-  List<SafariTapBank> _banks = const [];
-  bool _loadingBanks = false;
 
   @override
   void initState() {
     super.initState();
-    if (widget.kenyaOnly && widget.paymentMethod == PaymentMethod.bank) {
-      _loadBanks();
-    }
     _fullNameCtrl = TextEditingController(text: widget.initialDetails.recipientFullName);
     _bankNameCtrl = TextEditingController(text: widget.initialDetails.recipientBankName);
     _accountNumberCtrl = TextEditingController(text: widget.initialDetails.recipientAccountNumber);
@@ -129,27 +126,9 @@ class _RecipientDetailsScreenState extends State<RecipientDetailsScreen> {
     _accountNumberCtrl.addListener(_onChanged);
   }
 
-  Future<void> _loadBanks() async {
-    setState(() => _loadingBanks = true);
-    try {
-      final banks = await SafariTapPayApiService().listBanks();
-      if (!mounted) return;
-      setState(() {
-        _banks = banks;
-        final savedCode = widget.initialDetails.recipientBankCode;
-        if (savedCode != null && banks.any((b) => b.code == savedCode)) {
-          _selectedBankCode = savedCode;
-        }
-        _loadingBanks = false;
-      });
-    } catch (_) {
-      if (mounted) setState(() => _loadingBanks = false);
-    }
-  }
-
-  SafariTapBank? get _selectedBank {
+  SafariTapBank? _selectedBank(List<SafariTapBank> banks) {
     if (_selectedBankCode == null) return null;
-    for (final bank in _banks) {
+    for (final bank in banks) {
       if (bank.code == _selectedBankCode) return bank;
     }
     return null;
@@ -191,7 +170,9 @@ class _RecipientDetailsScreenState extends State<RecipientDetailsScreen> {
         recipientPhoneNumber: fullPhone,
         recipientMobileNetwork: _selectedMobileNetwork ?? '',
         recipientBankName: widget.kenyaOnly
-            ? _selectedBank?.name
+            ? _selectedBank(
+                ref.read(kenyaBanksProvider).valueOrNull ?? const [],
+              )?.name
             : _bankNameCtrl.text,
         recipientAccountNumber: _accountNumberCtrl.text,
         recipientBankCode: _selectedBankCode,
@@ -343,10 +324,19 @@ class _RecipientDetailsScreenState extends State<RecipientDetailsScreen> {
     final colors = AppColors.getThemeColors(context);
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final primary = Theme.of(context).colorScheme.primary;
+    final banksAsync = ref.watch(kenyaBanksProvider);
+    final banks = banksAsync.valueOrNull ?? const [];
+    final loadingBanks = banksAsync.isLoading;
+    final saved = widget.initialDetails.recipientBankCode;
+    if (_selectedBankCode == null &&
+        saved != null &&
+        banks.any((b) => b.code == saved)) {
+      _selectedBankCode = saved;
+    }
 
     return DropdownButtonFormField<String>(
       initialValue: _selectedBankCode,
-      items: _banks
+      items: banks
           .map(
             (bank) => DropdownMenuItem<String>(
               value: bank.code,
@@ -354,7 +344,7 @@ class _RecipientDetailsScreenState extends State<RecipientDetailsScreen> {
             ),
           )
           .toList(),
-      onChanged: _loadingBanks
+      onChanged: loadingBanks
           ? null
           : (value) {
               setState(() => _selectedBankCode = value);
@@ -365,10 +355,10 @@ class _RecipientDetailsScreenState extends State<RecipientDetailsScreen> {
         return null;
       },
       isExpanded: true,
-      hint: _loadingBanks
+      hint: loadingBanks
           ? const ShimmerBusyIndicator(width: 100, height: 12)
           : const Text('Select bank'),
-      icon: _loadingBanks
+      icon: loadingBanks
           ? const ShimmerBusyIndicator(width: 16, height: 12)
           : Icon(Icons.keyboard_arrow_down_rounded, color: colors.textSecondary),
       dropdownColor: isDark ? colors.surface : Colors.white,

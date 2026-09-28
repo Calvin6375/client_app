@@ -32,7 +32,7 @@ import 'package:pretium/features/wallet_settings/screens/contact_support_page.da
 import 'package:pretium/features/wallet/screens/wallet_page.dart';
 import 'package:pretium/services/notification_service.dart';
 import 'package:pretium/services/payment_callback_service.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 /// Desktop/web: allow drag scrolling with mouse/trackpad like a mobile surface.
 class _AppScrollBehavior extends MaterialScrollBehavior {
@@ -77,17 +77,17 @@ Future<void> main() async {
     Logger.warning('App will continue but Firebase features may not work.');
   }
   
-  runApp(const MyApp());
+  runApp(const ProviderScope(child: MyApp()));
 }
 
-class MyApp extends StatefulWidget {
+class MyApp extends ConsumerStatefulWidget {
   const MyApp({super.key});
 
   @override
-  State<MyApp> createState() => _MyAppState();
+  ConsumerState<MyApp> createState() => _MyAppState();
 }
 
-class _MyAppState extends State<MyApp> {
+class _MyAppState extends ConsumerState<MyApp> {
   final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
 
   @override
@@ -274,60 +274,54 @@ class _MyAppState extends State<MyApp> {
 
   @override
   Widget build(BuildContext context) {
-    return ChangeNotifierProvider(
-      create: (_) => ThemeProvider(),
-      child: Consumer<ThemeProvider>(
-        builder: (context, themeProvider, _) {
-          return MaterialApp(
-            navigatorKey: _navigatorKey,
-            title: 'SafariTap',
-            debugShowCheckedModeBanner: false,
-            scrollBehavior: const _AppScrollBehavior(),
-            theme: _buildLightTheme(), // Light theme with glassmorphism
-            darkTheme: _buildDarkTheme(), // Dark fintech theme
-            themeMode: themeProvider.themeMode, // Dynamic theme mode
-            builder: (context, child) {
-              // MaterialApp applies SystemUiOverlayStyle.light/dark, which still
-              // sets deprecated Android bar colors. Override with icon-only style.
-              final overlay = edgeToEdgeSystemUiOverlay(Theme.of(context).brightness);
-              SystemChrome.setSystemUIOverlayStyle(overlay);
-              final content = AnnotatedRegion<SystemUiOverlayStyle>(
-                value: overlay,
-                child: child ?? const SizedBox.shrink(),
-              );
-              // Phone-width shell on large web viewports — feels like an installed wallet app.
-              if (!kIsWeb) return content;
-              return ColoredBox(
-                color: AppColors.backgroundDeepNavy,
-                child: Center(
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 480),
-                    child: content,
-                  ),
-                ),
-              );
-            },
-            initialRoute: RouteNames.splash,
-            routes: {
-              RouteNames.splash: (context) => const SplashPage(),
-              RouteNames.splashPage1: (context) => const SplashPage1(),
-              RouteNames.login: (context) => const LoginPage(),
-              RouteNames.register: (context) => const RegisterPage(),
-              RouteNames.home: (context) => const LandingPage(),
-              RouteNames.topup: (context) => const TopUpPage(),
-              RouteNames.swap: (context) => const SwapPage(),
-              RouteNames.pay: (context) => const PayPage(),
-              RouteNames.walletVerification: (context) =>
-                  const WalletVerificationScreen(),
-              RouteNames.notifications: (context) => const NotificationsPage(),
-              RouteNames.transactions: (context) => const TransactionsPage(),
-              RouteNames.walletSettings: (context) => const WalletSettingsPage(),
-              RouteNames.contactSupport: (context) => const ContactSupportPage(),
-              RouteNames.wallet: (context) => const WalletPage(),
-            },
-          );
-        },
-      ),
+    final themeMode = ref.watch(themeControllerProvider);
+    return MaterialApp(
+      navigatorKey: _navigatorKey,
+      title: 'SafariTap',
+      debugShowCheckedModeBanner: false,
+      scrollBehavior: const _AppScrollBehavior(),
+      theme: _buildLightTheme(),
+      darkTheme: _buildDarkTheme(),
+      themeMode: themeMode,
+      builder: (context, child) {
+        // MaterialApp applies SystemUiOverlayStyle.light/dark, which still
+        // sets deprecated Android bar colors. Override with icon-only style.
+        final overlay = edgeToEdgeSystemUiOverlay(Theme.of(context).brightness);
+        SystemChrome.setSystemUIOverlayStyle(overlay);
+        final content = AnnotatedRegion<SystemUiOverlayStyle>(
+          value: overlay,
+          child: child ?? const SizedBox.shrink(),
+        );
+        // Phone-width shell on large web viewports — feels like an installed wallet app.
+        if (!kIsWeb) return content;
+        return ColoredBox(
+          color: AppColors.backgroundDeepNavy,
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 480),
+              child: content,
+            ),
+          ),
+        );
+      },
+      initialRoute: RouteNames.splash,
+      routes: {
+        RouteNames.splash: (context) => const SplashPage(),
+        RouteNames.splashPage1: (context) => const SplashPage1(),
+        RouteNames.login: (context) => const LoginPage(),
+        RouteNames.register: (context) => const RegisterPage(),
+        RouteNames.home: (context) => const LandingPage(),
+        RouteNames.topup: (context) => const TopUpPage(),
+        RouteNames.swap: (context) => const SwapPage(),
+        RouteNames.pay: (context) => const PayPage(),
+        RouteNames.walletVerification: (context) =>
+            const WalletVerificationScreen(),
+        RouteNames.notifications: (context) => const NotificationsPage(),
+        RouteNames.transactions: (context) => const TransactionsPage(),
+        RouteNames.walletSettings: (context) => const WalletSettingsPage(),
+        RouteNames.contactSupport: (context) => const ContactSupportPage(),
+        RouteNames.wallet: (context) => const WalletPage(),
+      },
     );
   }
 }

@@ -1,68 +1,61 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// Theme provider to manage light/dark mode switching
-class ThemeProvider extends ChangeNotifier {
-  static const String _themeKey = 'theme_mode';
-  ThemeMode _themeMode = ThemeMode.system;
+/// Persisted light/dark/system theme. Same prefs key as the old ChangeNotifier.
+class ThemeController extends Notifier<ThemeMode> {
+  static const String themeKey = 'theme_mode';
 
-  ThemeMode get themeMode => _themeMode;
-
-  ThemeProvider() {
+  @override
+  ThemeMode build() {
     _loadThemeMode();
+    return ThemeMode.system;
   }
 
-  /// Load saved theme mode from SharedPreferences
   Future<void> _loadThemeMode() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final savedMode = prefs.getString(_themeKey);
-      if (savedMode != null) {
-        _themeMode = ThemeMode.values.firstWhere(
-          (mode) => mode.toString() == savedMode,
-          orElse: () => ThemeMode.system,
-        );
-        notifyListeners();
-      }
-    } catch (e) {
-      // If loading fails, use system default
-      _themeMode = ThemeMode.system;
+      final savedMode = prefs.getString(themeKey);
+      if (savedMode == null) return;
+      state = ThemeMode.values.firstWhere(
+        (mode) => mode.toString() == savedMode,
+        orElse: () => ThemeMode.system,
+      );
+    } catch (_) {
+      state = ThemeMode.system;
     }
   }
 
-  /// Set theme mode and save to SharedPreferences
   Future<void> setThemeMode(ThemeMode mode) async {
-    if (_themeMode == mode) return;
-    
-    _themeMode = mode;
-    notifyListeners();
-    
+    if (state == mode) return;
+    state = mode;
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_themeKey, mode.toString());
-    } catch (e) {
-      // If saving fails, continue with theme change
-    }
+      await prefs.setString(themeKey, mode.toString());
+    } catch (_) {}
   }
 
-  /// Toggle between light and dark mode
   Future<void> toggleTheme() async {
-    if (_themeMode == ThemeMode.light) {
+    if (state == ThemeMode.light) {
       await setThemeMode(ThemeMode.dark);
-    } else if (_themeMode == ThemeMode.dark) {
+    } else if (state == ThemeMode.dark) {
       await setThemeMode(ThemeMode.light);
     } else {
-      // If system, check current brightness and switch
-      final brightness = WidgetsBinding.instance.platformDispatcher.platformBrightness;
-      await setThemeMode(brightness == Brightness.dark ? ThemeMode.light : ThemeMode.dark);
+      final brightness =
+          WidgetsBinding.instance.platformDispatcher.platformBrightness;
+      await setThemeMode(
+        brightness == Brightness.dark ? ThemeMode.light : ThemeMode.dark,
+      );
     }
   }
 
-  /// Check if current theme is dark
   bool isDarkMode(BuildContext context) {
-    if (_themeMode == ThemeMode.system) {
+    if (state == ThemeMode.system) {
       return MediaQuery.of(context).platformBrightness == Brightness.dark;
     }
-    return _themeMode == ThemeMode.dark;
+    return state == ThemeMode.dark;
   }
 }
+
+final themeControllerProvider =
+    NotifierProvider<ThemeController, ThemeMode>(ThemeController.new);

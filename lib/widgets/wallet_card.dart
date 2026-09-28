@@ -1,19 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:pretium/core/providers/wallet_accounts_provider.dart';
+import 'package:pretium/services/dashboard_session_cache.dart';
 import 'package:pretium/features/crypto/screens/usdc_receive_screen.dart';
 import 'package:pretium/features/crypto/services/crypto_api_service.dart';
 import 'package:pretium/features/pay/screens/pay_page.dart';
 import 'package:pretium/features/topup/models/topup_deposit_country.dart';
 import 'package:pretium/features/topup/screens/topup_page.dart';
 import 'package:pretium/models/wallet_model.dart';
-import 'package:pretium/repositories/wallet_repository.dart';
 import 'package:pretium/core/constants/app_colors.dart';
-import 'package:pretium/services/dashboard_session_cache.dart';
-import 'package:pretium/services/wallet_balance_refresh.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:pretium/utils/firebase_utils.dart';
 import 'package:pretium/widgets/app_shimmer.dart';
 
-class WalletCard extends StatefulWidget {
+class WalletCard extends ConsumerStatefulWidget {
   final int selectedTab;
   final String? focusCryptoCurrency;
   const WalletCard({
@@ -23,11 +21,10 @@ class WalletCard extends StatefulWidget {
   });
 
   @override
-  State<WalletCard> createState() => _WalletCardState();
+  ConsumerState<WalletCard> createState() => _WalletCardState();
 }
 
-class _WalletCardState extends State<WalletCard> {
-  final WalletRepository _walletRepository = WalletRepository();
+class _WalletCardState extends ConsumerState<WalletCard> {
   Wallet? _fiatWallet;
   bool _loading = false;
   String? _fiatError;
@@ -51,15 +48,7 @@ class _WalletCardState extends State<WalletCard> {
       PageController(viewportFraction: _carouselViewportFraction);
 
   // Cache for balances to avoid unnecessary backend calls
-  Wallet? _cachedFiatWallet;
-  Wallet? _cachedCryptoWallet;
-  DateTime? _cacheTimestamp;
-  static const Duration _cacheValidityDuration = Duration(seconds: 30); // Cache valid for 30 seconds
-
   static const List<String> _supportedCryptoCurrencies = ['USDT', 'USDC'];
-  /// Always shown on home even at 0 balance; other currencies need balance > 0.
-  static const Set<String> _zeroBalanceAlwaysVisibleFiat = {'KES', 'USD'};
-  static const Set<String> _zeroBalanceAlwaysVisibleCrypto = {'USDT', 'USDC'};
   static const double _cardAspectRatio = 1.586; // ISO/IEC 7810 ID-1 card ratio
 
   /// Keeps KES as the first fiat wallet card whenever it is available.
@@ -69,20 +58,6 @@ class _WalletCardState extends State<WalletCard> {
       'KES',
       ...currencies.where((c) => c != 'KES'),
     ];
-  }
-
-  static bool _showFiatOnHome(String code, double balance) {
-    final upper = code.trim().toUpperCase();
-    if (upper.isEmpty) return false;
-    if (_zeroBalanceAlwaysVisibleFiat.contains(upper)) return true;
-    return balance > 0;
-  }
-
-  static bool _showCryptoOnHome(String code, double balance) {
-    final upper = code.trim().toUpperCase();
-    if (upper.isEmpty) return false;
-    if (_zeroBalanceAlwaysVisibleCrypto.contains(upper)) return true;
-    return balance > 0;
   }
 
   double _cardHeight(BuildContext context) {
@@ -151,41 +126,12 @@ class _WalletCardState extends State<WalletCard> {
     );
   }
   
+  DateTime? _appliedSnapshotAt;
+
   @override
   void initState() {
     super.initState();
     _pendingCryptoFocus = widget.focusCryptoCurrency;
-    WalletBalanceRefresh.revision.addListener(_onExternalBalanceRefresh);
-    if (!isFirebaseInitialized()) return;
-    // Stale-while-revalidate: paint last known balance immediately, then
-    // refresh in the background without a loading spinner.
-    final snap = DashboardSessionCache.instance.readWalletLastKnown();
-    if (snap != null) {
-      _hydrateFromSnapshotSync(snap);
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        if (_fiatPageController.hasClients && _availableFiatCurrencies.length > 1) {
-          _fiatPageController.jumpToPage(_currentFiatIndex.clamp(0, _availableFiatCurrencies.length - 1));
-        }
-        _applyPendingCryptoFocus();
-        if (_cryptoPageController.hasClients && _availableCryptoCurrencies.length > 1) {
-          _cryptoPageController.jumpToPage(_currentCryptoIndex.clamp(0, _availableCryptoCurrencies.length - 1));
-        }
-        setState(() {});
-      });
-      _refreshBalance(silent: true, forceRefresh: true);
-    } else {
-      _refreshBalance();
-    }
-  }
-
-  void _onExternalBalanceRefresh() {
-    if (!mounted) return;
-    final snap = DashboardSessionCache.instance.readWalletLastKnown();
-    if (snap != null) {
-      setState(() => _hydrateFromSnapshotSync(snap));
-    }
-    _refreshBalance(silent: true, forceRefresh: true);
   }
 
   void _hydrateFromSnapshotSync(WalletSessionSnapshot snap) {
@@ -210,9 +156,6 @@ class _WalletCardState extends State<WalletCard> {
       ..addAll(snap.availableCryptoCurrencies.isNotEmpty
           ? snap.availableCryptoCurrencies
           : _supportedCryptoCurrencies);
-    _cachedFiatWallet = snap.cachedFiatWallet;
-    _cachedCryptoWallet = snap.cachedCryptoWallet;
-    _cacheTimestamp = snap.refreshedAt;
     _lastRefreshedAt = snap.refreshedAt;
     _loading = false;
     _fiatError = null;
@@ -253,163 +196,87 @@ class _WalletCardState extends State<WalletCard> {
   
   @override
   void dispose() {
-    WalletBalanceRefresh.revision.removeListener(_onExternalBalanceRefresh);
     _fiatPageController.dispose();
     _cryptoPageController.dispose();
     super.dispose();
   }
 
+  void _applyAccountsSnapshot(WalletSessionSnapshot snap) {
+    if (_appliedSnapshotAt == snap.refreshedAt) return;
+    _hydrateFromSnapshotSync(snap);
+    _appliedSnapshotAt = snap.refreshedAt;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (_fiatPageController.hasClients && _availableFiatCurrencies.length > 1) {
+        _fiatPageController.jumpToPage(
+          _currentFiatIndex.clamp(0, _availableFiatCurrencies.length - 1),
+        );
+      }
+      if (_cryptoPageController.hasClients &&
+          _availableCryptoCurrencies.length > 1) {
+        _cryptoPageController.jumpToPage(
+          _currentCryptoIndex.clamp(0, _availableCryptoCurrencies.length - 1),
+        );
+      }
+    });
+  }
+
   // Public method to refresh balance (can be called from parent)
   Future<void> refreshBalance({bool silent = false, bool forceRefresh = false}) async {
-    await _refreshBalance(silent: silent, forceRefresh: forceRefresh);
-  }
-  
-  Future<void> _refreshBalance({bool silent = false, bool forceRefresh = false}) async {
-    if (!isFirebaseInitialized()) return;
-    
-    try {
-      final user = FirebaseAuth.instance.currentUser;
-      if (user == null) return;
-      
-      // Check cache validity
-      final now = DateTime.now();
-      final isCacheValid = _cacheTimestamp != null && 
-                          _cachedFiatWallet != null && 
-                          _cachedCryptoWallet != null &&
-                          now.difference(_cacheTimestamp!) < _cacheValidityDuration;
-      
-      // Use cached data if available and valid, unless force refresh is requested
-      if (isCacheValid && !forceRefresh && silent) {
-        if (!mounted) return;
-        setState(() {
-          _fiatWallet = _cachedFiatWallet;
-        });
-        return;
-      }
-      
-      if (!silent) {
-        setState(() {
-          _loading = true;
-          _fiatError = null;
-          _cryptoError = null;
-        });
-      }
-
-      // Single GET /api/accounts — Firestore + USDC ledger (no RTDB wallet reads).
-      final accounts = await _walletRepository.fetchAccounts(
-        forceRefresh: forceRefresh,
-      );
-
-      final Map<String, Wallet> fiatWallets = Map<String, Wallet>.from(
-        accounts.fiatWallets,
-      );
-      for (final e in accounts.fiatBalances.entries) {
-        fiatWallets.putIfAbsent(
-          e.key,
-          () => Wallet(currencyCode: e.key, balance: e.value),
-        );
-      }
-      // Always keep default fiat shells so KES/USD appear even at 0.
-      for (final code in _zeroBalanceAlwaysVisibleFiat) {
-        fiatWallets.putIfAbsent(
-          code,
-          () =>
-              accounts.fiatWallet(code) ?? Wallet(currencyCode: code, balance: 0),
-        );
-      }
-
-      // Home carousel: KES/USD always; other fiat only when balance > 0.
-      final availableCurrencies = fiatWallets.entries
-          .where((e) => _showFiatOnHome(e.key, e.value.balance))
-          .map((e) => e.key)
-          .toList();
-      final orderedFiatCurrencies = _withKesFirst(availableCurrencies);
-
-      final Map<String, Wallet> cryptoWallets = {
-        for (final code in _supportedCryptoCurrencies)
-          code: accounts.cryptoWallet(code) ??
-              Wallet(currencyCode: code, balance: 0),
-      };
-      for (final e in accounts.cryptoWallets.entries) {
-        cryptoWallets[e.key] = e.value;
-      }
-
-      // Home carousel: USDT/USDC always; other crypto only when balance > 0.
-      final cryptoCodes = cryptoWallets.entries
-          .where((e) => _showCryptoOnHome(e.key, e.value.balance))
-          .map((e) => e.key)
-          .toList();
-      if (!cryptoCodes.contains('USDT')) cryptoCodes.insert(0, 'USDT');
-      if (!cryptoCodes.contains('USDC')) cryptoCodes.add('USDC');
-
-      if (!mounted) return;
-
-      _cachedFiatWallet = fiatWallets[
-              orderedFiatCurrencies.isNotEmpty ? orderedFiatCurrencies[0] : 'USD'] ??
-          Wallet(currencyCode: 'USD', balance: 0.0);
-      _cachedCryptoWallet =
-          cryptoWallets['USDT'] ?? Wallet(currencyCode: 'USDT', balance: 0.0);
-      _cacheTimestamp = now;
-
-      DashboardSessionCache.instance.recordWalletSnapshot(
-        fiatWallets: fiatWallets,
-        availableFiatCurrencies: orderedFiatCurrencies,
-        cryptoWallets: cryptoWallets,
-        availableCryptoCurrencies: cryptoCodes,
-        cachedFiatWallet: _cachedFiatWallet,
-        cachedCryptoWallet: _cachedCryptoWallet,
-      );
-
+    if (!silent && mounted) {
       setState(() {
-        _fiatWallets
-          ..clear()
-          ..addAll(fiatWallets);
-        _availableFiatCurrencies
-          ..clear()
-          ..addAll(orderedFiatCurrencies);
-
-        if (_availableFiatCurrencies.isNotEmpty) {
-          _fiatWallet = _fiatWallets[_availableFiatCurrencies[0]];
-          _currentFiatIndex = 0;
-        } else {
-          _fiatWallet = Wallet(currencyCode: 'USD', balance: 0.0);
-          _currentFiatIndex = 0;
-        }
-
-        _cryptoWallets
-          ..clear()
-          ..addAll(cryptoWallets);
-        _availableCryptoCurrencies
-          ..clear()
-          ..addAll(cryptoCodes);
-        _lastRefreshedAt = now;
+        _loading = true;
         _fiatError = null;
         _cryptoError = null;
-        _applyPendingCryptoFocus();
       });
+    }
+    try {
+      await ref.read(walletAccountsProvider.notifier).refresh(force: forceRefresh);
     } catch (e) {
-      // This should rarely happen now since fetchWalletBalance returns default wallet
       if (!mounted) return;
-      // Keep showing cached balance on silent refresh failures — no error flash.
-      if (silent && (_fiatWallet != null || _fiatWallets.isNotEmpty || _cryptoWallets.isNotEmpty)) {
+      if (silent &&
+          (_fiatWallet != null ||
+              _fiatWallets.isNotEmpty ||
+              _cryptoWallets.isNotEmpty)) {
         return;
       }
-      setState(() { 
-        // Only show error for unexpected exceptions (network issues, etc.)
-        final errorMsg = e.toString();
-        final truncatedError = errorMsg.length > 100 ? '${errorMsg.substring(0, 100)}...' : errorMsg;
+      final errorMsg = e.toString();
+      final truncatedError =
+          errorMsg.length > 100 ? '${errorMsg.substring(0, 100)}...' : errorMsg;
+      setState(() {
         _fiatError = truncatedError;
         _cryptoError = truncatedError;
       });
     } finally {
       if (mounted && !silent) {
-        setState(() { _loading = false; });
+        setState(() => _loading = false);
       }
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final accounts = ref.watch(walletAccountsProvider);
+    final snap = accounts.valueOrNull;
+    if (snap != null) {
+      _applyAccountsSnapshot(snap);
+    } else if (accounts.hasError &&
+        _fiatWallets.isEmpty &&
+        _cryptoWallets.isEmpty) {
+      final errorMsg = accounts.error.toString();
+      _fiatError = errorMsg.length > 100
+          ? '${errorMsg.substring(0, 100)}...'
+          : errorMsg;
+      _cryptoError = _fiatError;
+    }
+    if (accounts.isLoading &&
+        _fiatWallets.isEmpty &&
+        _cryptoWallets.isEmpty) {
+      _loading = true;
+    } else if (!accounts.isLoading) {
+      _loading = false;
+    }
+
     final primary = Theme.of(context).colorScheme.primary;
     final isFiat = widget.selectedTab == 0;
     
@@ -664,7 +531,7 @@ class _WalletCardState extends State<WalletCard> {
           builder: (_) => UsdcReceiveScreen(walletStatus: status),
         ),
       );
-      if (mounted) await _refreshBalance(forceRefresh: true);
+      if (mounted) await refreshBalance(forceRefresh: true);
     } on CryptoApiException catch (e) {
       if (!mounted) return;
       Navigator.of(context, rootNavigator: true).pop();
@@ -694,7 +561,7 @@ class _WalletCardState extends State<WalletCard> {
         ),
       ),
     );
-    if (mounted) await _refreshBalance(forceRefresh: true);
+    if (mounted) await refreshBalance(forceRefresh: true);
   }
 
   Future<void> _openPayFlow({required bool isCrypto}) async {
@@ -713,7 +580,7 @@ class _WalletCardState extends State<WalletCard> {
         builder: (_) => PayPage(initialCurrency: payCurrency),
       ),
     );
-    if (mounted) await _refreshBalance(forceRefresh: true);
+    if (mounted) await refreshBalance(forceRefresh: true);
   }
 }
 

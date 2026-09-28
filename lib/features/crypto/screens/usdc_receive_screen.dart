@@ -1,130 +1,50 @@
 import 'dart:async';
 
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:pretium/app/route_names.dart';
 import 'package:pretium/core/constants/app_colors.dart';
 import 'package:pretium/features/crypto/models/crypto_wallet_status.dart';
 import 'package:pretium/features/crypto/models/deposit_watch_result.dart';
+import 'package:pretium/features/crypto/providers/usdc_deposit_watch_provider.dart';
 import 'package:pretium/features/crypto/screens/crypto_transactions_screen.dart';
-import 'package:pretium/features/crypto/services/crypto_api_service.dart';
-import 'package:pretium/services/home_wallet_focus.dart';
-import 'package:pretium/services/wallet_balance_refresh.dart';
+import 'package:pretium/core/providers/home_wallet_focus_provider.dart';
 import 'package:pretium/widgets/app_shimmer.dart';
 import 'package:pretium/widgets/truepay_qr_code.dart';
 
-class UsdcReceiveScreen extends StatefulWidget {
+class UsdcReceiveScreen extends ConsumerStatefulWidget {
   const UsdcReceiveScreen({super.key, this.walletStatus});
 
   /// From GET /crypto/wallet/status after production was ensured (if needed).
   final CryptoWalletStatus? walletStatus;
 
   @override
-  State<UsdcReceiveScreen> createState() => _UsdcReceiveScreenState();
+  ConsumerState<UsdcReceiveScreen> createState() => _UsdcReceiveScreenState();
 }
 
-class _UsdcReceiveScreenState extends State<UsdcReceiveScreen> {
-  final CryptoApiService _cryptoApi = CryptoApiService();
-
-  DepositWatchResult? _watch;
-  String? _error;
-  bool _loading = true;
-  bool _credited = false;
-  bool _haveBaseline = false;
-  double _baselineUsdc = 0;
-  double _displayUsdc = 0;
-
-  StreamSubscription<DatabaseEvent>? _usdcSub;
-
+class _UsdcReceiveScreenState extends ConsumerState<UsdcReceiveScreen> {
   @override
   void initState() {
     super.initState();
-    _startWatch();
-  }
-
-  @override
-  void dispose() {
-    _usdcSub?.cancel();
-    super.dispose();
-  }
-
-  Future<void> _startWatch() async {
-    setState(() {
-      _loading = true;
-      _error = null;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ref.read(usdcDepositWatchProvider.notifier).startFromReceive(
+            walletStatus: widget.walletStatus,
+          );
     });
-    try {
-      var status = widget.walletStatus;
-      if (status == null || status.shouldCreateMainnet) {
-        status = await _cryptoApi.ensureProductionWallet();
-      }
-      final watch = await _cryptoApi.startUsdcDepositWatch(
-        network: status.preferredWatchNetwork,
-      );
-      if (!mounted) return;
-      setState(() {
-        _watch = watch;
-        _loading = false;
-      });
-      _listenLedgerDisplay();
-    } on CryptoApiException catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _error = e.message ?? 'Failed to start USDC deposit watch';
-        _loading = false;
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _error = e.toString();
-        _loading = false;
-      });
-    }
   }
 
-  void _listenLedgerDisplay() {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) return;
-
-    _usdcSub?.cancel();
-    _usdcSub = FirebaseDatabase.instance
-        .ref('wallet/$uid/crypto/USDC')
-        .onValue
-        .listen((event) {
-      final value = event.snapshot.value;
-      final usdc = value is num ? value.toDouble() : 0.0;
-      if (!mounted) return;
-
-      if (!_haveBaseline) {
-        setState(() {
-          _haveBaseline = true;
-          _baselineUsdc = usdc;
-          _displayUsdc = usdc;
-        });
-        return;
-      }
-
-      final creditedNow = !_credited && usdc > _baselineUsdc + 0.000001;
-      setState(() {
-        _displayUsdc = usdc;
-        if (creditedNow) _credited = true;
-      });
-      if (creditedNow) {
-        unawaited(_goHomeWithUsdcWallet());
-      }
-    });
+  Future<void> _retryWatch() {
+    return ref.read(usdcDepositWatchProvider.notifier).retryReceive(
+          walletStatus: widget.walletStatus,
+        );
   }
 
   Future<void> _goHomeWithUsdcWallet() async {
-    try {
-      await _cryptoApi.getBalance();
-      await _cryptoApi.getTransactions(limit: 10);
-    } catch (_) {}
-    await WalletBalanceRefresh.afterSuccessfulTransaction();
+    await ref.read(usdcDepositWatchProvider.notifier).acknowledgeCredit();
     if (!mounted) return;
-    HomeWalletFocus.showCryptoWallet(currency: 'USDC');
+    ref.read(homeWalletFocusProvider.notifier).showCryptoWallet(currency: 'USDC');
     Navigator.of(context).pushNamedAndRemoveUntil(
       RouteNames.home,
       (route) => false,
@@ -143,6 +63,14 @@ class _UsdcReceiveScreenState extends State<UsdcReceiveScreen> {
   Widget build(BuildContext context) {
     final colors = AppColors.getThemeColors(context);
     final primary = Theme.of(context).colorScheme.primary;
+    final watchState = ref.watch(usdcDepositWatchProvider);
+    ref.listen(usdcDepositWatchProvider, (prev, next) {
+      if (next.credited && prev?.credited != true) {
+        unawaited(_goHomeWithUsdcWallet());
+      }
+    });
+    final pending = watchState.loading ||
+        (watchState.watch == null && watchState.error == null);
 
     return Scaffold(
       backgroundColor: colors.background,
@@ -166,7 +94,7 @@ class _UsdcReceiveScreenState extends State<UsdcReceiveScreen> {
         ],
       ),
       body: RefreshIndicator(
-        onRefresh: _startWatch,
+        onRefresh: _retryWatch,
         color: primary,
         child: ListView(
           physics: const AlwaysScrollableScrollPhysics(),
@@ -177,18 +105,18 @@ class _UsdcReceiveScreenState extends State<UsdcReceiveScreen> {
             20 + MediaQuery.paddingOf(context).bottom,
           ),
           children: [
-            if (_loading)
+            if (pending)
               const Padding(
                 padding: EdgeInsets.symmetric(vertical: 24),
                 child: CardBlockShimmer(),
               )
-            else if (_error != null)
-              _ErrorState(message: _error!, onRetry: _startWatch)
-            else if (_watch != null)
+            else if (watchState.error != null)
+              _ErrorState(message: watchState.error!, onRetry: _retryWatch)
+            else if (watchState.watch != null)
               _DepositContent(
-                watch: _watch!,
-                displayUsdc: _displayUsdc,
-                credited: _credited,
+                watch: watchState.watch!,
+                displayUsdc: watchState.displayUsdc,
+                credited: watchState.credited,
                 onCopy: _copyAddress,
               ),
           ],

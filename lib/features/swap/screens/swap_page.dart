@@ -1,92 +1,60 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:confetti/confetti.dart';
 import 'package:cloud_functions/cloud_functions.dart';
-import 'package:pretium/features/swap/services/exchange_quote.dart';
-import 'package:pretium/features/swap/services/rates_service.dart';
+import 'package:pretium/core/providers/wallet_accounts_provider.dart';
+import 'package:pretium/features/swap/providers/swap_flow_provider.dart';
 import 'package:pretium/features/swap/services/swap_order_service.dart';
 import 'package:pretium/features/swap/widgets/currency_picker_bottom_sheet.dart';
-import 'package:pretium/repositories/wallet_repository.dart';
 import 'package:pretium/utils/logger.dart';
 import 'package:pretium/utils/async_action_guard.dart';
 import 'package:pretium/core/constants/app_colors.dart';
 import 'package:pretium/widgets/currency_logo.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:pretium/utils/firebase_utils.dart';
 import 'package:pretium/widgets/app_shimmer.dart';
 import 'package:pretium/widgets/bottom_safe_action_bar.dart';
 import 'package:pretium/widgets/slide_to_confirm.dart';
-import 'package:pretium/services/dashboard_session_cache.dart';
 import 'package:pretium/services/wallet_balance_refresh.dart';
 
-class SwapPage extends StatefulWidget {
+class SwapPage extends ConsumerStatefulWidget {
   final String? initialFromCurrency;
   
   const SwapPage({super.key, this.initialFromCurrency});
 
   @override
-  State<SwapPage> createState() => _SwapPageState();
+  ConsumerState<SwapPage> createState() => _SwapPageState();
 }
 
-enum _SwapStep { input, confirmation, success }
-
-class _SwapPageState extends State<SwapPage> {
-  _SwapStep _step = _SwapStep.input;
-
-  // State for the swap flow
-  final _rates = RatesService();
-  final _walletRepository = WalletRepository();
+class _SwapPageState extends ConsumerState<SwapPage> {
   final _fromCtrl = TextEditingController();
-  bool _isSubmittingSwap = false;
-  String _fromCurrency = 'USD';
-  String _toCurrency = 'USDT';
-  double _fromBalance = 0.0;
-  double _toBalance = 0.0;
-  bool _loadingBalances = true;
-  bool _loadingWallets = true;
-  bool _loadingRate = false;
+  late ConfettiController _confettiController;
 
-  /// `data.rate` from `GET /customer-rates?send=&get=` (0 until a quote loads).
-  double _rate = 0;
+  SwapFlowState get _flow => ref.read(swapFlowProvider);
+  SwapFlowNotifier get _flowN => ref.read(swapFlowProvider.notifier);
 
-  /// Prefer `data.display` from the quote response.
-  String? _rateDisplay;
-
-  /// Full `data` object stored in state for the current Send/Get pair.
-  Map<String, dynamic>? _ratesResponse;
-
-  String? _rateError;
-  int _rateRequestId = 0;
-
-  /// Currencies the user actually owns (fiat + crypto wallet nodes).
-  final List<String> _ownedCurrencyCodes = [];
-  final Map<String, double> _ownedBalances = {};
-
-  bool get _hasValidQuote =>
-      _rate > 0 && _rateError == null && !_loadingRate && _ratesResponse != null;
+  SwapStep get _step => _flow.step;
+  String get _fromCurrency => _flow.fromCurrency;
+  String get _toCurrency => _flow.toCurrency;
+  double get _fromBalance => _flow.fromBalance;
+  double get _toBalance => _flow.toBalance;
+  bool get _loadingWallets => _flow.loadingWallets;
+  bool get _loadingBalances => _flow.loadingWallets;
+  bool get _loadingRate => _flow.loadingRate;
+  double get _rate => _flow.rate;
+  String? get _rateDisplay => _flow.rateDisplay;
+  String? get _rateError => _flow.rateError;
+  List<String> get _ownedCurrencyCodes => _flow.ownedCurrencyCodes;
+  bool get _isSubmittingSwap => _flow.isSubmitting;
+  bool get _hasValidQuote => _flow.hasValidQuote;
 
   void _swapCurrencies() {
-    if (_ownedCurrencyCodes.length < 2) return;
-    setState(() {
-      final temp = _fromCurrency;
-      _fromCurrency = _toCurrency;
-      _toCurrency = temp;
-
-      final tempBalance = _fromBalance;
-      _fromBalance = _toBalance;
-      _toBalance = tempBalance;
-
-      _fromCtrl.clear();
-      _rate = 0;
-      _rateDisplay = null;
-      _ratesResponse = null;
-      _rateError = null;
-    });
-    _loadRate();
+    _fromCtrl.clear();
+    _flowN.swapCurrencies();
   }
 
   void _nextStep() async {
-    if (_step == _SwapStep.input) {
+    if (_step == SwapStep.input) {
       if (_fromCurrency == _toCurrency || _ownedCurrencyCodes.length < 2) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -105,12 +73,12 @@ class _SwapPageState extends State<SwapPage> {
         );
         return;
       }
-      setState(() => _step = _SwapStep.confirmation);
-    } else if (_step == _SwapStep.confirmation) {
+      _flowN.goTo(SwapStep.confirmation);
+    } else if (_step == SwapStep.confirmation) {
       await runGuardedAsync(
         this,
-        isSubmitting: () => _isSubmittingSwap,
-        setSubmitting: (value) => setState(() => _isSubmittingSwap = value),
+        isSubmitting: () => _flow.isSubmitting,
+        setSubmitting: _flowN.setSubmitting,
         action: () async {
           final user = FirebaseAuth.instance.currentUser;
           if (user == null) {
@@ -143,20 +111,15 @@ class _SwapPageState extends State<SwapPage> {
             if (!mounted) return;
 
             if (result.newBalances != null) {
-              final nb = result.newBalances!;
-              final fromBal = nb[_fromCurrency];
-              final toBal = nb[_toCurrency];
-              if (fromBal != null) _fromBalance = (fromBal as num).toDouble();
-              if (toBal != null) _toBalance = (toBal as num).toDouble();
-              setState(() {});
+              _flowN.applyNewBalances(result.newBalances!);
             } else {
-              await _loadBalances();
+              await ref.read(walletAccountsProvider.notifier).refresh(force: true);
             }
 
             await WalletBalanceRefresh.afterSuccessfulTransaction();
             if (!mounted) return;
 
-            setState(() => _step = _SwapStep.success);
+            _flowN.goTo(SwapStep.success);
             _showSuccessDialog();
           } on FirebaseFunctionsException catch (e) {
             if (!mounted) return;
@@ -187,285 +150,26 @@ class _SwapPageState extends State<SwapPage> {
   }
 
   void _previousStep() {
-    if (_step == _SwapStep.confirmation) {
-      setState(() => _step = _SwapStep.input);
+    if (_step == SwapStep.confirmation) {
+      _flowN.goTo(SwapStep.input);
     }
   }
-
-  late ConfettiController _confettiController;
 
   @override
   void initState() {
     super.initState();
     _confettiController = ConfettiController(duration: const Duration(seconds: 1));
-
-    _hydrateOwnedWalletsFromCache();
-    _loadOwnedWallets();
-  }
-
-  bool _isCryptoCurrency(String code) {
-    final upper = code.toUpperCase();
-    return upper == 'USDT' || upper == 'USDC';
-  }
-
-  void _hydrateOwnedWalletsFromCache() {
-    final snap = DashboardSessionCache.instance.readWalletLastKnown();
-    if (snap == null) return;
-
-    final codes = <String>{
-      ...snap.availableFiatCurrencies.map((c) => c.toUpperCase()),
-      ...snap.availableCryptoCurrencies.map((c) => c.toUpperCase()),
-    };
-    if (codes.isEmpty) return;
-
-    _ownedCurrencyCodes
-      ..clear()
-      ..addAll(codes);
-    _ownedBalances
-      ..clear()
-      ..addEntries([
-        for (final e in snap.fiatWallets.entries)
-          MapEntry(e.key.toUpperCase(), e.value.balance),
-        for (final e in snap.cryptoWallets.entries)
-          MapEntry(e.key.toUpperCase(), e.value.balance),
-      ]);
-    _applyOwnedCurrencyDefaults();
-    _fromBalance = _ownedBalances[_fromCurrency] ?? 0;
-    _toBalance = _ownedBalances[_toCurrency] ?? 0;
-    _loadingWallets = false;
-    _loadingBalances = false;
-  }
-
-  void _applyOwnedCurrencyDefaults() {
-    if (_ownedCurrencyCodes.isEmpty) return;
-
-    final preferredFrom = widget.initialFromCurrency?.toUpperCase();
-    if (preferredFrom != null && _ownedCurrencyCodes.contains(preferredFrom)) {
-      _fromCurrency = preferredFrom;
-    } else if (!_ownedCurrencyCodes.contains(_fromCurrency)) {
-      _fromCurrency = _ownedCurrencyCodes.first;
-    }
-
-    final preferredTo = _isCryptoCurrency(_fromCurrency)
-        ? _ownedCurrencyCodes.firstWhere(
-            (c) => !_isCryptoCurrency(c),
-            orElse: () => _ownedCurrencyCodes.firstWhere(
-              (c) => c != _fromCurrency,
-              orElse: () => _fromCurrency,
-            ),
-          )
-        : _ownedCurrencyCodes.firstWhere(
-            (c) => _isCryptoCurrency(c),
-            orElse: () => _ownedCurrencyCodes.firstWhere(
-              (c) => c != _fromCurrency,
-              orElse: () => _fromCurrency,
-            ),
-          );
-
-    _toCurrency = preferredTo == _fromCurrency && _ownedCurrencyCodes.length > 1
-        ? _ownedCurrencyCodes.firstWhere((c) => c != _fromCurrency)
-        : preferredTo;
-  }
-
-  Future<void> _loadOwnedWallets() async {
-    if (!isFirebaseInitialized()) {
-      if (mounted) {
-        setState(() {
-          _loadingWallets = false;
-          _loadingBalances = false;
-        });
-      }
-      return;
-    }
-
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) {
-      if (mounted) {
-        setState(() {
-          _loadingWallets = false;
-          _loadingBalances = false;
-        });
-      }
-      return;
-    }
-
-    if (mounted) {
-      setState(() {
-        _loadingWallets = true;
-        _loadingBalances = true;
-      });
-    }
-
-    try {
-      final fiat = await _walletRepository.listOwnedFiatWallets(user.uid);
-      final crypto = await _walletRepository.listOwnedCryptoWallets(user.uid);
-
-      final codes = <String>{
-        ...fiat.keys.map((c) => c.toUpperCase()),
-        ...crypto.keys.map((c) => c.toUpperCase()),
-      };
-
-      // If accounts list is empty, fall back to probing known currencies.
-      if (codes.isEmpty) {
-        for (final currency in const ['KES', 'USD', 'NGN', 'GHS', 'UGX']) {
-          try {
-            final wallet =
-                await _walletRepository.getWalletBalance(user.uid, currency: currency);
-            if (wallet != null) {
-              fiat[currency] = wallet;
-              codes.add(currency);
-            }
-          } catch (_) {}
-        }
-        for (final currency in const ['USDT', 'USDC']) {
-          try {
-            final wallet =
-                await _walletRepository.getCryptoWalletBalance(user.uid, currency);
-            // Crypto helper returns a zero wallet even when missing — only keep
-            // currencies that also appear in a successful parent list or cache.
-            if (wallet != null) {
-              final cached = DashboardSessionCache.instance
-                  .readWalletLastKnown()
-                  ?.availableCryptoCurrencies
-                  .map((c) => c.toUpperCase())
-                  .contains(currency);
-              if (cached == true || wallet.balance > 0) {
-                crypto[currency] = wallet;
-                codes.add(currency);
-              }
-            }
-          } catch (_) {}
-        }
-      }
-
+    WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-
-      setState(() {
-        _ownedCurrencyCodes
-          ..clear()
-          ..addAll(codes);
-        _ownedBalances
-          ..clear()
-          ..addEntries([
-            for (final e in fiat.entries) MapEntry(e.key.toUpperCase(), e.value.balance),
-            for (final e in crypto.entries) MapEntry(e.key.toUpperCase(), e.value.balance),
-          ]);
-        _applyOwnedCurrencyDefaults();
-        _fromBalance = _ownedBalances[_fromCurrency] ?? 0;
-        _toBalance = _ownedBalances[_toCurrency] ?? 0;
-        _loadingWallets = false;
-        _loadingBalances = false;
-      });
-
-      await _loadRate();
-    } catch (e, st) {
-      Logger.error('Failed to load owned wallets for exchange', e, st);
-      if (!mounted) return;
-      setState(() {
-        _loadingWallets = false;
-        _loadingBalances = false;
-      });
-    }
-  }
-  
-  Future<void> _loadRate() async {
-    final send = _fromCurrency;
-    final get = _toCurrency;
-    final requestId = ++_rateRequestId;
-
-    Logger.debug('🔄 Loading exchange quote send=$send get=$get');
-    setState(() {
-      _loadingRate = true;
-      _rateError = null;
-      _rate = 0;
-      _rateDisplay = null;
-      _ratesResponse = null;
+      _flowN.configure(initialFromCurrency: widget.initialFromCurrency);
     });
-
-    try {
-      final quote = await _rates.fetchExchangeQuote(send: send, get: get);
-      if (!mounted || requestId != _rateRequestId) return;
-
-      Logger.debug(
-        '✅ Quote stored in state: rate=${quote.rate} display=${quote.display} raw=${quote.raw}',
-      );
-      setState(() {
-        _rate = quote.rate;
-        _rateDisplay = quote.display;
-        _ratesResponse = Map<String, dynamic>.from(quote.raw);
-        _rateError = null;
-        _loadingRate = false;
-      });
-    } on ExchangeQuoteException catch (e) {
-      Logger.warning('Exchange quote failed: $e');
-      if (!mounted || requestId != _rateRequestId) return;
-      setState(() {
-        _rate = 0;
-        _rateDisplay = null;
-        _ratesResponse = null;
-        _rateError = e.message;
-        _loadingRate = false;
-      });
-    } catch (e, st) {
-      Logger.error('Unexpected exchange quote error', e, st);
-      if (!mounted || requestId != _rateRequestId) return;
-      setState(() {
-        _rate = 0;
-        _rateDisplay = null;
-        _ratesResponse = null;
-        _rateError = 'Could not load exchange rate.';
-        _loadingRate = false;
-      });
-    }
   }
 
-  Future<double> _balanceFor(String currency, String uid) async {
-    final code = currency.toUpperCase();
-    if (_isCryptoCurrency(code)) {
-      final wallet = await _walletRepository.getCryptoWalletBalance(uid, code);
-      return wallet?.balance ?? 0.0;
-    }
-    final wallet = await _walletRepository.getWalletBalance(uid, currency: code);
-    return wallet?.balance ?? 0.0;
-  }
-
-  Future<void> _loadBalances() async {
-    if (!isFirebaseInitialized()) {
-      setState(() => _loadingBalances = false);
-      return;
-    }
-
-    try {
-      final user = FirebaseAuth.instance.currentUser;
-      if (user == null) {
-        setState(() => _loadingBalances = false);
-        return;
-      }
-
-      setState(() => _loadingBalances = true);
-
-      final fromBal = await _balanceFor(_fromCurrency, user.uid);
-      final toBal = await _balanceFor(_toCurrency, user.uid);
-
-      if (!mounted) return;
-      setState(() {
-        _fromBalance = fromBal;
-        _toBalance = toBal;
-        _ownedBalances[_fromCurrency] = fromBal;
-        _ownedBalances[_toCurrency] = toBal;
-        _loadingBalances = false;
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _loadingBalances = false);
-    }
-  }
 
   @override
   void dispose() {
     _confettiController.dispose();
     _fromCtrl.dispose();
-    _rates.dispose();
     super.dispose();
   }
 
@@ -600,35 +304,26 @@ class _SwapPageState extends State<SwapPage> {
         currencies: availableCurrencies,
         selectedCode: isFromCurrency ? _fromCurrency : _toCurrency,
         onSelected: (currency) async {
-          setState(() {
-            if (isFromCurrency) {
-              _fromCurrency = currency.code.toUpperCase();
-              if (_toCurrency == _fromCurrency) {
-                final alt = _ownedCurrencyCodes.firstWhere(
-                  (c) => c != _fromCurrency,
-                  orElse: () => _toCurrency,
-                );
-                _toCurrency = alt;
-              }
-            } else {
-              _toCurrency = currency.code.toUpperCase();
-              if (_fromCurrency == _toCurrency) {
-                final alt = _ownedCurrencyCodes.firstWhere(
-                  (c) => c != _toCurrency,
-                  orElse: () => _fromCurrency,
-                );
-                _fromCurrency = alt;
-              }
+          _fromCtrl.clear();
+          if (isFromCurrency) {
+            _flowN.setFromCurrency(currency.code);
+            if (_toCurrency == currency.code.toUpperCase()) {
+              final alt = _ownedCurrencyCodes.firstWhere(
+                (c) => c != currency.code.toUpperCase(),
+                orElse: () => _toCurrency,
+              );
+              _flowN.setToCurrency(alt);
             }
-            _fromCtrl.clear();
-            _rate = 0;
-            _rateDisplay = null;
-            _ratesResponse = null;
-            _rateError = null;
-          });
-
-          await _loadBalances();
-          await _loadRate();
+          } else {
+            _flowN.setToCurrency(currency.code);
+            if (_fromCurrency == currency.code.toUpperCase()) {
+              final alt = _ownedCurrencyCodes.firstWhere(
+                (c) => c != currency.code.toUpperCase(),
+                orElse: () => _fromCurrency,
+              );
+              _flowN.setFromCurrency(alt);
+            }
+          }
         },
       ),
     );
@@ -636,6 +331,7 @@ class _SwapPageState extends State<SwapPage> {
 
   @override
   Widget build(BuildContext context) {
+    ref.watch(swapFlowProvider);
     final colors = AppColors.getThemeColors(context);
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final primary = Theme.of(context).colorScheme.primary;
@@ -647,14 +343,14 @@ class _SwapPageState extends State<SwapPage> {
             : primary.withValues(alpha: 0.08), // Light mint tint (8% opacity) for light mode
         elevation: 0,
         title: Text(
-          _step == _SwapStep.confirmation ? 'Confirm sending' : 'Exchange',
+          _step == SwapStep.confirmation ? 'Confirm sending' : 'Exchange',
           style: TextStyle(
             color: colors.textPrimary,
             fontWeight: FontWeight.w700,
           ),
         ),
         iconTheme: IconThemeData(color: colors.textPrimary),
-        leading: _step == _SwapStep.confirmation
+        leading: _step == SwapStep.confirmation
             ? IconButton(
                 icon: Icon(Icons.arrow_back, color: colors.textPrimary),
                 onPressed: _previousStep,
@@ -666,7 +362,8 @@ class _SwapPageState extends State<SwapPage> {
           : _ownedCurrencyCodes.length < 2
               ? _ExchangeNoWalletsState(
                   ownedCount: _ownedCurrencyCodes.length,
-                  onRefresh: _loadOwnedWallets,
+                  onRefresh: () =>
+                      ref.read(walletAccountsProvider.notifier).refresh(force: true),
                 )
               : IndexedStack(
                   index: _step.index,

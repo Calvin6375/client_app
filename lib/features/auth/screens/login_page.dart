@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:pretium/core/providers/service_providers.dart';
+import 'package:pretium/features/auth/providers/auth_flow_provider.dart';
 import 'package:pretium/features/auth/screens/forgot_password_page.dart';
 import 'package:pretium/features/auth/screens/register_page.dart';
 import 'package:pretium/features/auth/widgets/custom_text_field.dart';
@@ -6,39 +9,29 @@ import 'package:pretium/features/auth/widgets/wallet_icon_header.dart';
 import 'package:pretium/features/auth/widgets/welcome_text_section.dart';
 import 'package:pretium/features/auth/utils/post_auth_routing.dart';
 import 'package:pretium/services/auth_service.dart';
-import 'package:pretium/services/biometric_session_service.dart';
-import 'package:pretium/services/notification_service.dart';
 import 'package:pretium/utils/logger.dart';
 import 'package:pretium/utils/async_action_guard.dart';
 import 'package:pretium/core/constants/app_colors.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:pretium/widgets/app_shimmer.dart';
 
-class LoginPage extends StatefulWidget {
+class LoginPage extends ConsumerStatefulWidget {
   const LoginPage({super.key});
 
   @override
-  State<LoginPage> createState() => _LoginScreenState();
+  ConsumerState<LoginPage> createState() => _LoginScreenState();
 }
 
-class _LoginScreenState extends State<LoginPage> with WidgetsBindingObserver {
+class _LoginScreenState extends ConsumerState<LoginPage>
+    with WidgetsBindingObserver {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   bool _rememberMe = false;
-  bool _isLoading = false;
-  bool _biometricLoginAvailable = false;
-  bool _biometricDeviceSupported = false;
-  IconData _biometricIcon = Icons.fingerprint;
-
-  final AuthService _authService = AuthService();
-  final BiometricSessionService _biometricSession =
-      BiometricSessionService.instance;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _loadBiometricAvailability();
   }
 
   @override
@@ -52,26 +45,13 @@ class _LoginScreenState extends State<LoginPage> with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      _loadBiometricAvailability();
-    }
-  }
-
-  Future<void> _loadBiometricAvailability() async {
-    final deviceSupported = await _biometricSession.hasUsableBiometrics();
-    final available = await _biometricSession.canUseBiometricLogin();
-    final icon = await _biometricSession.preferredBiometricIcon();
-    if (mounted) {
-      setState(() {
-        _biometricDeviceSupported = deviceSupported;
-        _biometricLoginAvailable = available;
-        _biometricIcon = icon;
-      });
+      ref.read(loginFlowProvider.notifier).loadBiometricAvailability();
     }
   }
 
   void _onBiometricButtonPressed() {
-    if (_isLoading) return;
-    if (_biometricLoginAvailable) {
+    if (ref.read(loginFlowProvider).isLoading) return;
+    if (ref.read(loginFlowProvider).biometricLoginAvailable) {
       _signInWithBiometrics();
       return;
     }
@@ -92,7 +72,7 @@ class _LoginScreenState extends State<LoginPage> with WidgetsBindingObserver {
   }) async {
     if (credential.user?.uid != null) {
       try {
-        await NotificationService().setupNotifications(credential.user!.uid);
+        await ref.read(notificationServiceProvider).setupNotifications(credential.user!.uid);
       } catch (e) {
         Logger.warning('Failed to setup notifications after login: $e');
       }
@@ -100,29 +80,31 @@ class _LoginScreenState extends State<LoginPage> with WidgetsBindingObserver {
 
     if (!mounted) return;
 
-    await _biometricSession.maybePromptEnableAfterLogin(
+    await ref.read(biometricSessionProvider).maybePromptEnableAfterLogin(
       context,
       email: email,
       password: password,
     );
 
     if (!mounted) return;
-    await _loadBiometricAvailability();
+    await ref.read(loginFlowProvider.notifier).loadBiometricAvailability();
     if (!mounted) return;
     await completeAuthAndRoute(context);
   }
 
   Future<void> _signInWithBiometrics() async {
-    if (!_biometricLoginAvailable || _isLoading) return;
+    final flow = ref.read(loginFlowProvider);
+    if (!flow.biometricLoginAvailable || flow.isLoading) return;
 
-    setState(() => _isLoading = true);
+    ref.read(loginFlowProvider.notifier).setLoading(true);
     try {
-      final verified = await _biometricSession.authenticate(
+      final verified = await ref.read(biometricSessionProvider).authenticate(
         reason: 'Sign in with biometrics',
       );
       if (!verified) return;
 
-      final credentials = await _biometricSession.readStoredCredentials();
+      final credentials =
+          await ref.read(biometricSessionProvider).readStoredCredentials();
       if (credentials == null) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -134,7 +116,7 @@ class _LoginScreenState extends State<LoginPage> with WidgetsBindingObserver {
         return;
       }
 
-      final credential = await _authService.signIn(
+      final credential = await ref.read(authServiceProvider).signIn(
         email: credentials.email,
         password: credentials.password,
       );
@@ -161,7 +143,7 @@ class _LoginScreenState extends State<LoginPage> with WidgetsBindingObserver {
         );
       }
     } finally {
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted) ref.read(loginFlowProvider.notifier).setLoading(false);
     }
   }
 
@@ -177,11 +159,12 @@ class _LoginScreenState extends State<LoginPage> with WidgetsBindingObserver {
 
     await runGuardedAsync(
       this,
-      isSubmitting: () => _isLoading,
-      setSubmitting: (value) => setState(() => _isLoading = value),
+      isSubmitting: () => ref.read(loginFlowProvider).isLoading,
+      setSubmitting: (value) =>
+          ref.read(loginFlowProvider.notifier).setLoading(value),
       action: () async {
         try {
-          final credential = await _authService.signIn(
+          final credential = await ref.read(authServiceProvider).signIn(
             email: email,
             password: password,
           );
@@ -222,6 +205,7 @@ class _LoginScreenState extends State<LoginPage> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
+    final flow = ref.watch(loginFlowProvider);
     return Scaffold(
       body: SafeArea(
         child: SingleChildScrollView(
@@ -319,8 +303,8 @@ class _LoginScreenState extends State<LoginPage> with WidgetsBindingObserver {
                             borderRadius: BorderRadius.circular(12),
                           ),
                         ),
-                        onPressed: _isLoading ? null : _signInWithPassword,
-                        child: _isLoading
+                        onPressed: flow.isLoading ? null : _signInWithPassword,
+                        child: flow.isLoading
                             ? const ShimmerBusyIndicator(onPrimary: true)
                             : const Text(
                                 'Login',
@@ -329,7 +313,7 @@ class _LoginScreenState extends State<LoginPage> with WidgetsBindingObserver {
                       ),
                     ),
                   ),
-                  if (_biometricDeviceSupported) ...[
+                  if (flow.biometricDeviceSupported) ...[
                     const SizedBox(width: 12),
                     SizedBox(
                       height: 52,
@@ -338,7 +322,7 @@ class _LoginScreenState extends State<LoginPage> with WidgetsBindingObserver {
                         style: OutlinedButton.styleFrom(
                           padding: EdgeInsets.zero,
                           side: BorderSide(
-                            color: _biometricLoginAvailable
+                            color: flow.biometricLoginAvailable
                                 ? Theme.of(context).colorScheme.primary
                                 : AppColors.getThemeColors(context).textTertiary,
                             width: 1.5,
@@ -347,11 +331,12 @@ class _LoginScreenState extends State<LoginPage> with WidgetsBindingObserver {
                             borderRadius: BorderRadius.circular(12),
                           ),
                         ),
-                        onPressed: _isLoading ? null : _onBiometricButtonPressed,
+                        onPressed:
+                            flow.isLoading ? null : _onBiometricButtonPressed,
                         child: Icon(
-                          _biometricIcon,
+                          flow.biometricIcon,
                           size: 28,
-                          color: _biometricLoginAvailable
+                          color: flow.biometricLoginAvailable
                               ? Theme.of(context).colorScheme.primary
                               : AppColors.getThemeColors(context).textTertiary,
                         ),

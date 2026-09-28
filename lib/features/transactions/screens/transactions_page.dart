@@ -1,127 +1,25 @@
 // Transactions feature - Transaction History screen.
 // Clean architecture: presentation layer; data from TransactionsService.
 
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:pretium/core/constants/app_colors.dart';
 import 'package:pretium/models/transaction_model.dart';
-import 'package:pretium/services/transactions_service.dart';
+import 'package:pretium/features/transactions/providers/transactions_feed_provider.dart';
 import 'package:pretium/features/transactions/screens/transaction_detail_page.dart';
 import 'package:pretium/features/transactions/widgets/transaction_charts.dart';
 import 'package:pretium/features/transactions/widgets/transaction_list_tile.dart';
 import 'package:pretium/app/route_names.dart';
 import 'package:pretium/widgets/app_shimmer.dart';
 
-class TransactionsPage extends StatefulWidget {
+class TransactionsPage extends ConsumerStatefulWidget {
   const TransactionsPage({super.key});
 
   @override
-  State<TransactionsPage> createState() => _TransactionsPageState();
+  ConsumerState<TransactionsPage> createState() => _TransactionsPageState();
 }
 
-class _TransactionsPageState extends State<TransactionsPage> {
-  final TransactionsService _transactionsService = TransactionsService();
-  TransactionsResponse? _response;
-  List<Transaction> _chartTransactions = const [];
-  bool _isLoading = true;
-  bool _loadingMore = false;
-  String? _error;
-  String _filter = 'all'; // 'all' | 'income' | 'expenses' | 'pending'
-
-  @override
-  void initState() {
-    super.initState();
-    _loadTransactions();
-  }
-
-  Future<TransactionsResponse> _fetchFilteredTransactions({
-    int limit = 50,
-    String? startAfter,
-  }) {
-    switch (_filter) {
-      case 'income':
-        return _transactionsService.getCreditTransactions(
-          limit: limit,
-          startAfter: startAfter,
-        );
-      case 'expenses':
-        return _transactionsService.getDebitTransactions(
-          limit: limit,
-          startAfter: startAfter,
-        );
-      case 'pending':
-        return _transactionsService.getPendingTransactions(
-          limit: limit,
-          startAfter: startAfter,
-        );
-      default:
-        return _transactionsService.getTransactions(
-          limit: limit,
-          startAfter: startAfter,
-        );
-    }
-  }
-
-  Future<void> _loadTransactions() async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) {
-      setState(() {
-        _isLoading = false;
-        _response = TransactionsResponse(transactions: []);
-      });
-      return;
-    }
-    setState(() {
-      _isLoading = true;
-      _error = null;
-    });
-    try {
-      final chartRes = await _transactionsService.getTransactions(limit: 50);
-      final res = await _fetchFilteredTransactions(limit: 50);
-      if (mounted) {
-        setState(() {
-          _chartTransactions = chartRes.transactions;
-          _response = res;
-          _isLoading = false;
-        });
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _error = e.toString();
-          _isLoading = false;
-        });
-      }
-    }
-  }
-
-  Future<void> _loadMoreTransactions() async {
-    final current = _response;
-    if (_loadingMore || current == null || !current.hasMore) return;
-    final startAfter = current.nextPageToken;
-    if (startAfter == null || startAfter.isEmpty) return;
-
-    setState(() => _loadingMore = true);
-    try {
-      final nextPage = await _fetchFilteredTransactions(
-        limit: 50,
-        startAfter: startAfter,
-      );
-      if (!mounted) return;
-      setState(() {
-        _response = TransactionsResponse(
-          transactions: [...current.transactions, ...nextPage.transactions],
-          nextPageToken: nextPage.nextPageToken,
-          totalCount: nextPage.totalCount,
-          hasMore: nextPage.hasMore,
-          sources: nextPage.sources,
-        );
-        _loadingMore = false;
-      });
-    } catch (_) {
-      if (mounted) setState(() => _loadingMore = false);
-    }
-  }
+class _TransactionsPageState extends ConsumerState<TransactionsPage> {
 
   Map<String, List<Transaction>> _groupByDate(List<Transaction> list) {
     final map = <String, List<Transaction>>{};
@@ -153,8 +51,10 @@ class _TransactionsPageState extends State<TransactionsPage> {
   }
 
   List<Widget> _buildGroupedListItems() {
-    if (_response == null) return [];
-    final grouped = _groupByDate(_response!.transactions);
+    final feed = ref.read(transactionsFeedProvider);
+    final response = feed.response;
+    if (response == null) return [];
+    final grouped = _groupByDate(response.transactions);
     final items = <Widget>[];
     for (final key in grouped.keys) {
       items.add(
@@ -185,13 +85,15 @@ class _TransactionsPageState extends State<TransactionsPage> {
         );
       }
     }
-    if (_response?.hasMore == true) {
+    if (response.hasMore == true) {
       items.add(
         Padding(
           padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
           child: OutlinedButton(
-            onPressed: _loadingMore ? null : _loadMoreTransactions,
-            child: _loadingMore
+            onPressed: feed.loadingMore
+                ? null
+                : () => ref.read(transactionsFeedProvider.notifier).loadMore(),
+            child: feed.loadingMore
                 ? const ShimmerBusyIndicator(onPrimary: false)
                 : const Text('Load more'),
           ),
@@ -205,6 +107,8 @@ class _TransactionsPageState extends State<TransactionsPage> {
   Widget build(BuildContext context) {
     final colors = AppColors.getThemeColors(context);
     final primary = Theme.of(context).colorScheme.primary;
+    final feed = ref.watch(transactionsFeedProvider);
+    final feedN = ref.read(transactionsFeedProvider.notifier);
 
     return Scaffold(
       backgroundColor: colors.background,
@@ -240,7 +144,7 @@ class _TransactionsPageState extends State<TransactionsPage> {
         ],
       ),
       body: RefreshIndicator(
-        onRefresh: _loadTransactions,
+        onRefresh: feedN.load,
         color: primary,
         child: CustomScrollView(
           slivers: [
@@ -272,7 +176,7 @@ class _TransactionsPageState extends State<TransactionsPage> {
                       ],
                     ),
                     const SizedBox(height: 16),
-                    TransactionWeeklyBarChart(transactions: _chartTransactions),
+                    TransactionWeeklyBarChart(transactions: feed.chartTransactions),
                     const SizedBox(height: 24),
                     Text(
                       'Income vs Expenses',
@@ -284,7 +188,7 @@ class _TransactionsPageState extends State<TransactionsPage> {
                     ),
                     const SizedBox(height: 12),
                     TransactionIncomeExpenseChart(
-                      transactions: _chartTransactions,
+                      transactions: feed.chartTransactions,
                     ),
                     const SizedBox(height: 24),
                     Text(
@@ -296,7 +200,7 @@ class _TransactionsPageState extends State<TransactionsPage> {
                       ),
                     ),
                     const SizedBox(height: 12),
-                    TransactionCurrencyChart(transactions: _chartTransactions),
+                    TransactionCurrencyChart(transactions: feed.chartTransactions),
                     const SizedBox(height: 24),
                     Text(
                       'By status',
@@ -308,7 +212,7 @@ class _TransactionsPageState extends State<TransactionsPage> {
                     ),
                     const SizedBox(height: 12),
                     TransactionStatusDonutChart(
-                      transactions: _chartTransactions,
+                      transactions: feed.chartTransactions,
                     ),
                   ],
                 ),
@@ -324,41 +228,29 @@ class _TransactionsPageState extends State<TransactionsPage> {
                     _FilterChip(
                       label: 'All',
                       icon: Icons.format_list_bulleted,
-                      isSelected: _filter == 'all',
-                      onTap: () {
-                        setState(() => _filter = 'all');
-                        _loadTransactions();
-                      },
+                      isSelected: feed.filter == 'all',
+                      onTap: () => feedN.setFilter('all'),
                     ),
                     const SizedBox(width: 8),
                     _FilterChip(
                       label: 'Income',
                       icon: Icons.check_circle_outline,
-                      isSelected: _filter == 'income',
-                      onTap: () {
-                        setState(() => _filter = 'income');
-                        _loadTransactions();
-                      },
+                      isSelected: feed.filter == 'income',
+                      onTap: () => feedN.setFilter('income'),
                     ),
                     const SizedBox(width: 8),
                     _FilterChip(
                       label: 'Expenses',
                       icon: Icons.trending_up,
-                      isSelected: _filter == 'expenses',
-                      onTap: () {
-                        setState(() => _filter = 'expenses');
-                        _loadTransactions();
-                      },
+                      isSelected: feed.filter == 'expenses',
+                      onTap: () => feedN.setFilter('expenses'),
                     ),
                     const SizedBox(width: 8),
                     _FilterChip(
                       label: 'Pending',
                       icon: Icons.schedule,
-                      isSelected: _filter == 'pending',
-                      onTap: () {
-                        setState(() => _filter = 'pending');
-                        _loadTransactions();
-                      },
+                      isSelected: feed.filter == 'pending',
+                      onTap: () => feedN.setFilter('pending'),
                     ),
                   ],
                 ),
@@ -380,14 +272,14 @@ class _TransactionsPageState extends State<TransactionsPage> {
               ),
             ),
             const SliverToBoxAdapter(child: SizedBox(height: 12)),
-            if (_isLoading)
+            if (feed.loading)
               const SliverToBoxAdapter(
                 child: Padding(
                   padding: EdgeInsets.fromLTRB(20, 8, 20, 24),
                   child: TransactionListShimmer(itemCount: 8),
                 ),
               )
-            else if (_error != null)
+            else if (feed.error != null)
               SliverToBoxAdapter(
                 child: Padding(
                   padding: const EdgeInsets.all(24),
@@ -399,14 +291,14 @@ class _TransactionsPageState extends State<TransactionsPage> {
                       ),
                       const SizedBox(height: 12),
                       TextButton(
-                        onPressed: _loadTransactions,
+                        onPressed: feedN.load,
                         child: const Text('Retry'),
                       ),
                     ],
                   ),
                 ),
               )
-            else if (_response == null || _response!.transactions.isEmpty)
+            else if (feed.response == null || feed.response!.transactions.isEmpty)
               SliverToBoxAdapter(
                 child: Padding(
                   padding: const EdgeInsets.all(32),

@@ -1,14 +1,14 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:pretium/app/route_names.dart';
 import 'package:pretium/core/constants/app_colors.dart';
-import 'package:pretium/models/notification_model.dart';
-import 'package:pretium/services/notification_service.dart';
+import 'package:pretium/core/providers/auth_providers.dart';
+import 'package:pretium/core/providers/user_profile_provider.dart';
+import 'package:pretium/features/notifications/providers/notifications_provider.dart';
 import 'package:pretium/utils/firebase_utils.dart';
 import 'package:pretium/widgets/tappable_user_avatar.dart';
 
-class HeaderWidget extends StatelessWidget {
+class HeaderWidget extends ConsumerWidget {
   const HeaderWidget({super.key});
 
   Widget _buildClickableAvatar(BuildContext context, String initial) {
@@ -78,8 +78,7 @@ class HeaderWidget extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) {
-    // Check if Firebase is initialized before accessing FirebaseAuth
+  Widget build(BuildContext context, WidgetRef ref) {
     if (!isFirebaseInitialized()) {
       return _buildHeaderLayout(
         context: context,
@@ -88,9 +87,7 @@ class HeaderWidget extends StatelessWidget {
       );
     }
 
-    final user = FirebaseAuth.instance.currentUser;
-
-    // If no user is logged in, show a simple placeholder header
+    final user = ref.watch(currentUserProvider);
     if (user == null) {
       return _buildHeaderLayout(
         context: context,
@@ -99,91 +96,43 @@ class HeaderWidget extends StatelessWidget {
       );
     }
 
-    final uid = user.uid;
-    
-    // Wrap Firestore access in try-catch to handle errors gracefully
-    Stream<DocumentSnapshot<Map<String, dynamic>>>? userDocStream;
-    try {
-      userDocStream = FirebaseFirestore.instance.collection('users').doc(uid).snapshots();
-    } catch (e) {
-      // If Firestore fails, show default UI
-      return _buildHeaderLayout(
-        context: context,
-        avatarInitial: (user.email?.isNotEmpty ?? false)
-            ? user.email![0].toUpperCase()
-            : 'U',
-        displayName: user.email?.isNotEmpty ?? false
-            ? user.email!.split('@').first
-            : 'Guest',
-        userId: uid,
-      );
-    }
+    final profile = ref.watch(userProfileProvider).valueOrNull;
+    final email = user.email ?? '';
+    final firstName = profile?.firstName ?? '';
+    final lastName = profile?.lastName ?? '';
+    final displayName = (firstName.isNotEmpty
+            ? lastName.isNotEmpty
+                ? '$firstName $lastName'
+                : firstName
+            : (email.isNotEmpty ? email.split('@').first : ''))
+        .trim();
+    final avatarInitial = (firstName.isNotEmpty
+            ? firstName[0]
+            : (email.isNotEmpty ? email[0] : 'U'))
+        .toUpperCase();
 
-    return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-      stream: userDocStream,
-      builder: (context, snapshot) {
-        // Handle errors in the stream
-        if (snapshot.hasError) {
-          return _buildHeaderLayout(
-            context: context,
-            avatarInitial: (user.email?.isNotEmpty ?? false)
-                ? user.email![0].toUpperCase()
-                : 'U',
-            displayName: user.email?.isNotEmpty ?? false
-                ? user.email!.split('@').first
-                : 'Guest',
-            userId: uid,
-          );
-        }
-        String firstName = '';
-        String lastName = '';
-        String email = user.email ?? '';
-
-        if (snapshot.hasData && snapshot.data!.exists) {
-          final data = snapshot.data!.data();
-          if (data != null) {
-            firstName = (data['firstName'] ?? '').toString();
-            lastName = (data['lastName'] ?? '').toString();
-          }
-        }
-
-        final displayName =
-            (firstName.isNotEmpty
-                    ? lastName.isNotEmpty ? '$firstName $lastName' : firstName
-                    : (email.isNotEmpty ? email.split('@').first : ''))
-                .trim();
-        final avatarInitial =
-            (firstName.isNotEmpty
-                    ? firstName[0]
-                    : (email.isNotEmpty ? email[0] : 'U'))
-                .toUpperCase();
-
-        return _buildHeaderLayout(
-          context: context,
-          avatarInitial: avatarInitial,
-          displayName: displayName.isNotEmpty ? displayName : 'Guest',
-          userId: uid,
-        );
-      },
+    return _buildHeaderLayout(
+      context: context,
+      avatarInitial: avatarInitial,
+      displayName: displayName.isNotEmpty ? displayName : 'Guest',
+      userId: user.uid,
     );
   }
 }
 
-class _NotificationBellButton extends StatelessWidget {
+class _NotificationBellButton extends ConsumerWidget {
   const _NotificationBellButton({required this.userId});
 
   final String userId;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final colors = AppColors.getThemeColors(context);
+    final hasUnread =
+        ref.watch(notificationsProvider).valueOrNull?.any((n) => !n.read) ??
+            false;
 
-    return StreamBuilder<List<NotificationModel>>(
-      stream: NotificationService().getNotificationsStream(userId),
-      builder: (context, snapshot) {
-        final hasUnread = snapshot.data?.any((n) => !n.read) ?? false;
-
-        return Stack(
+    return Stack(
           clipBehavior: Clip.none,
           children: [
             IconButton(
@@ -211,7 +160,5 @@ class _NotificationBellButton extends StatelessWidget {
               ),
           ],
         );
-      },
-    );
   }
 }

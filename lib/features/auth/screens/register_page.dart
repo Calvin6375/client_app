@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:pretium/core/providers/service_providers.dart';
+import 'package:pretium/features/auth/providers/auth_flow_provider.dart';
 import 'package:pretium/services/auth_service.dart';
-import 'package:pretium/services/notification_service.dart';
 import 'package:pretium/utils/logger.dart';
 import 'package:pretium/utils/async_action_guard.dart';
 import 'package:pretium/core/constants/app_colors.dart';
@@ -15,7 +17,6 @@ import 'package:pretium/features/auth/screens/legal_document_webview_page.dart';
 import 'package:pretium/features/auth/services/registration_api_service.dart';
 import 'package:pretium/features/auth/utils/phone_local_digits.dart';
 import 'package:pretium/features/auth/utils/post_auth_routing.dart';
-import 'package:pretium/services/auth_claims_service.dart';
 import 'package:pretium/core/constants/auth_config.dart';
 import 'package:pretium/widgets/app_shimmer.dart';
 
@@ -44,14 +45,14 @@ class RegisterApp extends StatelessWidget {
   }
 }
 
-class RegisterPage extends StatefulWidget {
+class RegisterPage extends ConsumerStatefulWidget {
   const RegisterPage({super.key});
 
   @override
-  State<RegisterPage> createState() => _RegisterPageState();
+  ConsumerState<RegisterPage> createState() => _RegisterPageState();
 }
 
-class _RegisterPageState extends State<RegisterPage> {
+class _RegisterPageState extends ConsumerState<RegisterPage> {
   final TextEditingController _firstNameController = TextEditingController();
   final TextEditingController _lastNameController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
@@ -62,13 +63,8 @@ class _RegisterPageState extends State<RegisterPage> {
   bool _privacyAccepted = false;
   bool _hasReadTerms = false;
   bool _hasReadPrivacy = false;
-  bool _isSubmitting = false;
   String _selectedCountryCode = '254'; // Default to Kenya
   NationalityOption? _selectedNationality = nationalityByIsoCode('KE');
-
-  final AuthService _authService = AuthService();
-  final RegistrationApiService _registrationApiService = RegistrationApiService();
-  final AuthClaimsService _authClaimsService = AuthClaimsService();
 
   @override
   void initState() {
@@ -197,8 +193,9 @@ class _RegisterPageState extends State<RegisterPage> {
 
     await runGuardedAsync(
       this,
-      isSubmitting: () => _isSubmitting,
-      setSubmitting: (value) => setState(() => _isSubmitting = value),
+      isSubmitting: () => ref.read(registerFlowProvider),
+      setSubmitting: (value) =>
+          ref.read(registerFlowProvider.notifier).setSubmitting(value),
       action: () async {
         try {
           // Log complete registration request (matches API body except password is omitted)
@@ -218,7 +215,7 @@ class _RegisterPageState extends State<RegisterPage> {
 
       // 0) Backend creates Auth + profile (`POST /api/register` → 201).
       Logger.info('📤 Step 0: Registering customer with backend API...');
-      await _registrationApiService.registerCustomer(
+      await ref.read(registrationApiServiceProvider).registerCustomer(
         firstName: firstName,
         lastName: lastName,
         email: email,
@@ -230,7 +227,7 @@ class _RegisterPageState extends State<RegisterPage> {
 
       // 1) Sign in with the account the backend just created — do not createUser again.
       Logger.info('📤 Step 1: Signing in with Firebase Auth...');
-      final credential = await _authService.signIn(
+      final credential = await ref.read(authServiceProvider).signIn(
         email: email,
         password: password,
       );
@@ -240,7 +237,7 @@ class _RegisterPageState extends State<RegisterPage> {
       try {
         await credential.user!.getIdToken(true);
         final userType =
-            await _authClaimsService.userTypeClaim(forceRefresh: true);
+            await ref.read(authClaimsServiceProvider).userTypeClaim(forceRefresh: true);
         Logger.info(
           '✅ Auth token is ready (userType: ${userType ?? "(missing)"})',
         );
@@ -257,7 +254,7 @@ class _RegisterPageState extends State<RegisterPage> {
       // 2) Setup notifications (profile already created by backend).
       Logger.info('📤 Step 2: Setting up notifications...');
       try {
-        await NotificationService().setupNotifications(uid);
+        await ref.read(notificationServiceProvider).setupNotifications(uid);
         Logger.success('✅ Notifications setup completed');
       } catch (e) {
         Logger.warning('⚠️ Failed to setup notifications: $e');
@@ -314,6 +311,7 @@ class _RegisterPageState extends State<RegisterPage> {
 
   @override
   Widget build(BuildContext context) {
+    final submitting = ref.watch(registerFlowProvider);
     final colors = AppColors.getThemeColors(context);
     return Scaffold(
       backgroundColor: colors.background, // Theme-aware background
@@ -455,7 +453,7 @@ class _RegisterPageState extends State<RegisterPage> {
                   height: 48,
                   child: ElevatedButton(
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: _canSubmit && !_isSubmitting
+                      backgroundColor: _canSubmit && !submitting
                           ? Theme.of(context).colorScheme.primary
                           : Colors.grey.shade400,
                       foregroundColor: Colors.white,
@@ -465,8 +463,8 @@ class _RegisterPageState extends State<RegisterPage> {
                         borderRadius: BorderRadius.circular(8),
                       ),
                     ),
-                    onPressed: (_canSubmit && !_isSubmitting) ? _register : null,
-                    child: _isSubmitting
+                    onPressed: (_canSubmit && !submitting) ? _register : null,
+                    child: submitting
                         ? const ShimmerBusyIndicator(
                             width: 96,
                             height: 14,

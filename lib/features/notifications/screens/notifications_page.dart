@@ -3,9 +3,12 @@ import 'dart:async';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:pretium/core/constants/app_colors.dart';
+import 'package:pretium/core/providers/auth_providers.dart';
+import 'package:pretium/core/providers/service_providers.dart';
+import 'package:pretium/features/notifications/providers/notifications_provider.dart';
 import 'package:pretium/models/notification_model.dart';
-import 'package:pretium/services/notification_service.dart';
 import 'package:pretium/utils/async_action_guard.dart';
 import 'package:pretium/utils/provider_display_sanitizer.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -52,16 +55,16 @@ IconData _notificationIconFor(NotificationModel notification) {
   }
 }
 
-class NotificationsPage extends StatefulWidget {
+class NotificationsPage extends ConsumerStatefulWidget {
   const NotificationsPage({super.key});
 
   @override
-  State<NotificationsPage> createState() => _NotificationsPageState();
+  ConsumerState<NotificationsPage> createState() => _NotificationsPageState();
 }
 
 enum _NotificationFilterTab { transaction, system, promotions }
 
-class _NotificationsPageState extends State<NotificationsPage> {
+class _NotificationsPageState extends ConsumerState<NotificationsPage> {
   _NotificationFilterTab _selectedTab = _NotificationFilterTab.transaction;
   bool _isMarkingAllRead = false;
   String? _openingNotificationId;
@@ -80,7 +83,7 @@ class _NotificationsPageState extends State<NotificationsPage> {
 
   @override
   Widget build(BuildContext context) {
-    final user = FirebaseAuth.instance.currentUser;
+    final user = ref.watch(currentUserProvider);
     final colors = AppColors.getThemeColors(context);
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final primary = Theme.of(context).colorScheme.primary;
@@ -107,13 +110,11 @@ class _NotificationsPageState extends State<NotificationsPage> {
       );
     }
 
-    return StreamBuilder<List<NotificationModel>>(
-      stream: NotificationService().getNotificationsStream(user.uid),
-      builder: (context, snapshot) {
-        final notifications = snapshot.data ?? [];
-        final filtered = _filterNotifications(notifications);
-        final loading = snapshot.connectionState == ConnectionState.waiting &&
-            !snapshot.hasData;
+    final notificationsAsync = ref.watch(notificationsProvider);
+    final notifications = notificationsAsync.valueOrNull ?? [];
+    final filtered = _filterNotifications(notifications);
+    final loading =
+        notificationsAsync.isLoading && !notificationsAsync.hasValue;
         final hasUnread = filtered.any((n) => !n.read);
         final interactionLocked =
             loading || _isMarkingAllRead || _openingNotificationId != null;
@@ -160,7 +161,7 @@ class _NotificationsPageState extends State<NotificationsPage> {
                   children: [
                     _buildBody(
                       context,
-                      snapshot,
+                      notificationsAsync,
                       colors,
                       primary,
                       user,
@@ -188,24 +189,21 @@ class _NotificationsPageState extends State<NotificationsPage> {
             ],
           ),
         );
-      },
-    );
   }
 
   Widget _buildBody(
     BuildContext context,
-    AsyncSnapshot<List<NotificationModel>> snapshot,
+    AsyncValue<List<NotificationModel>> notificationsAsync,
     AppThemeColors colors,
     Color primary,
     User user,
     List<NotificationModel> notifications, {
     required bool interactionLocked,
   }) {
-    if (snapshot.connectionState == ConnectionState.waiting &&
-        !snapshot.hasData) {
+    if (notificationsAsync.isLoading && !notificationsAsync.hasValue) {
       return const NotificationListShimmer();
     }
-    if (snapshot.hasError) {
+    if (notificationsAsync.hasError) {
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(24.0),
@@ -254,7 +252,7 @@ class _NotificationsPageState extends State<NotificationsPage> {
       if (!mounted) return;
       setState(() => _isMarkingAllRead = true);
       try {
-        await NotificationService().markAllNotificationsAsRead(userId);
+        await ref.read(notificationServiceProvider).markAllNotificationsAsRead(userId);
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('All notifications marked as read')),
@@ -278,7 +276,7 @@ class _NotificationsPageState extends State<NotificationsPage> {
     unawaited(() async {
       try {
         final token = await user.getIdToken();
-        await NotificationService().markNotificationAsRead(
+        await ref.read(notificationServiceProvider).markNotificationAsRead(
           notificationId,
           authToken: token,
         );
