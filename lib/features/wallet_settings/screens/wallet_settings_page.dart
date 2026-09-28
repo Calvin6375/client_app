@@ -1,21 +1,27 @@
 // Wallet Settings screen - profile, balance, security, preferences.
 
-import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:pretium/core/constants/app_colors.dart';
 import 'package:pretium/core/theme/theme_provider.dart';
+import 'package:pretium/features/topup/utils/receipt_image_export.dart';
+import 'package:pretium/models/user_model.dart';
 import 'package:pretium/repositories/user_repository.dart';
 import 'package:pretium/repositories/wallet_repository.dart';
 import 'package:pretium/services/auth_service.dart';
+import 'package:pretium/services/dashboard_session_cache.dart';
 import 'package:pretium/services/biometric_session_service.dart';
 import 'package:pretium/utils/async_action_guard.dart';
+import 'package:pretium/utils/share_image.dart';
 import 'package:pretium/app/route_names.dart';
 import 'package:pretium/features/safari_tap/models/safari_tap_profile_qr.dart';
 import 'package:pretium/features/safari_tap/services/safari_tap_pay_api_service.dart';
 import 'package:pretium/widgets/app_shimmer.dart';
+import 'package:pretium/widgets/tappable_user_avatar.dart';
+import 'package:pretium/widgets/truepay_qr_code.dart';
 
 class WalletSettingsPage extends StatefulWidget {
   const WalletSettingsPage({super.key});
@@ -35,9 +41,10 @@ class _WalletSettingsPageState extends State<WalletSettingsPage> {
 
   bool _biometricEnabled = false;
   bool _pushNotificationsEnabled = true;
-  String _balance = '0.00';
+  double _kesBalance = 0;
   String _userName = '';
   String _userEmail = '';
+  UserModel? _profile;
   bool _loading = true;
   SafariTapProfileQr? _profileQr;
   bool _loadingQr = false;
@@ -56,18 +63,23 @@ class _WalletSettingsPageState extends State<WalletSettingsPage> {
     }
     try {
       final profile = await _userRepository.getUserProfile(user.uid);
-      final wallet = await _walletRepository.getWalletBalance(user.uid);
+      final cachedKes =
+          DashboardSessionCache.instance.readWalletLastKnown()?.fiatWallets['KES']?.balance;
+      final wallet = await _walletRepository.getWalletBalance(
+        user.uid,
+        currency: 'KES',
+      );
       final biometricEnabled = await _biometricSession.isBiometricLoginEnabled();
       if (mounted) {
         setState(() {
+          _profile = profile;
           _userName = profile?.fullName ?? 'User';
           _userEmail = profile?.email ?? user.email ?? '';
-          _balance = wallet?.balance.toStringAsFixed(2) ?? '0.00';
+          _kesBalance = wallet?.balance ?? cachedKes ?? 0;
           _biometricEnabled = biometricEnabled;
           _loading = false;
         });
       }
-      unawaited(_loadProfileQr());
     } catch (_) {
       if (mounted) setState(() => _loading = false);
     }
@@ -88,10 +100,14 @@ class _WalletSettingsPageState extends State<WalletSettingsPage> {
     }
   }
 
-  void _showProfileQr() {
-    final bytes = _profileQr?.pngBytes;
-    if (bytes == null) {
-      if (!_loadingQr) unawaited(_loadProfileQr());
+  Future<void> _showProfileQr() async {
+    if (_loadingQr) return;
+    if (_profileQr == null || _profileQr!.qrPayload.trim().isEmpty) {
+      await _loadProfileQr();
+      if (!mounted) return;
+    }
+    final payload = _profileQr?.qrPayload.trim() ?? '';
+    if (payload.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Your receive QR is not available yet.')),
       );
@@ -100,38 +116,11 @@ class _WalletSettingsPageState extends State<WalletSettingsPage> {
     showDialog<void>(
       context: context,
       builder: (ctx) {
-        final colors = AppColors.getThemeColors(ctx);
-        return AlertDialog(
-          title: const Text('My SafariTap QR'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                _profileQr?.displayName.isNotEmpty == true
-                    ? _profileQr!.displayName
-                    : _userName,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: colors.textPrimary,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const SizedBox(height: 16),
-              Image.memory(bytes, width: 220, height: 220, fit: BoxFit.contain),
-              const SizedBox(height: 12),
-              Text(
-                'Others can scan this to send to your SafariTap wallet.',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: colors.textSecondary, fontSize: 13),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(),
-              child: const Text('Close'),
-            ),
-          ],
+        return _SafariTapQrDialog(
+          payload: payload,
+          displayName: _profileQr?.displayName.isNotEmpty == true
+              ? _profileQr!.displayName
+              : _userName,
         );
       },
     );
@@ -250,35 +239,28 @@ class _WalletSettingsPageState extends State<WalletSettingsPage> {
                   Center(
                     child: Column(
                       children: [
-                        Stack(
-                          children: [
-                            CircleAvatar(
-                              radius: 44,
-                              backgroundColor: primary.withValues(alpha: 0.2),
-                              child: Text(
-                                _userName.isNotEmpty ? _userName[0].toUpperCase() : '?',
-                                style: TextStyle(
-                                  fontSize: 32,
-                                  color: primary,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ),
-                            Positioned(
-                              right: 0,
-                              bottom: 0,
-                              child: GestureDetector(
-                                onTap: _showProfileQr,
-                                child: CircleAvatar(
-                                  radius: 14,
-                                  backgroundColor: primary,
-                                  child: Icon(Icons.qr_code_2_rounded, size: 16, color: colors.onPrimary),
-                                ),
-                              ),
-                            ),
-                          ],
+                        TappableUserAvatar(
+                          initial: _userName.isNotEmpty
+                              ? _userName[0].toUpperCase()
+                              : '?',
+                          radius: 44,
+                          pulse: true,
+                          tooltip: 'Show receive QR',
+                          badgeIcon: _loadingQr
+                              ? Icons.hourglass_top_rounded
+                              : Icons.qr_code_2_rounded,
+                          onTap: _showProfileQr,
                         ),
-                        const SizedBox(height: 12),
+                        const SizedBox(height: 10),
+                        Text(
+                          'Tap to show your QR',
+                          style: TextStyle(
+                            color: primary,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(height: 10),
                         Text(
                           _userName,
                           style: TextStyle(
@@ -287,42 +269,10 @@ class _WalletSettingsPageState extends State<WalletSettingsPage> {
                             fontSize: 18,
                           ),
                         ),
-                        const SizedBox(height: 4),
-                        Text(
-                          _userEmail,
-                          style: TextStyle(
-                            color: colors.textSecondary,
-                            fontSize: 14,
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        if (_loadingQr && _profileQr == null)
-                          const ShimmerBusyIndicator(width: 160, height: 160)
-                        else if (_profileQr?.pngBytes != null)
-                          GestureDetector(
-                            onTap: _showProfileQr,
-                            child: Container(
-                              padding: const EdgeInsets.all(12),
-                              decoration: BoxDecoration(
-                                color: colors.surface,
-                                borderRadius: BorderRadius.circular(16),
-                                border: Border.all(
-                                  color: colors.border.withValues(alpha: 0.5),
-                                ),
-                              ),
-                              child: Image.memory(
-                                _profileQr!.pngBytes!,
-                                width: 168,
-                                height: 168,
-                                fit: BoxFit.contain,
-                              ),
-                            ),
-                          ),
                       ],
                     ),
                   ),
                   const SizedBox(height: 24),
-                  // Balance card
                   Container(
                     width: double.infinity,
                     padding: const EdgeInsets.all(20),
@@ -342,66 +292,84 @@ class _WalletSettingsPageState extends State<WalletSettingsPage> {
                           ),
                         ),
                         const SizedBox(height: 8),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(
-                              '\$$_balance',
-                              style: TextStyle(
-                                color: colors.textPrimary,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 24,
-                              ),
-                            ),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                              decoration: BoxDecoration(
-                                color: colors.successLight,
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Text(
-                                '+2.4%',
-                                style: TextStyle(
-                                  color: colors.success,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 16),
                         Text(
-                          'Wallet Address',
+                          'KES ${_kesBalance.toStringAsFixed(2)}',
                           style: TextStyle(
-                            color: colors.textSecondary,
-                            fontSize: 14,
+                            color: colors.textPrimary,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 24,
                           ),
                         ),
-                        const SizedBox(height: 4),
-                        Row(
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Material(
+                    color: colors.surface,
+                    borderRadius: BorderRadius.circular(16),
+                    child: InkWell(
+                      onTap: () {
+                        Navigator.of(context).push<void>(
+                          MaterialPageRoute<void>(
+                            builder: (_) => _ProfileDetailsPage(
+                              profile: _profile,
+                              fallbackEmail: _userEmail,
+                            ),
+                          ),
+                        );
+                      },
+                      borderRadius: BorderRadius.circular(16),
+                      child: Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.fromLTRB(16, 16, 12, 16),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                            color: colors.border.withValues(alpha: 0.5),
+                          ),
+                        ),
+                        child: Row(
                           children: [
-                            Expanded(
-                              child: Text(
-                                '0x71C...8a29',
-                                style: TextStyle(
-                                  color: colors.textPrimary,
-                                  fontSize: 14,
-                                  fontFamily: 'monospace',
-                                ),
+                            CircleAvatar(
+                              radius: 22,
+                              backgroundColor: primary.withValues(alpha: 0.12),
+                              child: Icon(
+                                Icons.person_outline_rounded,
+                                color: primary,
+                                size: 22,
                               ),
                             ),
-                            IconButton(
-                              icon: const Icon(Icons.copy, size: 20),
-                              onPressed: () {},
+                            const SizedBox(width: 14),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Profile',
+                                    style: TextStyle(
+                                      color: colors.textPrimary,
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 16,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    'View your name, phone number, and more',
+                                    style: TextStyle(
+                                      color: colors.textSecondary,
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
-                            TextButton(
-                              onPressed: () {},
-                              child: const Text('Manage'),
+                            Icon(
+                              Icons.chevron_right_rounded,
+                              color: colors.textTertiary,
                             ),
                           ],
                         ),
-                      ],
+                      ),
                     ),
                   ),
                   const SizedBox(height: 28),
@@ -463,19 +431,178 @@ class _WalletSettingsPageState extends State<WalletSettingsPage> {
                       ),
                     ),
                   ),
-                  Center(
-                    child: Text(
-                      'Securely encrypted',
-                      style: TextStyle(
-                        color: colors.textTertiary,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ),
                   const SizedBox(height: 32),
                 ],
               ),
             ),
+    );
+  }
+}
+
+class _SafariTapQrDialog extends StatefulWidget {
+  const _SafariTapQrDialog({
+    required this.payload,
+    required this.displayName,
+  });
+
+  final String payload;
+  final String displayName;
+
+  @override
+  State<_SafariTapQrDialog> createState() => _SafariTapQrDialogState();
+}
+
+class _SafariTapQrDialogState extends State<_SafariTapQrDialog> {
+  final GlobalKey _qrCardKey = GlobalKey();
+  bool _busy = false;
+
+  Rect? _shareOrigin(BuildContext buttonContext) {
+    final box = buttonContext.findRenderObject() as RenderBox?;
+    if (box == null || !box.hasSize) return null;
+    return box.localToGlobal(Offset.zero) & box.size;
+  }
+
+  Future<Uint8List?> _captureQrPng() async {
+    await WidgetsBinding.instance.endOfFrame;
+    return ReceiptImageExport.captureRepaintBoundaryPng(_qrCardKey);
+  }
+
+  void _toast(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
+  }
+
+  Future<void> _share(BuildContext buttonContext) async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    try {
+      final png = await _captureQrPng();
+      if (png == null || png.isEmpty) {
+        _toast('Could not capture QR. Try again.');
+        return;
+      }
+      final stamp = DateTime.now().millisecondsSinceEpoch;
+      await sharePngImage(
+        pngBytes: png,
+        fileBaseName: 'truepay_safaritap_qr_$stamp',
+        subject: 'My SafariTap QR',
+        text: 'Scan this QR to send to my SafariTap wallet.',
+        // ignore: use_build_context_synchronously
+        sharePositionOrigin: _shareOrigin(buttonContext),
+        onMessage: _toast,
+      );
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _download() async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    try {
+      final png = await _captureQrPng();
+      if (png == null || png.isEmpty) {
+        _toast('Could not capture QR. Try again.');
+        return;
+      }
+      final stamp = DateTime.now().millisecondsSinceEpoch;
+      await savePngToGallery(
+        pngBytes: png,
+        fileBaseName: 'truepay_safaritap_qr_$stamp',
+        onMessage: (m) {
+          _toast(m == 'Saved to gallery' ? 'QR saved to gallery' : m);
+        },
+      );
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = AppColors.getThemeColors(context);
+    final surface = Theme.of(context).colorScheme.surface;
+    return Dialog(
+      insetPadding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 360),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(20, 22, 20, 12),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'My SafariTap QR',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: colors.textPrimary,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 18,
+                ),
+              ),
+              const SizedBox(height: 16),
+              RepaintBoundary(
+                key: _qrCardKey,
+                child: ColoredBox(
+                  color: surface,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        widget.displayName,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: colors.textPrimary,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      TruePayQrCode(data: widget.payload, size: 220),
+                      const SizedBox(height: 12),
+                      Text(
+                        'Others can scan this to send to your SafariTap wallet.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: colors.textSecondary,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 18),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed: _busy ? null : _download,
+                  icon: const Icon(Icons.download_rounded, size: 18),
+                  label: const Text('Download'),
+                ),
+              ),
+              const SizedBox(height: 8),
+              SizedBox(
+                width: double.infinity,
+                child: Builder(
+                  builder: (buttonContext) {
+                    return OutlinedButton.icon(
+                      onPressed: _busy ? null : () => _share(buttonContext),
+                      icon: const Icon(Icons.ios_share_rounded, size: 18),
+                      label: const Text('Share'),
+                    );
+                  },
+                ),
+              ),
+              TextButton(
+                onPressed: _busy ? null : () => Navigator.of(context).pop(),
+                child: const Text('Close'),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
@@ -591,6 +718,122 @@ class _SettingsTile extends StatelessWidget {
           ),
         ),
         trailing: trailing,
+      ),
+    );
+  }
+}
+
+class _ProfileDetailsPage extends StatelessWidget {
+  const _ProfileDetailsPage({
+    required this.profile,
+    required this.fallbackEmail,
+  });
+
+  final UserModel? profile;
+  final String fallbackEmail;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = AppColors.getThemeColors(context);
+    final email = (profile?.email.trim().isNotEmpty == true)
+        ? profile!.email.trim()
+        : fallbackEmail.trim();
+    final rows = <(String, String)>[
+      ('First name', profile?.firstName.trim() ?? ''),
+      ('Last name', profile?.lastName.trim() ?? ''),
+      ('Full name', profile?.fullName ?? ''),
+      ('Email', email),
+      ('Phone number', profile?.phoneNumber?.trim() ?? ''),
+      ('Country', profile?.country?.trim() ?? ''),
+      ('City', profile?.city?.trim() ?? ''),
+      ('State', profile?.state?.trim() ?? ''),
+      ('Street address', profile?.streetAddress?.trim() ?? ''),
+      ('Postal code', profile?.postalCode?.trim() ?? ''),
+    ].where((row) => row.$2.isNotEmpty).toList();
+
+    return Scaffold(
+      backgroundColor: colors.background,
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        title: Text(
+          'Profile',
+          style: TextStyle(
+            color: colors.textPrimary,
+            fontWeight: FontWeight.bold,
+            fontSize: 18,
+          ),
+        ),
+        iconTheme: IconThemeData(color: colors.textPrimary),
+      ),
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
+        children: [
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+            decoration: BoxDecoration(
+              color: colors.surface,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: colors.border.withValues(alpha: 0.5)),
+            ),
+            child: Column(
+              children: [
+                for (var i = 0; i < rows.length; i++) ...[
+                  if (i > 0)
+                    Divider(
+                      height: 1,
+                      color: colors.border.withValues(alpha: 0.45),
+                    ),
+                  _ProfileFieldRow(
+                    label: rows[i].$1,
+                    value: rows[i].$2.isEmpty ? '—' : rows[i].$2,
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ProfileFieldRow extends StatelessWidget {
+  const _ProfileFieldRow({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = AppColors.getThemeColors(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 14),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 120,
+            child: Text(
+              label,
+              style: TextStyle(
+                color: colors.textSecondary,
+                fontSize: 13,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: TextStyle(
+                color: colors.textPrimary,
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

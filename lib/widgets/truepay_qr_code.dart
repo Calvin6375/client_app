@@ -7,10 +7,12 @@ class TruePayQrCode extends StatelessWidget {
     super.key,
     required this.data,
     this.size = 240,
+    this.logoAsset = 'assets/icons/clean.png',
   });
 
   final String data;
   final double size;
+  final String logoAsset;
 
   static const Color _ink = Color(0xFF008CA8);
 
@@ -35,17 +37,17 @@ class TruePayQrCode extends StatelessWidget {
       child: PrettyQrView.data(
         data: data,
         errorCorrectLevel: QrErrorCorrectLevel.H,
-        decoration: const PrettyQrDecoration(
+        decoration: PrettyQrDecoration(
           background: Colors.white,
           quietZone: PrettyQrQuietZone.zero,
-          shape: PrettyQrDotsSymbol(
+          shape: const PrettyQrDotsSymbol(
             color: _ink,
             unifiedFinderPattern: true,
             unifiedAlignmentPatterns: true,
           ),
           image: PrettyQrDecorationImage(
-            image: AssetImage('assets/images/icon_2.png'),
-            padding: EdgeInsets.all(6),
+            image: AssetImage(logoAsset),
+            padding: const EdgeInsets.all(6),
             position: PrettyQrDecorationImagePosition.embedded,
           ),
         ),

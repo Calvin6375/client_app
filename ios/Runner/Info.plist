@@ -69,7 +69,7 @@
 	<key>NSCameraUsageDescription</key>
 	<string>Scan merchant QR codes to complete payments.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
-	<string>Save transaction receipts to your photo library.</string>
+	<string>Save receipts and your SafariTap QR code to your photo library.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Upload a QR code image from your photo library to pay merchants.</string>
 	<key>NSFaceIDUsageDescription</key>

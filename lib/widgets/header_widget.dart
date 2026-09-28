@@ -6,35 +6,17 @@ import 'package:pretium/core/constants/app_colors.dart';
 import 'package:pretium/models/notification_model.dart';
 import 'package:pretium/services/notification_service.dart';
 import 'package:pretium/utils/firebase_utils.dart';
+import 'package:pretium/widgets/tappable_user_avatar.dart';
 
 class HeaderWidget extends StatelessWidget {
   const HeaderWidget({super.key});
 
-  Widget _buildClickableAvatar(
-    BuildContext context,
-    String initial,
-    Color primary,
-  ) {
-    final colors = AppColors.getThemeColors(context);
-    return InkWell(
+  Widget _buildClickableAvatar(BuildContext context, String initial) {
+    return TappableUserAvatar(
+      initial: initial,
+      tooltip: 'Wallet settings',
+      badgeIcon: Icons.arrow_forward_ios_rounded,
       onTap: () => Navigator.of(context).pushNamed(RouteNames.walletSettings),
-      borderRadius: BorderRadius.circular(20),
-      child: CircleAvatar(
-        radius: 22,
-        backgroundColor: Theme.of(context).brightness == Brightness.dark
-            ? colors.onPrimary // White for dark mode
-            : primary.withValues(alpha: 0.1), // Light teal background for light mode
-        child: Text(
-          initial,
-          style: TextStyle(
-            color: Theme.of(context).brightness == Brightness.dark
-                ? primary // Teal text on white for dark mode
-                : primary, // Teal text on light background for light mode
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-      ),
     );
   }
 
@@ -45,12 +27,11 @@ class HeaderWidget extends StatelessWidget {
     String? userId,
   }) {
     final colors = AppColors.getThemeColors(context);
-    final primary = Theme.of(context).colorScheme.primary;
 
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        _buildClickableAvatar(context, avatarInitial, primary),
+        _buildClickableAvatar(context, avatarInitial),
         const SizedBox(width: 12),
         Expanded(
           child: Column(
