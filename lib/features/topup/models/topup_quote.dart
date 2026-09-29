@@ -29,70 +29,88 @@ class TopupQuote {
   final double? amount;
 
   factory TopupQuote.fromJson(Map<String, dynamic> json) {
-    final currency = _stringOrNull(json['currency'])?.toUpperCase();
+    final depositCurrency = _stringOrNull(json['currency'])?.toUpperCase();
     final amount = _asDouble(json['amount'] ?? json['depositAmount']);
+    final lines = _indexLines(json['lines']);
 
-    final lines = json['lines'];
-    Map<String, dynamic>? linesMap;
-    if (lines is Map) {
-      linesMap = Map<String, dynamic>.from(lines);
-    }
-
-    final processingFromLine = _lineDisplay(linesMap, const [
-      'processing_fees',
-      'processingFees',
-      'processing',
-    ]);
-    final paymentMethodFromLine = _lineDisplay(linesMap, const [
-      'payment_method_fees',
-      'paymentMethodFees',
-      'payment_method',
-    ]);
-    final youDepositFromLine = _lineDisplay(linesMap, const [
+    final youDepositLine = _line(lines, const [
       'you_deposit',
       'youDeposit',
       'deposit',
     ]);
-    final youWillPayFromLine = _lineDisplay(linesMap, const [
+    final processingLine = _line(lines, const [
+      'processing_fees',
+      'processingFees',
+      'processing',
+    ]);
+    final paymentMethodLine = _line(lines, const [
+      'payment_method_fees',
+      'paymentMethodFees',
+      'payment_method',
+    ]);
+    final youWillPayLine = _line(lines, const [
       'you_will_pay',
       'youWillPay',
       'total',
       'paystack_amount',
     ]);
 
+    final payCurrency = _firstCurrency([
+      youWillPayLine?.currency,
+      json['paystackCurrency'],
+      json['paystack_currency'],
+      json['youWillPayCurrency'],
+      json['totalToPayCurrency'],
+    ]);
+
     final youDeposit = _display(
-      json['youDeposit'] ?? json['you_deposit'] ?? youDepositFromLine,
-      fallbackAmount: amount,
-      currency: currency,
-      fallbackLabel: amount != null && currency != null
-          ? _formatAmount(amount, currency)
+      youDepositLine?.display ?? json['youDeposit'] ?? json['you_deposit'],
+      fallbackAmount: _asDouble(youDepositLine?.amount) ?? amount,
+      currency: youDepositLine?.currency ?? depositCurrency,
+      fallbackLabel: amount != null && depositCurrency != null
+          ? _formatAmount(amount, depositCurrency)
           : '—',
     );
 
     final processingFees = _display(
-      json['processingFees'] ??
-          json['processing_fees'] ??
-          processingFromLine,
+      processingLine?.display ??
+          json['processingFees'] ??
+          json['processing_fees'],
+      fallbackAmount: _asDouble(processingLine?.amount) ??
+          _asDouble(json['processingFees'] ?? json['processing_fees']),
+      currency: processingLine?.currency ??
+          _stringOrNull(json['processingFeesCurrency'])?.toUpperCase(),
       fallbackLabel: 'Free',
     );
 
     final paymentMethodFees = _display(
-      json['paymentMethodFees'] ??
-          json['payment_method_fees'] ??
-          paymentMethodFromLine,
+      paymentMethodLine?.display ??
+          json['paymentMethodFees'] ??
+          json['payment_method_fees'],
+      fallbackAmount: _asDouble(paymentMethodLine?.amount) ??
+          _asDouble(json['paymentMethodFees'] ?? json['payment_method_fees']),
+      currency: paymentMethodLine?.currency ??
+          _stringOrNull(json['paymentMethodFeesCurrency'])?.toUpperCase(),
       fallbackLabel: 'Free',
     );
 
     final youWillPay = _display(
-      json['youWillPay'] ??
+      youWillPayLine?.display ??
+          json['youWillPay'] ??
           json['you_will_pay'] ??
+          json['totalToPay'] ??
           json['paystackAmount'] ??
-          json['paystack_amount'] ??
-          youWillPayFromLine,
-      fallbackAmount: amount,
-      currency: currency,
-      fallbackLabel: amount != null && currency != null
-          ? _formatAmount(amount, currency)
+          json['paystack_amount'],
+      fallbackAmount: _asDouble(youWillPayLine?.amount) ??
+          _asDouble(
+            json['youWillPay'] ??
+                json['totalToPay'] ??
+                json['paystackAmount'],
+          ) ??
+          amount,
+      currency: payCurrency,
+      fallbackLabel: amount != null && (payCurrency ?? depositCurrency) != null
+          ? _formatAmount(amount, payCurrency ?? depositCurrency!)
           : youDeposit,
     );
 
@@ -107,7 +125,7 @@ class TopupQuote {
       paymentMethodFees: paymentMethodFees,
       youWillPay: youWillPay,
       checkoutProvider: checkoutProvider,
-      currency: currency,
+      currency: depositCurrency,
       amount: amount,
     );
   }
@@ -130,21 +148,48 @@ class TopupQuote {
     );
   }
 
-  static String? _lineDisplay(
-    Map<String, dynamic>? lines,
-    List<String> keys,
-  ) {
-    if (lines == null) return null;
-    for (final key in keys) {
-      final raw = lines[key];
-      if (raw is Map) {
-        final display = raw['display'] ?? raw['label'] ?? raw['value'];
-        final text = _stringOrNull(display);
-        if (text != null && text.isNotEmpty) return text;
-      } else {
-        final text = _stringOrNull(raw);
-        if (text != null && text.isNotEmpty) return text;
+  static Map<String, _QuoteLine> _indexLines(Object? raw) {
+    final indexed = <String, _QuoteLine>{};
+    if (raw is List) {
+      for (final item in raw) {
+        if (item is! Map) continue;
+        final line = _QuoteLine.fromMap(Map<String, dynamic>.from(item));
+        if (line.key.isEmpty) continue;
+        indexed[line.key] = line;
       }
+      return indexed;
+    }
+    if (raw is Map) {
+      raw.forEach((key, value) {
+        if (value is Map) {
+          final line = _QuoteLine.fromMap(
+            Map<String, dynamic>.from(value),
+            fallbackKey: key.toString(),
+          );
+          if (line.key.isNotEmpty) indexed[line.key] = line;
+        } else {
+          final text = _stringOrNull(value);
+          if (text != null) {
+            indexed[key.toString()] = _QuoteLine(key: key.toString(), display: text);
+          }
+        }
+      });
+    }
+    return indexed;
+  }
+
+  static _QuoteLine? _line(Map<String, _QuoteLine> lines, List<String> keys) {
+    for (final key in keys) {
+      final line = lines[key];
+      if (line != null) return line;
+    }
+    return null;
+  }
+
+  static String? _firstCurrency(List<Object?> values) {
+    for (final value in values) {
+      final text = _stringOrNull(value)?.toUpperCase();
+      if (text != null && text.isNotEmpty) return text;
     }
     return null;
   }
@@ -156,6 +201,7 @@ class TopupQuote {
     required String fallbackLabel,
   }) {
     if (value is num) {
+      if (value == 0 && fallbackLabel.toLowerCase() == 'free') return 'Free';
       if (currency != null && currency.isNotEmpty) {
         return _formatAmount(value.toDouble(), currency);
       }
@@ -166,10 +212,13 @@ class TopupQuote {
       if (text.toLowerCase() == 'free') return 'Free';
       return text;
     }
-    if (fallbackAmount != null &&
-        currency != null &&
-        currency.isNotEmpty) {
-      return _formatAmount(fallbackAmount, currency);
+    if (fallbackAmount != null) {
+      if (fallbackAmount == 0 && fallbackLabel.toLowerCase() == 'free') {
+        return 'Free';
+      }
+      if (currency != null && currency.isNotEmpty) {
+        return _formatAmount(fallbackAmount, currency);
+      }
     }
     return fallbackLabel;
   }
@@ -187,5 +236,31 @@ class TopupQuote {
     if (value is num) return value.toDouble();
     if (value is String) return double.tryParse(value.replaceAll(',', ''));
     return null;
+  }
+}
+
+class _QuoteLine {
+  const _QuoteLine({
+    required this.key,
+    this.display,
+    this.amount,
+    this.currency,
+  });
+
+  final String key;
+  final String? display;
+  final double? amount;
+  final String? currency;
+
+  factory _QuoteLine.fromMap(
+    Map<String, dynamic> json, {
+    String? fallbackKey,
+  }) {
+    return _QuoteLine(
+      key: (json['key']?.toString() ?? fallbackKey ?? '').trim(),
+      display: TopupQuote._stringOrNull(json['display']),
+      amount: TopupQuote._asDouble(json['amount']),
+      currency: TopupQuote._stringOrNull(json['currency'])?.toUpperCase(),
+    );
   }
 }

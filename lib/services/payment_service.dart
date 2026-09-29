@@ -1,5 +1,6 @@
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:pretium/features/topup/models/create_payment_result.dart';
 import 'package:pretium/utils/logger.dart';
 
 /// Payment service that calls Cloud Functions
@@ -49,9 +50,10 @@ class PaymentService {
     await Future.delayed(const Duration(milliseconds: 800));
   }
 
-  /// Create a C2B wallet top-up via Cloud Function (Paystack or Transak hosted checkout).
-  /// Sends amount, currency, optional customer fields, and optional [provider] (`paystack` | `transak`).
-  Future<Map<String, dynamic>> createPayment({
+  /// Create a C2B wallet top-up via Cloud Function.
+  /// Paystack/KES returns a hosted [CreatePaymentFlow.hostedCheckout] URL.
+  /// Grid/USD may return [CreatePaymentFlow.gridUsdInstructions] with no checkout URL.
+  Future<CreatePaymentResult> createPayment({
     required double amount,
     required String currency,
     String? email,
@@ -117,59 +119,33 @@ class PaymentService {
       final duration = DateTime.now().difference(startTime);
       Logger.success('✅ Cloud Function call completed in ${duration.inMilliseconds}ms');
       
-      final data = result.data as Map<String, dynamic>;
-      
-      // Debug: Log the full response to understand the structure
+      final parsed = CreatePaymentResult.fromResponse(
+        result.data,
+        requestedProvider: provider,
+      );
+
       Logger.info('📥 Cloud Function response received:');
-      Logger.info('   Response keys: ${data.keys.toList()}');
-      Logger.debug('   Full response: $data');
-      
-      final invoiceId = data['invoiceId']?.toString() ??
-          data['paymentId']?.toString() ??
-          data['orderId']?.toString() ??
-          data['fundingOrderId']?.toString();
+      Logger.info('   flow: ${parsed.flow.name}');
+      Logger.info('   provider: ${parsed.provider}');
+      Logger.info('   currency: ${parsed.currency}');
+      Logger.info('   status: ${parsed.status}');
+      Logger.debug('   Full response: ${result.data}');
 
-      final checkoutUrl = data['checkoutUrl']?.toString() ??
-          data['checkout_url']?.toString() ??
-          data['url']?.toString() ??
-          data['authorization_url']?.toString();
-
-      if (checkoutUrl == null || checkoutUrl.isEmpty) {
-        Logger.error('createPayment: empty checkoutUrl. Full response: $data');
-        return {
-          'success': false,
-          'error': 'No checkout URL returned from server',
-          'code': 'invalid-response',
-          'data': data,
-        };
+      if (parsed.isError) {
+        Logger.error('createPayment: ${parsed.error}. Full response: ${result.data}');
+        return parsed;
       }
 
-      if (invoiceId == null || invoiceId.isEmpty) {
-        Logger.error('createPayment: missing invoiceId. Full response: $data');
-        return {
-          'success': false,
-          'error': 'Payment reference is missing from server response',
-          'code': 'invalid-response',
-          'data': data,
-        };
+      if (parsed.showsGridUsdInstructions) {
+        Logger.success(
+          'Grid USD funding order created: ${parsed.fundingOrderId} '
+          '(${parsed.instructions.length} instruction methods)',
+        );
+        return parsed;
       }
 
-      Logger.success('Payment created successfully: $invoiceId');
-
-      return {
-        'success': true,
-        'invoiceId': invoiceId,
-        'paymentId': invoiceId,
-        'orderId': data['orderId']?.toString() ?? data['fundingOrderId']?.toString(),
-        'checkoutUrl': checkoutUrl,
-        'amount': data['amount'],
-        'currency': data['currency']?.toString(),
-        'status': data['status']?.toString(),
-        'provider': data['provider']?.toString() ?? provider,
-        'paystackAmount': data['paystackAmount'],
-        'paystackCurrency': data['paystackCurrency']?.toString(),
-        'data': data,
-      };
+      Logger.success('Payment created successfully: ${parsed.invoiceId}');
+      return parsed;
     } on FirebaseFunctionsException catch (e) {
       Logger.error('❌ ===== CLOUD FUNCTION ERROR =====');
       Logger.error('   Error code: ${e.code}');
@@ -223,21 +199,13 @@ Diagnostic steps:
       
       Logger.error('❌ ====================================');
       
-      return {
-        'success': false,
-        'error': errorMessage,
-        'code': e.code,
-        'diagnostic': diagnosticInfo,
-      };
+      return CreatePaymentResult.error(errorMessage);
     } catch (e, stackTrace) {
       Logger.error('❌ ===== UNEXPECTED ERROR =====');
       Logger.error('   Error: $e');
       Logger.error('   Stack trace: $stackTrace');
       Logger.error('❌ ============================');
-      return {
-        'success': false,
-        'error': 'Unexpected error: $e',
-      };
+      return CreatePaymentResult.error('Unexpected error: $e');
     }
   }
 

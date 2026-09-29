@@ -15,6 +15,7 @@ import 'package:pretium/features/topup/models/topup_deposit_country.dart';
 import 'package:pretium/features/topup/providers/topup_flow_provider.dart';
 import 'package:pretium/features/topup/screens/deposit_review_screen.dart';
 import 'package:pretium/features/topup/screens/payment_checkout_webview_page.dart';
+import 'package:pretium/features/topup/screens/usd_funding_instructions_screen.dart';
 import 'package:pretium/widgets/app_shimmer.dart';
 import 'package:pretium/widgets/bottom_safe_action_bar.dart';
 
@@ -213,28 +214,36 @@ class _TopUpPageState extends ConsumerState<TopUpPage> {
         phoneNumber: userPhoneNumber,
       );
 
-      if (result['success'] != true) {
-        _showError(result['error']?.toString() ?? 'Payment failed');
-        return;
-      }
-
-      final checkoutUrl = result['checkoutUrl'] as String?;
-      final invoiceId = result['invoiceId'] as String? ?? result['paymentId'] as String?;
-      if (checkoutUrl == null ||
-          checkoutUrl.isEmpty ||
-          invoiceId == null ||
-          invoiceId.isEmpty) {
-        _showError('No checkout URL returned from server');
+      if (result.isError) {
+        _showError(result.error ?? 'Payment failed');
         return;
       }
 
       if (!mounted) return;
 
+      if (result.showsGridUsdInstructions) {
+        await Navigator.of(context).push<void>(
+          MaterialPageRoute(
+            builder: (_) => UsdFundingInstructionsScreen(result: result),
+          ),
+        );
+        return;
+      }
+
+      if (!result.opensHostedCheckout ||
+          result.checkoutUrl == null ||
+          result.checkoutUrl!.isEmpty ||
+          result.invoiceId == null ||
+          result.invoiceId!.isEmpty) {
+        _showError('No checkout URL returned from server');
+        return;
+      }
+
       await Navigator.of(context).push<bool>(
         MaterialPageRoute(
           builder: (_) => PaymentCheckoutWebViewPage(
-            checkoutUrl: checkoutUrl,
-            paymentId: invoiceId,
+            checkoutUrl: result.checkoutUrl!,
+            paymentId: result.invoiceId!,
             title: 'Secure checkout',
           ),
         ),

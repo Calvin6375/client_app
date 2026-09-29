@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:pretium/core/constants/app_colors.dart';
 import 'package:pretium/features/topup/utils/receipt_image_export.dart';
 import 'package:pretium/features/topup/utils/receipt_save_helper.dart';
+import 'package:pretium/features/topup/models/create_payment_result.dart';
 import 'package:pretium/models/transaction_model.dart';
 import 'package:pretium/services/transactions_service.dart';
 import 'package:pretium/utils/async_action_guard.dart';
@@ -173,6 +174,7 @@ class _TransactionDetailPageState extends State<TransactionDetailPage> {
                           row.value,
                           copyable: row.copyable,
                         ),
+                      ..._fundingInstructionSections(colors),
                     ],
                   ),
                 ),
@@ -276,6 +278,19 @@ class _TransactionDetailPageState extends State<TransactionDetailPage> {
     'review.paymentMethod',
     'review.paymentMethodId',
     'review.mobileProvider',
+    'fundingPaymentInstructions',
+    'funding_payment_instructions',
+    'fundingInstructions',
+    'funding_instructions',
+    'providerAccountId',
+    'provider_account_id',
+    'providerCustomerId',
+    'provider_customer_id',
+    'providerReference',
+    'provider_reference',
+    'product',
+    'productKey',
+    'pricingProductKey',
   };
 
   static const Set<String> _hiddenLabels = {
@@ -368,6 +383,12 @@ class _TransactionDetailPageState extends State<TransactionDetailPage> {
     consumeKeys(['currency']);
 
     _addRecipientRows(addRow, consumeKeys);
+    consumeKeys([
+      'fundingPaymentInstructions',
+      'funding_payment_instructions',
+      'fundingInstructions',
+      'funding_instructions',
+    ]);
 
     // Prefer friendly labels for known metadata / extra keys.
     const orderedLabels = <String, String>{
@@ -635,13 +656,131 @@ class _TransactionDetailPageState extends State<TransactionDetailPage> {
 
   String _stringifyValue(dynamic v) {
     if (v == null) return '';
+    if (v is Map || v is List) return '';
     if (v is num) {
       final d = v.toDouble();
       if ((d - d.roundToDouble()).abs() < 1e-9) return d.round().toString();
       return d.toStringAsFixed(2);
     }
-    if (v is Map || v is List) return v.toString();
     return ProviderDisplaySanitizer.sanitize(v.toString());
+  }
+
+  List<FundingPaymentInstruction> _fundingInstructions() {
+    for (final source in [_t.metadata, _t.extraFields]) {
+      if (source == null) continue;
+      final fromList = FundingPaymentInstruction.listFrom(
+        source['fundingPaymentInstructions'] ??
+            source['funding_payment_instructions'],
+      );
+      if (fromList.isNotEmpty) return fromList;
+      final single = source['fundingInstructions'] ?? source['funding_instructions'];
+      if (single is Map) {
+        final one = FundingPaymentInstruction.fromJson(
+          Map<String, dynamic>.from(single),
+        );
+        if (one.hasContent) return [one];
+      }
+    }
+    return const [];
+  }
+
+  List<Widget> _fundingInstructionSections(AppThemeColors colors) {
+    final methods = _fundingInstructions();
+    if (methods.isEmpty) return const [];
+
+    return [
+      const SizedBox(height: 8),
+      Divider(height: 24, color: colors.divider),
+      Text(
+        'Funding methods',
+        style: TextStyle(
+          fontSize: 15,
+          fontWeight: FontWeight.w700,
+          color: colors.textPrimary,
+        ),
+      ),
+      const SizedBox(height: 12),
+      for (var i = 0; i < methods.length; i++) ...[
+        if (i > 0) const SizedBox(height: 16),
+        _fundingMethodBlock(colors, methods[i], i),
+      ],
+    ];
+  }
+
+  Widget _fundingMethodBlock(
+    AppThemeColors colors,
+    FundingPaymentInstruction instruction,
+    int index,
+  ) {
+    final account = instruction.account;
+    final title = account.accountType != null
+        ? _formatAccountType(account.accountType)
+        : (account.bankName ?? 'Funding method ${index + 1}');
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: colors.background.withValues(alpha: 0.45),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: colors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: TextStyle(
+              color: colors.textPrimary,
+              fontWeight: FontWeight.w700,
+              fontSize: 14,
+            ),
+          ),
+          if (instruction.instructionsNotes != null) ...[
+            const SizedBox(height: 8),
+            Text(
+              instruction.instructionsNotes!,
+              style: TextStyle(
+                color: colors.textSecondary,
+                fontSize: 12.5,
+                height: 1.35,
+              ),
+            ),
+          ],
+          const SizedBox(height: 10),
+          _fundingField(colors, 'Bank name', account.bankName),
+          _fundingField(colors, 'Account holder', account.accountHolderName),
+          _fundingField(colors, 'Account number', account.accountNumber),
+          _fundingField(colors, 'Routing number', account.routingNumber),
+          _fundingField(colors, 'SWIFT code', account.swiftCode),
+          _fundingField(colors, 'Bank address', account.bankAddress),
+          _fundingField(colors, 'Account type', account.accountType),
+          _fundingField(colors, 'Country', account.country),
+          _fundingField(
+            colors,
+            'Payment rails',
+            account.paymentRails.isEmpty
+                ? null
+                : account.paymentRails.join(' · '),
+          ),
+          _fundingField(colors, 'Reference', account.reference),
+        ],
+      ),
+    );
+  }
+
+  Widget _fundingField(
+    AppThemeColors colors,
+    String label,
+    String? value,
+  ) {
+    if (value == null || value.trim().isEmpty) return const SizedBox.shrink();
+    return _receiptRow(
+      colors,
+      label,
+      value,
+      copyable: true,
+    );
   }
 
   String _humanizeKey(String k) {
