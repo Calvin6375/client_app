@@ -5,6 +5,7 @@ import 'package:pretium/features/topup/models/topup_deposit_country.dart';
 import 'package:pretium/features/topup/models/topup_quote.dart';
 import 'package:pretium/features/topup/services/topup_quote_api_service.dart';
 import 'package:pretium/services/countries_api_service.dart';
+import 'package:pretium/services/dashboard_session_cache.dart';
 
 enum TopUpPaymentMethod {
   cardMobileMoney,
@@ -138,12 +139,38 @@ class TopUpFlowNotifier extends AutoDisposeNotifier<TopUpFlowState> {
     ref.listen(walletAccountsProvider, (prev, next) {
       final snap = next.valueOrNull;
       if (snap == null) return;
-      applyFiatBalances({
-        for (final e in snap.fiatWallets.entries) e.key: e.value.balance,
-      });
-    }, fireImmediately: true);
+      applyFiatBalances(_fiatBalancesFrom(snap));
+    });
     Future<void>(_loadCountries);
-    return const TopUpFlowState();
+    return _initialState(ref.read(walletAccountsProvider).valueOrNull);
+  }
+
+  static Map<String, double> _fiatBalancesFrom(WalletSessionSnapshot snap) {
+    return {
+      for (final e in snap.fiatWallets.entries) e.key: e.value.balance,
+    };
+  }
+
+  static TopUpFlowState _initialState(WalletSessionSnapshot? snap) {
+    if (snap == null) return const TopUpFlowState();
+    final balances = _fiatBalancesFrom(snap);
+    if (balances.isEmpty) return const TopUpFlowState();
+    return TopUpFlowState(
+      fiatBalances: balances,
+      selectedCurrency: _selectedCurrencyForBalances('USD', balances),
+    );
+  }
+
+  static String _selectedCurrencyForBalances(
+    String current,
+    Map<String, double> balances,
+  ) {
+    if (!balances.containsKey(current) &&
+        current == 'USD' &&
+        balances.containsKey('KES')) {
+      return 'KES';
+    }
+    return current;
   }
 
   void configureInitialCurrency(String? code) {
@@ -153,17 +180,12 @@ class TopUpFlowNotifier extends AutoDisposeNotifier<TopUpFlowState> {
 
   void applyFiatBalances(Map<String, double> balances) {
     if (balances.isEmpty) return;
-    var currency = state.selectedCurrency;
-    if (!balances.containsKey(currency) && balances.isNotEmpty) {
-      // Keep explicit selection even if missing; only seed when still USD default
-      // and we have a KES wallet.
-      if (currency == 'USD' && balances.containsKey('KES')) {
-        currency = 'KES';
-      }
-    }
     state = state.copyWith(
       fiatBalances: balances,
-      selectedCurrency: currency,
+      selectedCurrency: _selectedCurrencyForBalances(
+        state.selectedCurrency,
+        balances,
+      ),
     );
   }
 

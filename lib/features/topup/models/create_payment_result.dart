@@ -2,6 +2,7 @@
 enum CreatePaymentFlow {
   hostedCheckout,
   gridUsdInstructions,
+  crossmintCheckout,
   error,
 }
 
@@ -95,6 +96,8 @@ class CreatePaymentResult {
     this.currency,
     this.status,
     this.provider,
+    this.checkoutOrderId,
+    this.checkoutClientSecret,
     this.instructions = const [],
   });
 
@@ -107,12 +110,16 @@ class CreatePaymentResult {
   final String? currency;
   final String? status;
   final String? provider;
+  final String? checkoutOrderId;
+  final String? checkoutClientSecret;
   final List<FundingPaymentInstruction> instructions;
 
   bool get isError => flow == CreatePaymentFlow.error;
   bool get opensHostedCheckout => flow == CreatePaymentFlow.hostedCheckout;
   bool get showsGridUsdInstructions =>
       flow == CreatePaymentFlow.gridUsdInstructions;
+  bool get opensCrossmintCheckout =>
+      flow == CreatePaymentFlow.crossmintCheckout;
 
   /// createPayment never means the wallet was credited.
   bool get isPaymentSettled => false;
@@ -164,6 +171,38 @@ class CreatePaymentResult {
     ]);
     final amount = _asDouble(data['amount'] ?? data['totalToPay']);
     final instructions = _parseInstructions(data['fundingPaymentInstructions']);
+    final checkout = _asStringKeyMap(data['checkout']);
+    final checkoutOrderId = _firstNonEmpty([
+      checkout?['orderId'],
+      checkout?['order_id'],
+    ]);
+    final checkoutClientSecret = _firstNonEmpty([
+      checkout?['clientSecret'],
+      checkout?['client_secret'],
+    ]);
+
+    final isCrossmintUsd = provider == 'crossmint' && currency == 'USD';
+    if (isCrossmintUsd) {
+      if (checkoutOrderId == null || checkoutClientSecret == null) {
+        return CreatePaymentResult.error(
+          'Checkout session was not returned. Please try again.',
+        );
+      }
+      return CreatePaymentResult(
+        flow: checkoutUrl != null && checkoutUrl.isNotEmpty
+            ? CreatePaymentFlow.hostedCheckout
+            : CreatePaymentFlow.crossmintCheckout,
+        checkoutUrl: checkoutUrl,
+        invoiceId: invoiceId,
+        fundingOrderId: fundingOrderId,
+        amount: amount,
+        currency: currency,
+        status: status ?? 'pending',
+        provider: provider,
+        checkoutOrderId: checkoutOrderId,
+        checkoutClientSecret: checkoutClientSecret,
+      );
+    }
 
     final isGridUsd = provider == 'grid' && currency == 'USD';
     if (isGridUsd) {

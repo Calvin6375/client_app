@@ -221,6 +221,27 @@ class _TopUpPageState extends ConsumerState<TopUpPage> {
 
       if (!mounted) return;
 
+      if (result.opensHostedCheckout &&
+          result.checkoutUrl != null &&
+          result.checkoutUrl!.isNotEmpty &&
+          result.invoiceId != null &&
+          result.invoiceId!.isNotEmpty) {
+        await Navigator.of(context).push<bool>(
+          MaterialPageRoute(
+            builder: (_) => PaymentCheckoutWebViewPage(
+              checkoutUrl: result.checkoutUrl!,
+              paymentId: result.invoiceId!,
+              title: 'Secure checkout',
+            ),
+          ),
+        );
+        await WalletBalanceRefresh.afterSuccessfulTransaction();
+        if (mounted) {
+          await ref.read(walletAccountsProvider.notifier).refresh(force: true);
+        }
+        return;
+      }
+
       if (result.showsGridUsdInstructions) {
         await Navigator.of(context).push<void>(
           MaterialPageRoute(
