@@ -22,6 +22,8 @@ class CurrencyLogo extends StatelessWidget {
         return 'assets/icons/usdt-logo.png';
       case 'USDC':
         return 'assets/icons/usdc-logo.png';
+      case 'BNB':
+        return 'assets/icons/bnb-logo.png';
       default:
         return null;
     }
@@ -35,6 +37,8 @@ class CurrencyLogo extends StatelessWidget {
         return '₮';
       case 'USDC':
         return '🇺🇸';
+      case 'BNB':
+        return '🔶';
       default:
         return TopupDepositCountry.flagEmojiForCode(upper);
     }
@@ -50,6 +54,8 @@ class CurrencyLogo extends StatelessWidget {
         return 'Tether';
       case 'USDC':
         return 'USD Coin';
+      case 'BNB':
+        return 'BNB';
       default:
         return TopupDepositCountry.resolve(upper).currencyName;
     }

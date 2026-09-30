@@ -1,8 +1,8 @@
-// Top-up screen: fiat (Paystack / Transak card checkout) and crypto.
-// Local and International topup: PaymentService.createPayment → hosted checkout in-app WebView.
-// African currencies → Paystack; USD, GBP, EUR, and other non-African → Transak.
+// Top-up screen: amount + currency. Fiat → Paystack / Crossmint / Transak;
+// USDC / USDT / BNB → wallet-address deposit.
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:pretium/features/crypto/screens/crypto_deposit_page.dart';
@@ -18,12 +18,10 @@ import 'package:pretium/features/topup/screens/payment_checkout_webview_page.dar
 import 'package:pretium/features/topup/screens/usd_funding_instructions_screen.dart';
 import 'package:pretium/widgets/app_shimmer.dart';
 import 'package:pretium/widgets/bottom_safe_action_bar.dart';
+import 'package:pretium/widgets/currency_logo.dart';
 
 class TopUpPage extends ConsumerStatefulWidget {
-  const TopUpPage({super.key, this.initialDepositCountry});
-
-  /// When set, pre-selects that currency in Set amount and is passed to direct fiat deposit.
-  final TopupDepositCountry? initialDepositCountry;
+  const TopUpPage({super.key});
 
   @override
   ConsumerState<TopUpPage> createState() => _TopUpPageState();
@@ -43,34 +41,17 @@ class _TopUpPageState extends ConsumerState<TopUpPage> {
   TopUpFlowState get _flow => ref.read(topUpFlowProvider);
   TopUpFlowNotifier get _flowN => ref.read(topUpFlowProvider.notifier);
 
-  void _selectPaymentMethod(TopUpPaymentMethod method) {
-    _flowN.selectMethod(method);
-    if (method == TopUpPaymentMethod.cryptoDeposit) {
-      _openCryptoDeposit();
-    }
-  }
-
   Future<void> _openCryptoDeposit() async {
     await Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
         builder: (_) => CryptoDepositPage(
-          initialAsset:
-              _flow.selectedCurrency == 'USDC' ? 'USDC' : 'USDT',
+          initialAsset: _flow.selectedCurrency,
         ),
       ),
     );
     if (!mounted) return;
     await WalletBalanceRefresh.afterSuccessfulTransaction();
     await ref.read(walletAccountsProvider.notifier).refresh(force: true);
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      _flowN.configureInitialCurrency(widget.initialDepositCountry?.code);
-    });
   }
 
   void _fillProfileIfNeeded() {
@@ -103,30 +84,12 @@ class _TopUpPageState extends ConsumerState<TopUpPage> {
     return _parsedSetAmount() >= _kesFiatOptionMinimumAmount;
   }
 
-  String get _paymentMethodTitle {
-    switch (_flow.method) {
-      case TopUpPaymentMethod.directFiatDeposit:
-        return 'Local Topup';
-      case TopUpPaymentMethod.cardMobileMoney:
-        return 'International Topup';
-      case TopUpPaymentMethod.cryptoDeposit:
-        return 'Crypto Deposit';
-    }
-  }
-
-  String get _paymentMethodSubtitle {
-    switch (_flow.method) {
-      case TopUpPaymentMethod.directFiatDeposit:
-        return 'Local bank or card or mobile money';
-      case TopUpPaymentMethod.cardMobileMoney:
-        return 'International bank or card, Apple Pay or Google Pay';
-      case TopUpPaymentMethod.cryptoDeposit:
-        return 'Crypto or stablecoin to a wallet address';
-    }
-  }
-
   /// Returns false (and shows an error) when the form is not ready for review/checkout.
   bool _validateFiatDepositForm() {
+    if (!_flow.hasSelectedCurrency) {
+      _showError('Please select a currency');
+      return false;
+    }
     if (_amountCtrl.text.isEmpty) {
       _showError('Please enter an amount');
       return false;
@@ -269,7 +232,6 @@ class _TopUpPageState extends ConsumerState<TopUpPage> {
           ),
         ),
       );
-      // Checkout may have settled while the WebView was open — refresh ledger.
       await WalletBalanceRefresh.afterSuccessfulTransaction();
       if (mounted) {
         await ref.read(walletAccountsProvider.notifier).refresh(force: true);
@@ -285,14 +247,16 @@ class _TopUpPageState extends ConsumerState<TopUpPage> {
 
   void _onNextPressed() {
     if (_flow.isProcessingPayment) return;
-    switch (_flow.method) {
-      case TopUpPaymentMethod.cardMobileMoney:
-      case TopUpPaymentMethod.directFiatDeposit:
-        if (_validateFiatDepositForm()) {
-          _goToReview();
-        }
-      case TopUpPaymentMethod.cryptoDeposit:
-        _openCryptoDeposit();
+    if (!_flow.hasSelectedCurrency) {
+      _showError('Please select a currency');
+      return;
+    }
+    if (_flow.isCryptoDeposit) {
+      _openCryptoDeposit();
+      return;
+    }
+    if (_validateFiatDepositForm()) {
+      _goToReview();
     }
   }
 
@@ -378,8 +342,9 @@ class _TopUpPageState extends ConsumerState<TopUpPage> {
       quoteError: _flow.quoteError,
       onRetryQuote: _flow.isLoadingQuote ? null : _loadTopupQuote,
       fallbackAmountLabel: fallbackAmount,
-      paymentMethodTitle: _paymentMethodTitle,
-      paymentMethodSubtitle: _paymentMethodSubtitle,
+      paymentMethodTitle: 'Bank, card or mobile money',
+      paymentMethodSubtitle:
+          'Local and international checkout via ${_flow.providerDisplayLabel}',
       isSubmitting: _flow.isProcessingPayment,
       onEditDepositDetails: _goToForm,
       onEditPaymentMethod: _goToForm,
@@ -390,12 +355,13 @@ class _TopUpPageState extends ConsumerState<TopUpPage> {
   Widget _buildFormStep(AppThemeColors colors) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final primary = Theme.of(context).colorScheme.primary;
-    final availableLabel = _hideBalance
-        ? 'Available: •••• ${_flow.selectedCurrency}'
-        : 'Available: ${_flow.availableBalance.toStringAsFixed(2)} ${_flow.selectedCurrency}';
-    final nextLabel = _flow.method == TopUpPaymentMethod.cryptoDeposit
-        ? 'Continue'
-        : 'Next';
+    final hasCurrency = _flow.hasSelectedCurrency;
+    final availableLabel = !hasCurrency
+        ? null
+        : _hideBalance
+            ? 'Available: •••• ${_flow.selectedCurrency}'
+            : 'Available: ${_flow.availableBalance.toStringAsFixed(2)} ${_flow.selectedCurrency}';
+    final nextLabel = _flow.isCryptoDeposit ? 'Continue' : 'Next';
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -417,7 +383,7 @@ class _TopUpPageState extends ConsumerState<TopUpPage> {
                 ),
                 const SizedBox(height: 32),
                 Text(
-                  'Deposit',
+                  'Amount',
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w500,
@@ -425,65 +391,36 @@ class _TopUpPageState extends ConsumerState<TopUpPage> {
                   ),
                 ),
                 const SizedBox(height: 8),
-                _DepositAmountField(
-                  controller: _amountCtrl,
+                _DepositAmountField(controller: _amountCtrl),
+                const SizedBox(height: 8),
+                if (availableLabel != null)
+                  if (ref.watch(walletAccountsProvider).isLoading &&
+                      _flow.fiatBalances.isEmpty &&
+                      _flow.cryptoBalances.isEmpty)
+                    const ShimmerBusyIndicator(width: 96, height: 12)
+                  else
+                    Text(
+                      availableLabel,
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: colors.textSecondary,
+                      ),
+                    ),
+                const SizedBox(height: 24),
+                Text(
+                  'Currency',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                    color: colors.textSecondary,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                _DepositCurrencyField(
                   selectedCurrency: _flow.selectedCurrency,
                   currencies: _flow.depositPickerCurrencies,
                   loadingCurrencies: _flow.loadingCountries,
                   onCurrencyChanged: _flowN.selectCurrency,
-                ),
-                const SizedBox(height: 8),
-                if (ref.watch(walletAccountsProvider).isLoading &&
-                    _flow.fiatBalances.isEmpty)
-                  const ShimmerBusyIndicator(width: 96, height: 12)
-                else
-                  Text(
-                    availableLabel,
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: colors.textSecondary,
-                    ),
-                  ),
-                const SizedBox(height: 32),
-                Text(
-                  'Select a payment method',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w500,
-                    color: colors.textSecondary,
-                  ),
-                ),
-                const SizedBox(height: 16),
-                _PaymentMethodTile(
-                  title: 'Local Topup',
-                  subtitle: 'Local bank or card or mobile money',
-                  brandIcon: Icons.account_balance_outlined,
-                  selected:
-                      _flow.method == TopUpPaymentMethod.directFiatDeposit,
-                  onTap: () =>
-                      _selectPaymentMethod(TopUpPaymentMethod.directFiatDeposit),
-                ),
-                const SizedBox(height: 12),
-                _PaymentMethodTile(
-                  title: 'International Topup',
-                  subtitle:
-                      'International bank or card, Apple Pay or Google Pay.',
-                  brandIcon: Icons.payment,
-                  selected:
-                      _flow.method == TopUpPaymentMethod.cardMobileMoney,
-                  onTap: () =>
-                      _selectPaymentMethod(TopUpPaymentMethod.cardMobileMoney),
-                ),
-                const SizedBox(height: 12),
-                _PaymentMethodTile(
-                  title: 'Crypto Deposit',
-                  subtitle:
-                      'Send any crypto or stablecoin from any network to a wallet address',
-                  brandIcon: Icons.currency_bitcoin,
-                  selected:
-                      _flow.method == TopUpPaymentMethod.cryptoDeposit,
-                  onTap: () =>
-                      _selectPaymentMethod(TopUpPaymentMethod.cryptoDeposit),
                 ),
               ],
             ),
@@ -522,17 +459,55 @@ class _TopUpPageState extends ConsumerState<TopUpPage> {
   }
 }
 
-// Argo-style deposit layout widgets
 class _DepositAmountField extends StatelessWidget {
-  const _DepositAmountField({
-    required this.controller,
+  const _DepositAmountField({required this.controller});
+
+  final TextEditingController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = AppColors.getThemeColors(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: isDark ? colors.surface : Colors.white,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: colors.surfaceVariant),
+      ),
+      child: TextField(
+        controller: controller,
+        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+        inputFormatters: [
+          FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+        ],
+        style: TextStyle(
+          fontSize: 18,
+          fontWeight: FontWeight.w500,
+          color: colors.textPrimary,
+        ),
+        decoration: InputDecoration(
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 16,
+          ),
+          border: InputBorder.none,
+          hintText: '0.00',
+          hintStyle: TextStyle(color: colors.textSecondary),
+        ),
+      ),
+    );
+  }
+}
+
+class _DepositCurrencyField extends StatelessWidget {
+  const _DepositCurrencyField({
     required this.selectedCurrency,
     required this.currencies,
     required this.onCurrencyChanged,
     this.loadingCurrencies = false,
   });
 
-  final TextEditingController controller;
   final String selectedCurrency;
   final List<String> currencies;
   final ValueChanged<String> onCurrencyChanged;
@@ -568,70 +543,68 @@ class _DepositAmountField extends StatelessWidget {
     final colors = AppColors.getThemeColors(context);
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final primary = Theme.of(context).colorScheme.primary;
+    final country = TopupDepositCountry.resolve(selectedCurrency);
 
-    return Container(
-      decoration: BoxDecoration(
-        color: isDark ? colors.surface : Colors.white,
+    return Material(
+      color: isDark ? colors.surface : Colors.white,
+      borderRadius: BorderRadius.circular(8),
+      child: InkWell(
+        onTap: () => _openCurrencyPicker(context),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: colors.surfaceVariant),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: TextField(
-              controller: controller,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w500,
-                color: colors.textPrimary,
-              ),
-              decoration: InputDecoration(
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 16,
-                ),
-                border: InputBorder.none,
-                hintText: '0.00',
-                hintStyle: TextStyle(color: colors.textSecondary),
-              ),
-            ),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: colors.surfaceVariant),
           ),
-          Container(
-            width: 1,
-            height: 44,
-            color: colors.surfaceVariant,
-          ),
-          Material(
-            color: Colors.transparent,
-            child: InkWell(
-              onTap: () => _openCurrencyPicker(context),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      TopupDepositCountry.flagEmojiForCode(selectedCurrency),
-                      style: const TextStyle(fontSize: 18),
-                    ),
-                    const SizedBox(width: 6),
-                    Text(
-                      selectedCurrency,
-                      style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
-                        color: primary,
+          child: Row(
+            children: [
+              if (selectedCurrency.isNotEmpty) ...[
+                CurrencyLogo(code: selectedCurrency, size: 22),
+                const SizedBox(width: 10),
+              ],
+              Expanded(
+                child: selectedCurrency.isEmpty
+                    ? Text(
+                        'Select currency',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w500,
+                          color: colors.textSecondary,
+                        ),
+                      )
+                    : Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            selectedCurrency,
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                              color: colors.textPrimary,
+                            ),
+                          ),
+                          Text(
+                            country.currencyName,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: colors.textSecondary,
+                            ),
+                          ),
+                        ],
                       ),
-                    ),
-                    const SizedBox(width: 4),
-                    Icon(Icons.keyboard_arrow_down, color: colors.textSecondary, size: 20),
-                  ],
-                ),
               ),
-            ),
+              if (loadingCurrencies)
+                const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              else
+                Icon(Icons.keyboard_arrow_down, color: primary),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
@@ -744,11 +717,10 @@ class _CurrencyPickerSheetState extends State<_CurrencyPickerSheet> {
                       final currency = filtered[index];
                       final country = TopupDepositCountry.resolve(currency);
                       final isSelected = currency == widget.selectedCurrency;
+                      final isCrypto =
+                          TopupDepositCountry.isCryptoDepositAsset(currency);
                       return ListTile(
-                        leading: Text(
-                          country.flagEmoji,
-                          style: const TextStyle(fontSize: 26),
-                        ),
+                        leading: CurrencyLogo(code: currency, size: 28),
                         title: Text(
                           currency,
                           style: TextStyle(
@@ -758,7 +730,9 @@ class _CurrencyPickerSheetState extends State<_CurrencyPickerSheet> {
                           ),
                         ),
                         subtitle: Text(
-                          '${country.name} · ${country.currencyName}',
+                          isCrypto
+                              ? country.currencyName
+                              : '${country.name} · ${country.currencyName}',
                           style: TextStyle(
                             fontSize: 12,
                             color: colors.textSecondary,
@@ -773,89 +747,6 @@ class _CurrencyPickerSheetState extends State<_CurrencyPickerSheet> {
                   ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _PaymentMethodTile extends StatelessWidget {
-  const _PaymentMethodTile({
-    required this.title,
-    required this.subtitle,
-    required this.brandIcon,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final String title;
-  final String subtitle;
-  final IconData brandIcon;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = AppColors.getThemeColors(context);
-    final primary = Theme.of(context).colorScheme.primary;
-
-    return Material(
-      color: colors.surface,
-      borderRadius: BorderRadius.circular(12),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
-        child: Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: selected ? primary : colors.surfaceVariant,
-              width: selected ? 1.5 : 1,
-            ),
-          ),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Padding(
-                padding: const EdgeInsets.only(top: 2),
-                child: Icon(
-                  selected
-                      ? Icons.radio_button_checked
-                      : Icons.radio_button_off,
-                  size: 22,
-                  color: selected ? primary : colors.textSecondary,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                        color: colors.textPrimary,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      subtitle,
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: colors.textSecondary,
-                        height: 1.35,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 12),
-              Icon(brandIcon, color: colors.textSecondary, size: 28),
-            ],
-          ),
-        ),
       ),
     );
   }

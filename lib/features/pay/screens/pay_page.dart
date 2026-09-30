@@ -5,7 +5,9 @@ import 'package:pretium/core/providers/service_providers.dart';
 import 'package:pretium/core/providers/wallet_accounts_provider.dart';
 import 'package:pretium/features/pay/screens/qr_scan_page.dart';
 import 'package:pretium/features/pay/screens/safari_tap_pay_views.dart';
+import 'package:pretium/services/dashboard_session_cache.dart';
 import 'package:pretium/widgets/money_form_widgets.dart';
+import 'package:pretium/widgets/safari_card.dart';
 
 enum _PayOption { truePayMerchant, payBill, buyGoods, pochiLaBiashara }
 
@@ -23,10 +25,18 @@ class PayPage extends ConsumerStatefulWidget {
 
 class _PayPageState extends ConsumerState<PayPage> {
   _PayOption? _selected;
+  late String _selectedCurrency;
   final _truePayMerchantKey = GlobalKey<SafariTapTruePayMerchantViewState>();
   final _payBillKey = GlobalKey<SafariTapPayBillViewState>();
   final _buyGoodsKey = GlobalKey<SafariTapBuyGoodsViewState>();
   final _pochiKey = GlobalKey<SafariTapPochiViewState>();
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedCurrency = widget.initialCurrency.trim().toUpperCase();
+    if (_selectedCurrency.isEmpty) _selectedCurrency = _kPayAmountCurrency;
+  }
 
   void _openOption(_PayOption option) {
     setState(() => _selected = option);
@@ -58,14 +68,42 @@ class _PayPageState extends ConsumerState<PayPage> {
     }
   }
 
+  List<SafariCardEntry> _walletsFrom(WalletSessionSnapshot? snap) {
+    if (snap == null) {
+      return const [
+        SafariCardEntry(currency: _kPayAmountCurrency, balance: 0),
+      ];
+    }
+
+    final wallets = <SafariCardEntry>[
+      for (final code in snap.availableFiatCurrencies)
+        SafariCardEntry(
+          currency: code,
+          balance: snap.fiatWallets[code]?.balance ?? 0,
+        ),
+      for (final code in snap.availableCryptoCurrencies)
+        SafariCardEntry(
+          currency: code,
+          balance: snap.cryptoWallets[code]?.balance ?? 0,
+          isCrypto: true,
+        ),
+    ];
+
+    if (wallets.isEmpty) {
+      return const [
+        SafariCardEntry(currency: _kPayAmountCurrency, balance: 0),
+      ];
+    }
+    return wallets;
+  }
+
   double get _kesBalance =>
       ref.watch(walletAccountsProvider).valueOrNull?.fiatWallets[_kPayAmountCurrency]?.balance ??
       0;
 
   bool get _loadingWallets {
     final accounts = ref.watch(walletAccountsProvider);
-    return accounts.isLoading &&
-        accounts.valueOrNull?.fiatWallets[_kPayAmountCurrency] == null;
+    return accounts.isLoading && accounts.valueOrNull == null;
   }
 
   Future<void> _openQrScanner() async {
@@ -97,6 +135,8 @@ class _PayPageState extends ConsumerState<PayPage> {
     final colors = AppColors.getThemeColors(context);
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final primary = Theme.of(context).colorScheme.primary;
+    final snap = ref.watch(walletAccountsProvider).valueOrNull;
+    final wallets = _walletsFrom(snap);
 
     final title = switch (_selected) {
       _PayOption.truePayMerchant => 'TruePay merchant',
@@ -128,8 +168,11 @@ class _PayPageState extends ConsumerState<PayPage> {
         ),
         body: _selected == null
             ? _PayHub(
-                kesBalance: _kesBalance,
+                wallets: wallets,
                 loadingBalance: _loadingWallets,
+                initialCurrency: _selectedCurrency,
+                onCurrencyChanged: (code) =>
+                    setState(() => _selectedCurrency = code),
                 onSelect: _openOption,
               )
             : switch (_selected!) {
@@ -182,13 +225,17 @@ class _PayPageState extends ConsumerState<PayPage> {
 
 class _PayHub extends StatelessWidget {
   const _PayHub({
-    required this.kesBalance,
+    required this.wallets,
     required this.loadingBalance,
+    required this.initialCurrency,
+    required this.onCurrencyChanged,
     required this.onSelect,
   });
 
-  final double kesBalance;
+  final List<SafariCardEntry> wallets;
   final bool loadingBalance;
+  final String initialCurrency;
+  final ValueChanged<String> onCurrencyChanged;
   final ValueChanged<_PayOption> onSelect;
 
   @override
@@ -198,11 +245,11 @@ class _PayHub extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
       children: [
-        MoneyBalanceCard(
-          currency: _kPayAmountCurrency,
-          balance: kesBalance,
+        SafariCardPager(
+          wallets: wallets,
           loading: loadingBalance,
-          caption: 'Pay from your $_kPayAmountCurrency wallet',
+          initialCurrency: initialCurrency,
+          onCurrencyChanged: onCurrencyChanged,
         ),
         const SizedBox(height: 24),
         Text(

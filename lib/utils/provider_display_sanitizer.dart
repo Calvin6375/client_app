@@ -3,7 +3,7 @@ class ProviderDisplaySanitizer {
   ProviderDisplaySanitizer._();
 
   static const _providerPattern =
-      r'paystack|transak|transack|intasend|inta[\s-]?send|transfi';
+      r'paystack|transak|transack|intasend|inta[\s-]?send|transfi|crossmint';
 
   static final RegExp _parentheticalProvider = RegExp(
     r'\s*\([^)]*(?:' + _providerPattern + r')[^)]*\)',
@@ -52,6 +52,7 @@ class ProviderDisplaySanitizer {
     switch (reconType.trim().toLowerCase()) {
       case 'funding_paystack':
       case 'funding_transak':
+      case 'funding_crossmint':
       case 'topup_intasend':
       case 'funding':
       case 'topup':
@@ -98,6 +99,7 @@ class ProviderDisplaySanitizer {
     return hidden.contains(normalized.replaceAll('.', '').replaceAll('_', '')) ||
         normalized.contains('paystack') ||
         normalized.contains('transak') ||
-        normalized.contains('intasend');
+        normalized.contains('intasend') ||
+        normalized.contains('crossmint');
   }
 }

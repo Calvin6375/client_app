@@ -67,7 +67,9 @@
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	<key>NSCameraUsageDescription</key>
-	<string>Scan merchant QR codes to complete payments.</string>
+	<string>Scan merchant QR codes and capture a photo of yourself and your ID to verify your identity during checkout.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Record a short video of yourself to complete identity verification during checkout.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>Save receipts and your SafariTap QR code to your photo library.</string>
 	<key>NSPhotoLibraryUsageDescription</key>

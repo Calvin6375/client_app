@@ -1,6 +1,5 @@
 import 'dart:convert';
 
-import 'package:encrypt/encrypt.dart' as enc;
 import 'package:firebase_remote_config/firebase_remote_config.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -10,7 +9,7 @@ import 'package:pretium/utils/logger.dart';
 final class C2bEncryptionContext {
   const C2bEncryptionContext({required this.key, required this.keyId});
 
-  final enc.Key key;
+  final Uint8List key;
   final String keyId;
 }
 
@@ -129,7 +128,7 @@ final class C2bEncryptionService {
       if (keyBytes.length != 32) {
         throw FormatException('Expected 32-byte key, got ${keyBytes.length}');
       }
-      _context = C2bEncryptionContext(key: enc.Key(keyBytes), keyId: keyId);
+      _context = C2bEncryptionContext(key: keyBytes, keyId: keyId);
       _enabled = true;
     } catch (e) {
       Logger.error('Invalid C2B encryption key material', e);

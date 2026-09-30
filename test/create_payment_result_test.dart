@@ -1,36 +1,33 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pretium/features/topup/models/create_payment_result.dart';
+import 'package:pretium/features/topup/models/topup_deposit_country.dart';
 import 'package:pretium/features/topup/screens/usd_funding_instructions_screen.dart';
 
 void main() {
   group('CreatePaymentResult.fromResponse', () {
-    test('USD + Crossmint + checkout secrets opens hosted checkout when URL is present', () {
+    test('USD + Crossmint + checkout URL opens hosted WebView checkout', () {
       final result = CreatePaymentResult.fromResponse({
         'success': true,
         'provider': 'crossmint',
         'currency': 'USD',
         'status': 'pending',
-        'checkoutUrl':
+        'url':
             'https://staging.crossmint.com/sdk/2024-03-05/embedded-checkout?orderId=cm1',
         'fundingOrderId': 'fund_cm_1',
-        'invoiceId': 'cm_order_1',
         'amount': 10,
-        'checkout': {
-          'orderId': 'cm_order_1',
-          'clientSecret': 'cs_secret',
-        },
       });
 
       expect(result.isError, isFalse);
       expect(result.opensHostedCheckout, isTrue);
-      expect(result.opensCrossmintCheckout, isFalse);
-      expect(result.checkoutOrderId, 'cm_order_1');
-      expect(result.checkoutClientSecret, 'cs_secret');
+      expect(result.showsGridUsdInstructions, isFalse);
+      expect(result.checkoutUrl, contains('staging.crossmint.com'));
+      expect(result.invoiceId, 'fund_cm_1');
+      expect(result.fundingOrderId, 'fund_cm_1');
       expect(result.isPaymentSettled, isFalse);
     });
 
-    test('USD + Crossmint + missing checkout secrets is an error', () {
+    test('USD + Crossmint without checkout URL is an error', () {
       final result = CreatePaymentResult.fromResponse({
         'success': true,
         'provider': 'crossmint',
@@ -42,7 +39,7 @@ void main() {
       });
 
       expect(result.isError, isTrue);
-      expect(result.error, contains('Checkout session'));
+      expect(result.error, contains('No checkout URL'));
     });
 
     test('A: KES + Paystack + checkoutUrl opens hosted checkout', () {
@@ -173,6 +170,20 @@ void main() {
     await tester.scrollUntilVisible(find.text('HCBLUSFFXXX'), 200);
     expect(find.text('Payment successful'), findsNothing);
     expect(find.text('No checkout URL returned from server'), findsNothing);
+  });
+
+  group('cardMobileMoneyProviderFor', () {
+    test('KES uses Paystack', () {
+      expect(TopupDepositCountry.cardMobileMoneyProviderFor('KES'), 'paystack');
+    });
+
+    test('USD uses Crossmint', () {
+      expect(TopupDepositCountry.cardMobileMoneyProviderFor('USD'), 'crossmint');
+    });
+
+    test('GBP still uses Transak', () {
+      expect(TopupDepositCountry.cardMobileMoneyProviderFor('GBP'), 'transak');
+    });
   });
 }
 

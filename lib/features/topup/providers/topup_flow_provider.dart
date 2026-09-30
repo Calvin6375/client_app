@@ -7,18 +7,11 @@ import 'package:pretium/features/topup/services/topup_quote_api_service.dart';
 import 'package:pretium/services/countries_api_service.dart';
 import 'package:pretium/services/dashboard_session_cache.dart';
 
-enum TopUpPaymentMethod {
-  cardMobileMoney,
-  directFiatDeposit,
-  cryptoDeposit,
-}
-
 enum TopUpStep { form, review }
 
 List<String> topupFiatCurrencyCodes({
   List<String>? apiCodes,
   String? includeCode,
-  bool excludeAfrican = false,
 }) {
   final codes = <String>{
     if (apiCodes != null && apiCodes.isNotEmpty)
@@ -31,34 +24,41 @@ List<String> topupFiatCurrencyCodes({
   };
 
   final extra = includeCode?.trim().toUpperCase();
-  if (extra != null && extra.isNotEmpty) {
-    final extraAllowed = excludeAfrican
-        ? !TopupDepositCountry.isAfricanCurrency(extra)
-        : TopupDepositCountry.isAllowedOnDepositSelector(extra);
-    if (extraAllowed) codes.add(extra);
+  if (extra != null &&
+      extra.isNotEmpty &&
+      TopupDepositCountry.isAllowedOnDepositSelector(extra)) {
+    codes.add(extra);
   }
 
   final list = codes.toList()..sort();
-  if (excludeAfrican) {
-    return list
-        .where((c) => !TopupDepositCountry.isAfricanCurrency(c))
-        .toList();
-  }
   return list.where(TopupDepositCountry.isAllowedOnDepositSelector).toList();
 }
 
-String coerceTopupFiatCurrency(String? code) {
-  final u = code?.trim().toUpperCase() ?? '';
-  if (u.isEmpty) return 'USD';
-  return TopupDepositCountry.resolve(u).code;
+/// Fiat codes first, then USDC / USDT / BNB for the deposit currency picker.
+List<String> topupDepositPickerCodes({
+  List<String>? apiCodes,
+  String? includeCode,
+}) {
+  final fiat = topupFiatCurrencyCodes(
+    apiCodes: apiCodes,
+    includeCode: includeCode,
+  );
+  final crypto = List<String>.from(TopupDepositCountry.cryptoDepositAssets);
+  final extra = includeCode?.trim().toUpperCase();
+  if (extra != null &&
+      TopupDepositCountry.isCryptoDepositAsset(extra) &&
+      !crypto.contains(extra)) {
+    crypto.add(extra);
+  }
+  return [...fiat, ...crypto];
 }
 
 class TopUpFlowState {
   const TopUpFlowState({
-    this.method = TopUpPaymentMethod.directFiatDeposit,
     this.step = TopUpStep.form,
-    this.selectedCurrency = 'USD',
+    this.selectedCurrency = '',
     this.fiatBalances = const {},
+    this.cryptoBalances = const {},
     this.apiFiatCurrencies = const [],
     this.loadingCountries = true,
     this.quote,
@@ -67,10 +67,10 @@ class TopUpFlowState {
     this.isProcessingPayment = false,
   });
 
-  final TopUpPaymentMethod method;
   final TopUpStep step;
   final String selectedCurrency;
   final Map<String, double> fiatBalances;
+  final Map<String, double> cryptoBalances;
   final List<String> apiFiatCurrencies;
   final bool loadingCountries;
   final TopupQuote? quote;
@@ -78,14 +78,22 @@ class TopUpFlowState {
   final String? quoteError;
   final bool isProcessingPayment;
 
-  bool get isInternational => method == TopUpPaymentMethod.cardMobileMoney;
+  bool get hasSelectedCurrency => selectedCurrency.trim().isNotEmpty;
 
-  double get availableBalance => fiatBalances[selectedCurrency] ?? 0;
+  bool get isCryptoDeposit =>
+      hasSelectedCurrency &&
+      TopupDepositCountry.isCryptoDepositAsset(selectedCurrency);
 
-  List<String> get depositPickerCurrencies => topupFiatCurrencyCodes(
+  double get availableBalance {
+    if (!hasSelectedCurrency) return 0;
+    return fiatBalances[selectedCurrency] ??
+        cryptoBalances[selectedCurrency] ??
+        0;
+  }
+
+  List<String> get depositPickerCurrencies => topupDepositPickerCodes(
         apiCodes: apiFiatCurrencies,
         includeCode: selectedCurrency,
-        excludeAfrican: isInternational,
       );
 
   String get cardMobileMoneyProvider =>
@@ -97,16 +105,18 @@ class TopUpFlowState {
         return 'Paystack';
       case 'transak':
         return 'Transak';
+      case 'crossmint':
+        return 'Card';
       default:
         return cardMobileMoneyProvider;
     }
   }
 
   TopUpFlowState copyWith({
-    TopUpPaymentMethod? method,
     TopUpStep? step,
     String? selectedCurrency,
     Map<String, double>? fiatBalances,
+    Map<String, double>? cryptoBalances,
     List<String>? apiFiatCurrencies,
     bool? loadingCountries,
     TopupQuote? quote,
@@ -117,10 +127,10 @@ class TopUpFlowState {
     bool? isProcessingPayment,
   }) {
     return TopUpFlowState(
-      method: method ?? this.method,
       step: step ?? this.step,
       selectedCurrency: selectedCurrency ?? this.selectedCurrency,
       fiatBalances: fiatBalances ?? this.fiatBalances,
+      cryptoBalances: cryptoBalances ?? this.cryptoBalances,
       apiFiatCurrencies: apiFiatCurrencies ?? this.apiFiatCurrencies,
       loadingCountries: loadingCountries ?? this.loadingCountries,
       quote: clearQuote ? null : (quote ?? this.quote),
@@ -139,7 +149,7 @@ class TopUpFlowNotifier extends AutoDisposeNotifier<TopUpFlowState> {
     ref.listen(walletAccountsProvider, (prev, next) {
       final snap = next.valueOrNull;
       if (snap == null) return;
-      applyFiatBalances(_fiatBalancesFrom(snap));
+      applyWalletBalances(snap);
     });
     Future<void>(_loadCountries);
     return _initialState(ref.read(walletAccountsProvider).valueOrNull);
@@ -151,41 +161,30 @@ class TopUpFlowNotifier extends AutoDisposeNotifier<TopUpFlowState> {
     };
   }
 
+  static Map<String, double> _cryptoBalancesFrom(WalletSessionSnapshot snap) {
+    return {
+      for (final e in snap.cryptoWallets.entries) e.key: e.value.balance,
+    };
+  }
+
   static TopUpFlowState _initialState(WalletSessionSnapshot? snap) {
     if (snap == null) return const TopUpFlowState();
-    final balances = _fiatBalancesFrom(snap);
-    if (balances.isEmpty) return const TopUpFlowState();
+    final fiat = _fiatBalancesFrom(snap);
+    final crypto = _cryptoBalancesFrom(snap);
+    if (fiat.isEmpty && crypto.isEmpty) return const TopUpFlowState();
     return TopUpFlowState(
-      fiatBalances: balances,
-      selectedCurrency: _selectedCurrencyForBalances('USD', balances),
+      fiatBalances: fiat,
+      cryptoBalances: crypto,
     );
   }
 
-  static String _selectedCurrencyForBalances(
-    String current,
-    Map<String, double> balances,
-  ) {
-    if (!balances.containsKey(current) &&
-        current == 'USD' &&
-        balances.containsKey('KES')) {
-      return 'KES';
-    }
-    return current;
-  }
-
-  void configureInitialCurrency(String? code) {
-    if (code == null || code.trim().isEmpty) return;
-    state = state.copyWith(selectedCurrency: coerceTopupFiatCurrency(code));
-  }
-
-  void applyFiatBalances(Map<String, double> balances) {
-    if (balances.isEmpty) return;
+  void applyWalletBalances(WalletSessionSnapshot snap) {
+    final fiat = _fiatBalancesFrom(snap);
+    final crypto = _cryptoBalancesFrom(snap);
+    if (fiat.isEmpty && crypto.isEmpty) return;
     state = state.copyWith(
-      fiatBalances: balances,
-      selectedCurrency: _selectedCurrencyForBalances(
-        state.selectedCurrency,
-        balances,
-      ),
+      fiatBalances: fiat,
+      cryptoBalances: crypto,
     );
   }
 
@@ -204,33 +203,18 @@ class TopUpFlowNotifier extends AutoDisposeNotifier<TopUpFlowState> {
 
   void _applyDepositCurrencies(List<String> fiatCodes) {
     var selected = state.selectedCurrency;
-    final allowed = topupFiatCurrencyCodes(
+    final allowed = topupDepositPickerCodes(
       apiCodes: fiatCodes,
       includeCode: selected,
     );
-    if (!allowed.contains(selected) && allowed.isNotEmpty) {
-      selected = allowed.first;
+    if (selected.isNotEmpty && !allowed.contains(selected)) {
+      selected = '';
     }
     state = state.copyWith(
       apiFiatCurrencies: List<String>.from(fiatCodes),
       loadingCountries: false,
       selectedCurrency: selected,
     );
-  }
-
-  void selectMethod(TopUpPaymentMethod method) {
-    var currency = state.selectedCurrency;
-    if (method == TopUpPaymentMethod.cardMobileMoney &&
-        TopupDepositCountry.isAfricanCurrency(currency)) {
-      final international = topupFiatCurrencyCodes(
-        apiCodes: state.apiFiatCurrencies,
-        excludeAfrican: true,
-      );
-      currency = international.contains('USD')
-          ? 'USD'
-          : (international.isNotEmpty ? international.first : 'USD');
-    }
-    state = state.copyWith(method: method, selectedCurrency: currency);
   }
 
   void selectCurrency(String currency) {

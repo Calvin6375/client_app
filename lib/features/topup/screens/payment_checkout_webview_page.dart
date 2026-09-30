@@ -1,10 +1,17 @@
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:pretium/core/constants/app_colors.dart';
 import 'package:pretium/services/payment_callback_service.dart';
-import 'package:webview_flutter/webview_flutter.dart';
 import 'package:pretium/widgets/app_shimmer.dart';
+import 'package:webview_flutter/webview_flutter.dart';
+import 'package:webview_flutter_android/webview_flutter_android.dart';
+import 'package:webview_flutter_wkwebview/webview_flutter_wkwebview.dart';
 
-/// In-app hosted checkout (Paystack / Transak). Stays inside the app and
+/// In-app hosted checkout (Paystack / Transak / Crossmint). Stays inside the app and
 /// intercepts payment return URLs so confirmation never depends on Safari.
 class PaymentCheckoutWebViewPage extends StatefulWidget {
   const PaymentCheckoutWebViewPage({
@@ -27,23 +34,100 @@ class _PaymentCheckoutWebViewPageState extends State<PaymentCheckoutWebViewPage>
   late final WebViewController _controller;
   var _isLoading = true;
   var _handledReturn = false;
+  var _cameraDenied = false;
+  double _webViewCssWidth = 0;
 
   static const _webPaymentHosts = {
     'app.truepay.live',
     'localhost',
   };
 
+  /// Viewport only — do not reset iframe height or global box-sizing.
+  /// Those rules clipped Crossmint/Persona (two-column forms, iframe KYC).
+  String _responsiveJs(double cssWidth) {
+    final width = cssWidth.isFinite && cssWidth > 0 ? cssWidth.round() : 390;
+    return '''
+(function () {
+  var w = $width;
+  function applyViewport() {
+    var root = document.head || document.documentElement;
+    if (!root) return;
+    var meta = document.querySelector('meta[name="viewport"]');
+    if (!meta) {
+      meta = document.createElement('meta');
+      meta.setAttribute('name', 'viewport');
+      root.appendChild(meta);
+    }
+    meta.setAttribute(
+      'content',
+      'width=' + w + ', initial-scale=1, minimum-scale=1, maximum-scale=5, user-scalable=yes, viewport-fit=cover'
+    );
+    var style = document.getElementById('safaritap-checkout-mq');
+    if (!style) {
+      style = document.createElement('style');
+      style.id = 'safaritap-checkout-mq';
+      root.appendChild(style);
+    }
+    style.textContent = [
+      'html, body { width: 100% !important; max-width: 100% !important; min-width: 0 !important; margin: 0 !important; padding: 0 !important; overflow-x: auto !important; overflow-y: auto !important; -webkit-text-size-adjust: 100%; }',
+      'body { left: 0 !important; }',
+      '@media (max-width: ' + w + 'px) {',
+      '  #root, #__next, #app, main, [data-testid="checkout"] { width: 100% !important; max-width: 100% !important; min-width: 0 !important; }',
+      '}'
+    ].join('\\n');
+    document.querySelectorAll('iframe').forEach(function (frame) {
+      frame.style.maxWidth = '100%';
+      frame.style.minWidth = '0';
+      frame.style.width = '100%';
+      frame.style.marginLeft = '0';
+    });
+    try { window.scrollTo(0, window.scrollY || 0); } catch (e) {}
+  }
+  applyViewport();
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', applyViewport);
+  }
+})();
+''';
+  }
+
   @override
   void initState() {
     super.initState();
-    _controller = WebViewController()
+    _controller = _createController();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(_preparePermissionsAndLoad());
+    });
+  }
+
+  WebViewController _createController() {
+    late final PlatformWebViewControllerCreationParams params;
+    if (WebViewPlatform.instance is WebKitWebViewPlatform) {
+      params = WebKitWebViewControllerCreationParams(
+        allowsInlineMediaPlayback: true,
+        mediaTypesRequiringUserAction: const <PlaybackMediaTypes>{},
+      );
+    } else {
+      params = const PlatformWebViewControllerCreationParams();
+    }
+
+    final controller = WebViewController.fromPlatformCreationParams(
+      params,
+      onPermissionRequest: (request) {
+        request.grant();
+      },
+    );
+
+    controller
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..setNavigationDelegate(
         NavigationDelegate(
           onPageStarted: (_) {
             if (mounted) setState(() => _isLoading = true);
+            unawaited(_injectResponsiveLayout());
           },
           onPageFinished: (_) {
+            unawaited(_injectResponsiveLayout());
             if (mounted) setState(() => _isLoading = false);
           },
           onNavigationRequest: (request) {
@@ -52,8 +136,6 @@ class _PaymentCheckoutWebViewPageState extends State<PaymentCheckoutWebViewPage>
               _handlePaymentReturn(uri);
               return NavigationDecision.prevent;
             }
-            // Keep http(s) checkout inside the WebView; block leaving the app
-            // via custom schemes (except our own callback handled above).
             if (uri != null &&
                 uri.scheme != 'http' &&
                 uri.scheme != 'https' &&
@@ -65,12 +147,66 @@ class _PaymentCheckoutWebViewPageState extends State<PaymentCheckoutWebViewPage>
             return NavigationDecision.navigate;
           },
           onWebResourceError: (error) {
-            // Ignore aborted loads from prevented navigations.
             if (error.errorCode == -999) return;
           },
         ),
-      )
-      ..loadRequest(Uri.parse(widget.checkoutUrl));
+      );
+
+    final platform = controller.platform;
+    if (platform is AndroidWebViewController) {
+      platform.setMediaPlaybackRequiresUserGesture(false);
+      platform.setOnShowFileSelector(_pickAndroidCaptureFiles);
+      unawaited(platform.setUseWideViewPort(true));
+      unawaited(platform.enableZoom(true));
+    }
+    if (platform is WebKitWebViewController) {
+      unawaited(platform.setAllowsBackForwardNavigationGestures(true));
+      unawaited(platform.enableZoom(true));
+    }
+
+    return controller;
+  }
+
+  Future<List<String>> _pickAndroidCaptureFiles(FileSelectorParams params) async {
+    final wantsVideo = params.acceptTypes.any((type) => type.contains('video'));
+    if (wantsVideo) return const <String>[];
+
+    final source =
+        params.isCaptureEnabled ? ImageSource.camera : ImageSource.gallery;
+    final file = await ImagePicker().pickImage(
+      source: source,
+      requestFullMetadata: false,
+    );
+    if (file == null) return const <String>[];
+    return <String>[Uri.file(file.path).toString()];
+  }
+
+  Future<void> _preparePermissionsAndLoad() async {
+    final allowed = await _requestCameraAccess();
+    if (!mounted) return;
+    if (!allowed) {
+      setState(() => _cameraDenied = true);
+    }
+    await _controller.loadRequest(Uri.parse(widget.checkoutUrl));
+  }
+
+  Future<bool> _requestCameraAccess() async {
+    if (kIsWeb) return true;
+    final isMobile = defaultTargetPlatform == TargetPlatform.android ||
+        defaultTargetPlatform == TargetPlatform.iOS;
+    if (!isMobile) return true;
+
+    final camera = await Permission.camera.request();
+    await Permission.microphone.request();
+    return camera.isGranted;
+  }
+
+  Future<void> _injectResponsiveLayout() async {
+    final width = _webViewCssWidth;
+    if (width <= 0) return;
+    try {
+      await _controller.runJavaScript(_responsiveJs(width));
+    } catch (_) {}
   }
 
   bool _isPaymentCallback(Uri uri) {
@@ -95,8 +231,6 @@ class _PaymentCheckoutWebViewPageState extends State<PaymentCheckoutWebViewPage>
     final effectiveRef =
         (reference != null && reference.isNotEmpty) ? reference : widget.paymentId;
 
-    // Successful confirm navigates to home (clears WebView + top-up).
-    // On failure, close checkout only so the user stays on deposit.
     var success = false;
     if (effectiveRef.isNotEmpty) {
       success =
@@ -110,12 +244,16 @@ class _PaymentCheckoutWebViewPageState extends State<PaymentCheckoutWebViewPage>
   @override
   Widget build(BuildContext context) {
     final colors = AppColors.getThemeColors(context);
+    final media = MediaQuery.of(context);
+    final compact = media.size.width < 360 || media.size.height < 700;
+    final titleSize = compact ? 15.0 : 16.0;
 
     return Scaffold(
       backgroundColor: colors.background,
       appBar: AppBar(
         backgroundColor: colors.background,
         elevation: 0,
+        toolbarHeight: compact ? 48 : kToolbarHeight,
         leading: IconButton(
           icon: Icon(Icons.close, color: colors.textPrimary),
           onPressed: () => Navigator.of(context).pop(false),
@@ -124,7 +262,7 @@ class _PaymentCheckoutWebViewPageState extends State<PaymentCheckoutWebViewPage>
           widget.title,
           style: TextStyle(
             color: colors.textPrimary,
-            fontSize: 16,
+            fontSize: titleSize,
             fontWeight: FontWeight.w600,
           ),
         ),
@@ -135,7 +273,65 @@ class _PaymentCheckoutWebViewPageState extends State<PaymentCheckoutWebViewPage>
               : const SizedBox(height: 2),
         ),
       ),
-      body: WebViewWidget(controller: _controller),
+      body: SafeArea(
+        top: false,
+        child: Column(
+          children: [
+            if (_cameraDenied)
+              Material(
+                color: colors.surfaceVariant,
+                child: Padding(
+                  padding: EdgeInsets.symmetric(
+                    horizontal: media.size.width < 360 ? 12 : 16,
+                    vertical: 10,
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.videocam_off, color: colors.textSecondary),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          'Camera access is required to verify your identity. Enable it in Settings.',
+                          style: TextStyle(
+                            fontSize: compact ? 12 : 13,
+                            color: colors.textSecondary,
+                            height: 1.35,
+                          ),
+                        ),
+                      ),
+                      const TextButton(
+                        onPressed: openAppSettings,
+                        child: Text('Settings'),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            Expanded(
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final nextWidth = constraints.maxWidth;
+                  if (nextWidth > 0 && (nextWidth - _webViewCssWidth).abs() > 0.5) {
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      if (!mounted) return;
+                      _webViewCssWidth = nextWidth;
+                      unawaited(_injectResponsiveLayout());
+                    });
+                  }
+                  return ColoredBox(
+                    color: Colors.white,
+                    child: SizedBox(
+                      width: constraints.maxWidth,
+                      height: constraints.maxHeight,
+                      child: WebViewWidget(controller: _controller),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

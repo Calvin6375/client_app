@@ -122,17 +122,13 @@ class PaymentService {
       final parsed = CreatePaymentResult.fromResponse(
         result.data,
         requestedProvider: provider,
+        requestedCurrency: currency,
       );
 
-      Logger.info('📥 Cloud Function response received:');
-      Logger.info('   flow: ${parsed.flow.name}');
-      Logger.info('   provider: ${parsed.provider}');
-      Logger.info('   currency: ${parsed.currency}');
-      Logger.info('   status: ${parsed.status}');
-      Logger.debug('   Full response: ${result.data}');
+      _logCreatePaymentOutcome(parsed);
 
       if (parsed.isError) {
-        Logger.error('createPayment: ${parsed.error}. Full response: ${result.data}');
+        Logger.error('createPayment: ${parsed.error}');
         return parsed;
       }
 
@@ -292,5 +288,16 @@ Diagnostic steps:
       };
     }
   }
+}
+
+void _logCreatePaymentOutcome(CreatePaymentResult parsed) {
+  Logger.info('📥 Cloud Function response received:');
+  Logger.info('   provider: ${parsed.provider ?? 'unknown'}');
+  Logger.info('   flow: ${parsed.flow.name}');
+  Logger.info('   fundingOrderId: ${parsed.fundingOrderId ?? 'missing'}');
+  Logger.info('   status: ${parsed.status ?? 'missing'}');
+  Logger.info(
+    '   checkoutUrl: ${parsed.checkoutUrl != null && parsed.checkoutUrl!.isNotEmpty ? 'present' : 'missing'}',
+  );
 }
 

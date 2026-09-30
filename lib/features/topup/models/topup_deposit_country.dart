@@ -108,6 +108,12 @@ class TopupDepositCountry {
     flagEmoji: '🇬🇧',
   );
 
+  /// Crypto assets that open the wallet-address deposit flow (not hosted checkout).
+  static const List<String> cryptoDepositAssets = ['USDC', 'USDT', 'BNB'];
+
+  static bool isCryptoDepositAsset(String code) =>
+      cryptoDepositAssets.contains(code.trim().toUpperCase());
+
   /// Flag emoji for a currency code (used in top-up currency picker).
   static String flagEmojiForCode(String code) => resolve(code).flagEmoji;
 
@@ -184,9 +190,11 @@ class TopupDepositCountry {
     'XAF',
   };
 
-  /// Deposit currency picker: KES + ETB + non-African (AED excluded).
+  /// Deposit currency picker: KES + ETB + non-African fiat (AED excluded).
+  /// Crypto assets are listed separately via [cryptoDepositAssets].
   static bool isAllowedOnDepositSelector(String code) {
     final u = code.trim().toUpperCase();
+    if (isCryptoDepositAsset(u)) return false;
     if (u == 'KES' || u == 'ETB') return true;
     if (u == 'AED') return false;
     if (africanCurrencyCodes.contains(u)) return false;
@@ -195,9 +203,12 @@ class TopupDepositCountry {
   }
 
   /// Card / mobile money funding provider for [currencyCode].
-  /// African currencies → Paystack; USD, GBP, EUR, and other non-African → Transak.
-  static String cardMobileMoneyProviderFor(String currencyCode) =>
-      isAfricanCurrency(currencyCode) ? 'paystack' : 'transak';
+  /// African currencies → Paystack; USD → Crossmint; other non-African → Transak.
+  static String cardMobileMoneyProviderFor(String currencyCode) {
+    final u = currencyCode.trim().toUpperCase();
+    if (u == 'USD') return 'crossmint';
+    return isAfricanCurrency(u) ? 'paystack' : 'transak';
+  }
 
   /// Maps API [isoAlpha2] (e.g. `KE`, `NG`) to a catalog entry. Add cases when backend enables new countries.
   static TopupDepositCountry? fromIsoAlpha2(String isoAlpha2) {
@@ -241,6 +252,30 @@ class TopupDepositCountry {
   /// Unknown codes get a generic fallback so the backend list is never dropped.
   static TopupDepositCountry resolve(String code) {
     final trimmed = code.trim().toUpperCase();
+    if (trimmed == 'USDC') {
+      return const TopupDepositCountry(
+        name: 'USD Coin',
+        currencyName: 'USD Coin',
+        code: 'USDC',
+        flagEmoji: '🇺🇸',
+      );
+    }
+    if (trimmed == 'USDT') {
+      return const TopupDepositCountry(
+        name: 'Tether',
+        currencyName: 'Tether',
+        code: 'USDT',
+        flagEmoji: '₮',
+      );
+    }
+    if (trimmed == 'BNB') {
+      return const TopupDepositCountry(
+        name: 'BNB',
+        currencyName: 'BNB',
+        code: 'BNB',
+        flagEmoji: '🔶',
+      );
+    }
     if (trimmed == 'EUR') return euro;
     if (trimmed == 'GBP') return unitedKingdom;
     if (trimmed == 'CAD') {
