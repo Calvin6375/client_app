@@ -81,7 +81,7 @@ class _TransactionDetailPageState extends State<TransactionDetailPage> {
     final currency = _t.currency ?? _metaString(['currency']) ?? 'KES';
     final typeLabel = () {
       final fromRecon = ProviderDisplaySanitizer.labelFromReconType(
-        _t.reconType,
+        _t.reconType ?? _t.type,
         isDebit: _t.isDebit,
       );
       if (fromRecon.isNotEmpty) return fromRecon;
@@ -93,7 +93,6 @@ class _TransactionDetailPageState extends State<TransactionDetailPage> {
     final statusLabel = _capitalize(resolvedStatus.replaceAll('_', ' '));
     final showDownloadReceipt = _shouldShowDownloadReceipt(resolvedStatus);
     final detailRows = _buildDetailRows(
-      reference: _referenceDisplay(),
       typeLabel: typeLabel,
       dateStr: _formatDateTime(_t.createdAt),
       statusLabel: statusLabel,
@@ -251,12 +250,6 @@ class _TransactionDetailPageState extends State<TransactionDetailPage> {
     return _capitalize(raw.replaceAll('_', ' '));
   }
 
-  String _referenceDisplay() {
-    final r = _metaValue(['referenceId', 'reference', 'reference_id']);
-    if (r != null && r.toString().isNotEmpty) return r.toString();
-    return _t.id.isNotEmpty ? _t.id : '—';
-  }
-
   static const Set<String> _hiddenFieldKeys = {
     'source',
     'userId',
@@ -291,6 +284,27 @@ class _TransactionDetailPageState extends State<TransactionDetailPage> {
     'product',
     'productKey',
     'pricingProductKey',
+    'checkoutUrl',
+    'checkout_url',
+    'checkoutLink',
+    'checkout_link',
+    'reference',
+    'referenceId',
+    'reference_id',
+    'correlationId',
+    'correlation_id',
+    'passFeeToCustomer',
+    'pass_fee_to_customer',
+    'providerFee',
+    'provider_fee',
+    'settlementCoin',
+    'settlement_coin',
+    'customerPayAmount',
+    'customer_pay_amount',
+    'feeAmount',
+    'fee_amount',
+    'processingFee',
+    'processing_fee',
   };
 
   static const Set<String> _hiddenLabels = {
@@ -307,6 +321,18 @@ class _TransactionDetailPageState extends State<TransactionDetailPage> {
     'Payout ID',
     'Provider Tracking Id',
     'Provider Tracking ID',
+    'Reference',
+    'Checkout Url',
+    'Checkout URL',
+    'Checkout Link',
+    'Pass Fee To Customer',
+    'Provider Fee',
+    'Settlement Coin',
+    'Customer Pay Amount',
+    'Fee Amount',
+    'Processing Fee',
+    'Correlation Id',
+    'Correlation ID',
   };
 
   static bool _isCopyableLabel(String label) {
@@ -317,12 +343,14 @@ class _TransactionDetailPageState extends State<TransactionDetailPage> {
         normalized == 'network' ||
         normalized == 'tx hash' ||
         normalized == 'txhash' ||
-        normalized == 'transaction hash';
+        normalized == 'transaction hash' ||
+        normalized == 'transaction id' ||
+        normalized == 'payment id' ||
+        normalized == 'paymentid';
   }
 
   /// Builds labeled rows for every meaningful field from the API response.
   List<({String label, String value, bool copyable})> _buildDetailRows({
-    required String reference,
     required String typeLabel,
     required String dateStr,
     required String statusLabel,
@@ -335,6 +363,8 @@ class _TransactionDetailPageState extends State<TransactionDetailPage> {
       final v = value.trim();
       if (v.isEmpty || v == '—') return;
       if (_hiddenLabels.contains(label)) return;
+      if (ProviderDisplaySanitizer.isHiddenMetadataKey(label)) return;
+      if (ProviderDisplaySanitizer.isProcessorInternalValue(v)) return;
       rows.add((
         label: label,
         value: v,
@@ -347,13 +377,14 @@ class _TransactionDetailPageState extends State<TransactionDetailPage> {
     // Always hide these API fields from the receipt.
     consumeKeys(_hiddenFieldKeys);
 
-    addRow('Reference', reference, copyable: true);
     consumeKeys(['referenceId', 'reference', 'reference_id']);
 
-    if (_t.id.isNotEmpty && _t.id != reference) {
+    if (_t.id.isNotEmpty &&
+        !ProviderDisplaySanitizer.isProcessorInternalValue(_t.id) &&
+        !ProviderDisplaySanitizer.isHiddenMetadataKey('transactionId')) {
       addRow('Transaction ID', _t.id);
     }
-    consumeKeys(['id', 'transactionId', 'transaction_id']);
+    consumeKeys(['id', 'transactionId', 'transaction_id', 'correlationId', 'correlation_id']);
 
     addRow('Type', typeLabel);
     consumeKeys(['type', 'displayName', 'label', 'title', 'reconType']);
@@ -392,12 +423,6 @@ class _TransactionDetailPageState extends State<TransactionDetailPage> {
 
     // Prefer friendly labels for known metadata / extra keys.
     const orderedLabels = <String, String>{
-      'orderId': 'Order ID',
-      'order_id': 'Order ID',
-      'correlationId': 'Transaction ID',
-      'correlation_id': 'Transaction ID',
-      'transactionId': 'Transaction ID',
-      'transaction_id': 'Transaction ID',
       'flow': 'Flow',
       'orderType': 'Order type',
       'bankName': 'Bank name',
@@ -455,6 +480,7 @@ class _TransactionDetailPageState extends State<TransactionDetailPage> {
       if (ProviderDisplaySanitizer.isHiddenMetadataKey(key)) continue;
       final value = _stringifyValue(flat[key]);
       if (value.isEmpty) continue;
+      if (ProviderDisplaySanitizer.isProcessorInternalValue(value)) continue;
       final label = _humanizeKey(key.replaceFirst(RegExp(r'^review\.'), ''));
       if (_hiddenLabels.contains(label)) continue;
       addRow(label, value);
@@ -474,7 +500,6 @@ class _TransactionDetailPageState extends State<TransactionDetailPage> {
       );
     }
 
-    ensureCore('Reference', reference, copyable: true);
     ensureCore('Type', typeLabel);
     ensureCore('Date & time', dateStr);
     ensureCore('Status', statusLabel);
@@ -775,6 +800,12 @@ class _TransactionDetailPageState extends State<TransactionDetailPage> {
     String? value,
   ) {
     if (value == null || value.trim().isEmpty) return const SizedBox.shrink();
+    if (ProviderDisplaySanitizer.isHiddenMetadataKey(label)) {
+      return const SizedBox.shrink();
+    }
+    if (ProviderDisplaySanitizer.isProcessorInternalValue(value)) {
+      return const SizedBox.shrink();
+    }
     return _receiptRow(
       colors,
       label,

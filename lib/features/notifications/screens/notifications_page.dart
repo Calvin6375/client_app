@@ -772,6 +772,9 @@ class _NotificationDetailSheet extends StatelessWidget {
     for (final k in remaining) {
       if (k == 'review') continue;
       if (ProviderDisplaySanitizer.isHiddenMetadataKey(k)) continue;
+      final value = _stringifyFlatValue(flat[k]);
+      if (value.isEmpty) continue;
+      if (ProviderDisplaySanitizer.isProcessorInternalValue(value)) continue;
       final label = _humanizeKey(k.replaceFirst(RegExp(r'^review\.'), ''));
       out.add((
         label: label,

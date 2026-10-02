@@ -3,7 +3,7 @@ class ProviderDisplaySanitizer {
   ProviderDisplaySanitizer._();
 
   static const _providerPattern =
-      r'paystack|transak|transack|intasend|inta[\s-]?send|transfi|crossmint|persona|grid|circle|onramp';
+      r'paylio|paystack|transak|transack|intasend|inta[\s-]?send|transfi|crossmint|persona|grid|circle|onramp';
 
   static final RegExp _parentheticalProvider = RegExp(
     r'\s*\([^)]*(?:' + _providerPattern + r')[^)]*\)',
@@ -53,6 +53,7 @@ class ProviderDisplaySanitizer {
       case 'funding_paystack':
       case 'funding_transak':
       case 'funding_crossmint':
+      case 'funding_paylio':
       case 'topup_intasend':
       case 'funding':
       case 'topup':
@@ -73,35 +74,87 @@ class ProviderDisplaySanitizer {
       case 'swap':
         return 'Currency swap';
       default:
+        final lower = reconType.trim().toLowerCase();
+        if (lower.startsWith('funding') ||
+            lower.contains('topup') ||
+            lower.contains('top_up') ||
+            lower.contains('paylio')) {
+          return 'Wallet top-up';
+        }
         final humanized = reconType.replaceAll('_', ' ').trim();
         return sanitize(humanized);
     }
   }
 
-  /// Returns true when [key] is an internal provider identifier field.
+  /// Returns true when [key] is an internal provider / checkout field.
   static bool isHiddenMetadataKey(String key) {
-    final normalized = key.trim().toLowerCase();
+    final normalized = _normalizeKey(key);
+    if (normalized.isEmpty) return false;
     const hidden = {
       'provider',
       'paymentprovider',
-      'payment_provider',
       'fundingprovider',
-      'funding_provider',
       'checkoutprovider',
-      'checkout_provider',
+      'checkout',
+      'checkouturl',
+      'checkouturi',
+      'checkoutlink',
+      'hostedcheckouturl',
+      'payurl',
+      'paymenturl',
+      'reference',
+      'referenceid',
+      'providerreference',
       'paystackreference',
-      'paystack_reference',
       'transakreference',
-      'transak_reference',
       'intasendcheckoutid',
-      'intasend_checkout_id',
+      'correlationid',
+      'passfeetocustomer',
+      'passfeestocustomer',
+      'providerfee',
+      'providerfees',
+      'providerfeeamount',
+      'settlementcoin',
+      'settlementasset',
+      'settlementcurrency',
+      'customerpayamount',
+      'customerpay',
+      'feeamount',
+      'processingfee',
+      'processorfee',
     };
-    return hidden.contains(normalized.replaceAll('.', '').replaceAll('_', '')) ||
-        normalized.contains('paystack') ||
-        normalized.contains('transak') ||
-        normalized.contains('intasend') ||
-        normalized.contains('crossmint');
+    if (hidden.contains(normalized)) return true;
+    if (normalized.contains('paylio')) return true;
+    if (normalized.contains('paystack')) return true;
+    if (normalized.contains('transak')) return true;
+    if (normalized.contains('intasend')) return true;
+    if (normalized.contains('crossmint')) return true;
+    if (normalized.contains('checkout')) return true;
+    if (normalized.contains('settlementcoin') ||
+        normalized.contains('settlementasset')) {
+      return true;
+    }
+    if (normalized.contains('providerfee')) return true;
+    if (normalized.contains('passfee')) return true;
+    return false;
   }
+
+  /// Values that leak processor rails: checkout URLs, order ids, partner names.
+  static bool isProcessorInternalValue(String? value) {
+    final text = (value ?? '').trim();
+    if (text.isEmpty) return false;
+    final lower = text.toLowerCase();
+    if (lower.startsWith('http://') || lower.startsWith('https://')) {
+      return true;
+    }
+    if (lower.startsWith('corr_') || lower.startsWith('funding_order')) {
+      return true;
+    }
+    return _inlineProvider.hasMatch(text);
+  }
+
+  static String _normalizeKey(String key) =>
+      key.trim().toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
 
   /// Safe copy for payment-failure dialogs. Never forward raw backend or
   /// processor messages (HTTP codes, staging URLs, partner names).
