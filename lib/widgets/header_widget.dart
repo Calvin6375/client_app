@@ -98,14 +98,10 @@ class HeaderWidget extends ConsumerWidget {
 
     final profile = ref.watch(userProfileProvider).valueOrNull;
     final email = user.email ?? '';
-    final firstName = profile?.firstName ?? '';
-    final lastName = profile?.lastName ?? '';
-    final displayName = (firstName.isNotEmpty
-            ? lastName.isNotEmpty
-                ? '$firstName $lastName'
-                : firstName
-            : (email.isNotEmpty ? email.split('@').first : ''))
-        .trim();
+    final firstName = profile?.firstName.trim() ?? '';
+    final displayName = firstName.isNotEmpty
+        ? firstName
+        : (email.isNotEmpty ? email.split('@').first : '');
     final avatarInitial = (firstName.isNotEmpty
             ? firstName[0]
             : (email.isNotEmpty ? email[0] : 'U'))

@@ -2,6 +2,7 @@
 
 import 'dart:typed_data';
 
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:pretium/core/constants/app_colors.dart';
@@ -38,6 +39,25 @@ class _WalletSettingsPageState extends ConsumerState<WalletSettingsPage> {
   final _signOutGuard = AsyncActionGuard();
 
   bool _pushNotificationsEnabled = true;
+  String _appVersionLabel = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadAppVersion();
+  }
+
+  Future<void> _loadAppVersion() async {
+    final info = await PackageInfo.fromPlatform();
+    if (!mounted) return;
+    final version = info.version.trim();
+    final build = info.buildNumber.trim();
+    setState(() {
+      _appVersionLabel = build.isEmpty
+          ? 'version: $version'
+          : 'version: $version+$build';
+    });
+  }
 
   String _resolvedUserName(UserModel? profile) {
     final name = profile?.fullName.trim() ?? '';
@@ -225,16 +245,7 @@ class _WalletSettingsPageState extends ConsumerState<WalletSettingsPage> {
                               : Icons.qr_code_2_rounded,
                           onTap: _showProfileQr,
                         ),
-                        const SizedBox(height: 10),
-                        Text(
-                          'Tap to show your QR',
-                          style: TextStyle(
-                            color: primary,
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        const SizedBox(height: 10),
+                        const SizedBox(height: 12),
                         Text(
                           userName,
                           style: TextStyle(
@@ -393,16 +404,18 @@ class _WalletSettingsPageState extends ConsumerState<WalletSettingsPage> {
                       ),
                     ),
                   ),
-                  const SizedBox(height: 16),
-                  Center(
-                    child: Text(
-                      'version: 1.0.0+14',
-                      style: TextStyle(
-                        color: colors.textTertiary,
-                        fontSize: 12,
+                  if (_appVersionLabel.isNotEmpty) ...[
+                    const SizedBox(height: 16),
+                    Center(
+                      child: Text(
+                        _appVersionLabel,
+                        style: TextStyle(
+                          color: colors.textTertiary,
+                          fontSize: 12,
+                        ),
                       ),
                     ),
-                  ),
+                  ],
                   const SizedBox(height: 32),
                 ],
               ),

@@ -170,16 +170,16 @@ class _TappableUserAvatarState extends State<TappableUserAvatar>
 
     final button = Semantics(
       button: true,
-      label: widget.tooltip ?? 'Open profile',
+      label: widget.tooltip ?? 'Show receive QR',
       child: Material(
         type: MaterialType.transparency,
         child: InkWell(
           onTap: widget.onTap,
           onHighlightChanged: (v) => setState(() => _pressed = v),
-          customBorder: const CircleBorder(),
+          borderRadius: BorderRadius.circular(widget.radius + ringPad + 12),
           splashColor: primary.withValues(alpha: 0.18),
           child: Padding(
-            padding: const EdgeInsets.all(4),
+            padding: const EdgeInsets.fromLTRB(8, 8, 10, 10),
             child: scaled,
           ),
         ),

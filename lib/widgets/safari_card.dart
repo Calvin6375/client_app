@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:pretium/core/constants/app_colors.dart';
+import 'package:pretium/services/dashboard_session_cache.dart';
 import 'package:pretium/widgets/app_shimmer.dart';
 
 /// Virtual SafariTap / TruePay card shown on Home and Pay.
@@ -452,6 +453,29 @@ class SafariCardEntry {
   final String currency;
   final double balance;
   final bool isCrypto;
+
+  static List<SafariCardEntry> fromSnapshot(WalletSessionSnapshot? snap) {
+    if (snap == null) {
+      return const [SafariCardEntry(currency: 'KES', balance: 0)];
+    }
+    final wallets = <SafariCardEntry>[
+      for (final code in snap.availableFiatCurrencies)
+        SafariCardEntry(
+          currency: code,
+          balance: snap.fiatWallets[code]?.balance ?? 0,
+        ),
+      for (final code in snap.availableCryptoCurrencies)
+        SafariCardEntry(
+          currency: code,
+          balance: snap.cryptoWallets[code]?.balance ?? 0,
+          isCrypto: true,
+        ),
+    ];
+    if (wallets.isEmpty) {
+      return const [SafariCardEntry(currency: 'KES', balance: 0)];
+    }
+    return wallets;
+  }
 }
 
 /// Swipeable SafariTap cards for every wallet, matching Home.

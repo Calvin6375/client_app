@@ -7,6 +7,7 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:pretium/core/constants/app_colors.dart';
 import 'package:pretium/services/payment_callback_service.dart';
 import 'package:pretium/widgets/app_shimmer.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:webview_flutter_android/webview_flutter_android.dart';
 import 'package:webview_flutter_wkwebview/webview_flutter_wkwebview.dart';
@@ -31,10 +32,11 @@ class PaymentCheckoutWebViewPage extends StatefulWidget {
 }
 
 class _PaymentCheckoutWebViewPageState extends State<PaymentCheckoutWebViewPage> {
-  late final WebViewController _controller;
+  WebViewController? _controller;
   var _isLoading = true;
   var _handledReturn = false;
   var _cameraDenied = false;
+  var _webLaunchFailed = false;
   double _webViewCssWidth = 0;
 
   static const _webPaymentHosts = {
@@ -94,9 +96,35 @@ class _PaymentCheckoutWebViewPageState extends State<PaymentCheckoutWebViewPage>
   @override
   void initState() {
     super.initState();
-    _controller = _createController();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      unawaited(_preparePermissionsAndLoad());
+      unawaited(_startCheckout());
+    });
+  }
+
+  Future<void> _startCheckout() async {
+    if (kIsWeb) {
+      await _openExternalCheckout();
+      return;
+    }
+    _controller = _createController();
+    if (mounted) setState(() {});
+    await _preparePermissionsAndLoad();
+  }
+
+  Future<void> _openExternalCheckout() async {
+    final uri = Uri.tryParse(widget.checkoutUrl);
+    var opened = false;
+    if (uri != null && (uri.scheme == 'https' || uri.scheme == 'http')) {
+      opened = await launchUrl(
+        uri,
+        mode: LaunchMode.externalApplication,
+        webOnlyWindowName: '_blank',
+      );
+    }
+    if (!mounted) return;
+    setState(() {
+      _isLoading = false;
+      _webLaunchFailed = !opened;
     });
   }
 
@@ -187,7 +215,7 @@ class _PaymentCheckoutWebViewPageState extends State<PaymentCheckoutWebViewPage>
     if (!allowed) {
       setState(() => _cameraDenied = true);
     }
-    await _controller.loadRequest(Uri.parse(widget.checkoutUrl));
+    await _controller?.loadRequest(Uri.parse(widget.checkoutUrl));
   }
 
   Future<bool> _requestCameraAccess() async {
@@ -202,10 +230,11 @@ class _PaymentCheckoutWebViewPageState extends State<PaymentCheckoutWebViewPage>
   }
 
   Future<void> _injectResponsiveLayout() async {
+    final controller = _controller;
     final width = _webViewCssWidth;
-    if (width <= 0) return;
+    if (controller == null || width <= 0) return;
     try {
-      await _controller.runJavaScript(_responsiveJs(width));
+      await controller.runJavaScript(_responsiveJs(width));
     } catch (_) {}
   }
 
@@ -273,65 +302,126 @@ class _PaymentCheckoutWebViewPageState extends State<PaymentCheckoutWebViewPage>
               : const SizedBox(height: 2),
         ),
       ),
-      body: SafeArea(
-        top: false,
-        child: Column(
-          children: [
-            if (_cameraDenied)
-              Material(
-                color: colors.surfaceVariant,
-                child: Padding(
-                  padding: EdgeInsets.symmetric(
-                    horizontal: media.size.width < 360 ? 12 : 16,
-                    vertical: 10,
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(Icons.videocam_off, color: colors.textSecondary),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Text(
-                          'Camera access is required to verify your identity. Enable it in Settings.',
-                          style: TextStyle(
-                            fontSize: compact ? 12 : 13,
-                            color: colors.textSecondary,
-                            height: 1.35,
-                          ),
-                        ),
-                      ),
-                      const TextButton(
-                        onPressed: openAppSettings,
-                        child: Text('Settings'),
-                      ),
-                    ],
-                  ),
-                ),
+        body: SafeArea(
+          top: false,
+          child: kIsWeb
+              ? _buildWebCheckoutBody(colors, compact)
+              : _buildNativeCheckoutBody(colors, media, compact),
+        ),
+    );
+  }
+
+  Widget _buildWebCheckoutBody(AppThemeColors colors, bool compact) {
+    final primary = Theme.of(context).colorScheme.primary;
+    return Padding(
+      padding: EdgeInsets.fromLTRB(compact ? 20 : 32, 24, compact ? 20 : 32, 24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Icon(Icons.open_in_new, size: 40, color: primary),
+          const SizedBox(height: 16),
+          Text(
+            _webLaunchFailed
+                ? 'Could not open checkout automatically'
+                : 'Checkout opened in a new tab',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: compact ? 18 : 20,
+              fontWeight: FontWeight.w700,
+              color: colors.textPrimary,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            'Card payment and identity verification cannot run inside this page on web. '
+            'Finish checkout in the new tab. When you are done, return here — your balance will update.',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: compact ? 13 : 14,
+              height: 1.4,
+              color: colors.textSecondary,
+            ),
+          ),
+          const SizedBox(height: 24),
+          ElevatedButton(
+            onPressed: () {
+              setState(() {
+                _isLoading = true;
+                _webLaunchFailed = false;
+              });
+              unawaited(_openExternalCheckout());
+            },
+            child: const Text('Open checkout'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildNativeCheckoutBody(
+    AppThemeColors colors,
+    MediaQueryData media,
+    bool compact,
+  ) {
+    final controller = _controller;
+    return Column(
+      children: [
+        if (_cameraDenied)
+          Material(
+            color: colors.surfaceVariant,
+            child: Padding(
+              padding: EdgeInsets.symmetric(
+                horizontal: media.size.width < 360 ? 12 : 16,
+                vertical: 10,
               ),
-            Expanded(
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  final nextWidth = constraints.maxWidth;
-                  if (nextWidth > 0 && (nextWidth - _webViewCssWidth).abs() > 0.5) {
-                    WidgetsBinding.instance.addPostFrameCallback((_) {
-                      if (!mounted) return;
-                      _webViewCssWidth = nextWidth;
-                      unawaited(_injectResponsiveLayout());
-                    });
-                  }
-                  return ColoredBox(
-                    color: Colors.white,
-                    child: SizedBox(
-                      width: constraints.maxWidth,
-                      height: constraints.maxHeight,
-                      child: WebViewWidget(controller: _controller),
+              child: Row(
+                children: [
+                  Icon(Icons.videocam_off, color: colors.textSecondary),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'Camera access is required to verify your identity. Enable it in Settings.',
+                      style: TextStyle(
+                        fontSize: compact ? 12 : 13,
+                        color: colors.textSecondary,
+                        height: 1.35,
+                      ),
                     ),
-                  );
-                },
+                  ),
+                  const TextButton(
+                    onPressed: openAppSettings,
+                    child: Text('Settings'),
+                  ),
+                ],
               ),
             ),
-          ],
+          ),
+        Expanded(
+          child: controller == null
+              ? const Center(child: ShimmerBusyIndicator())
+              : LayoutBuilder(
+                  builder: (context, constraints) {
+                    final nextWidth = constraints.maxWidth;
+                    if (nextWidth > 0 &&
+                        (nextWidth - _webViewCssWidth).abs() > 0.5) {
+                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                        if (!mounted) return;
+                        _webViewCssWidth = nextWidth;
+                        unawaited(_injectResponsiveLayout());
+                      });
+                    }
+                    return ColoredBox(
+                      color: Colors.white,
+                      child: SizedBox(
+                        width: constraints.maxWidth,
+                        height: constraints.maxHeight,
+                        child: WebViewWidget(controller: controller),
+                      ),
+                    );
+                  },
+                ),
         ),
-      ),
+      ],
     );
   }
 }

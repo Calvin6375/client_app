@@ -19,6 +19,7 @@ import 'package:pretium/features/topup/screens/usd_funding_instructions_screen.d
 import 'package:pretium/widgets/app_shimmer.dart';
 import 'package:pretium/widgets/bottom_safe_action_bar.dart';
 import 'package:pretium/widgets/currency_logo.dart';
+import 'package:pretium/utils/provider_display_sanitizer.dart';
 
 class TopUpPage extends ConsumerStatefulWidget {
   const TopUpPage({super.key});
@@ -178,7 +179,7 @@ class _TopUpPageState extends ConsumerState<TopUpPage> {
       );
 
       if (result.isError) {
-        _showError(result.error ?? 'Payment failed');
+        _showError(ProviderDisplaySanitizer.userFacingPaymentError(result.error));
         return;
       }
 
@@ -219,7 +220,7 @@ class _TopUpPageState extends ConsumerState<TopUpPage> {
           result.checkoutUrl!.isEmpty ||
           result.invoiceId == null ||
           result.invoiceId!.isEmpty) {
-        _showError('No checkout URL returned from server');
+        _showError(ProviderDisplaySanitizer.genericPaymentFailure);
         return;
       }
 
@@ -237,7 +238,7 @@ class _TopUpPageState extends ConsumerState<TopUpPage> {
         await ref.read(walletAccountsProvider.notifier).refresh(force: true);
       }
     } catch (e) {
-      _showError('Error processing payment: $e');
+      _showError(ProviderDisplaySanitizer.userFacingPaymentError('$e'));
     } finally {
       if (mounted) {
         _flowN.setProcessing(false);

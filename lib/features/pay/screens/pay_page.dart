@@ -5,7 +5,7 @@ import 'package:pretium/core/providers/service_providers.dart';
 import 'package:pretium/core/providers/wallet_accounts_provider.dart';
 import 'package:pretium/features/pay/screens/qr_scan_page.dart';
 import 'package:pretium/features/pay/screens/safari_tap_pay_views.dart';
-import 'package:pretium/services/dashboard_session_cache.dart';
+import 'package:pretium/widgets/keyboard_aware_scroll.dart';
 import 'package:pretium/widgets/money_form_widgets.dart';
 import 'package:pretium/widgets/safari_card.dart';
 
@@ -68,35 +68,6 @@ class _PayPageState extends ConsumerState<PayPage> {
     }
   }
 
-  List<SafariCardEntry> _walletsFrom(WalletSessionSnapshot? snap) {
-    if (snap == null) {
-      return const [
-        SafariCardEntry(currency: _kPayAmountCurrency, balance: 0),
-      ];
-    }
-
-    final wallets = <SafariCardEntry>[
-      for (final code in snap.availableFiatCurrencies)
-        SafariCardEntry(
-          currency: code,
-          balance: snap.fiatWallets[code]?.balance ?? 0,
-        ),
-      for (final code in snap.availableCryptoCurrencies)
-        SafariCardEntry(
-          currency: code,
-          balance: snap.cryptoWallets[code]?.balance ?? 0,
-          isCrypto: true,
-        ),
-    ];
-
-    if (wallets.isEmpty) {
-      return const [
-        SafariCardEntry(currency: _kPayAmountCurrency, balance: 0),
-      ];
-    }
-    return wallets;
-  }
-
   double get _kesBalance =>
       ref.watch(walletAccountsProvider).valueOrNull?.fiatWallets[_kPayAmountCurrency]?.balance ??
       0;
@@ -130,13 +101,28 @@ class _PayPageState extends ConsumerState<PayPage> {
     }
   }
 
+  bool get _isReviewing {
+    switch (_selected) {
+      case _PayOption.truePayMerchant:
+        return _truePayMerchantKey.currentState?.isReviewing ?? false;
+      case _PayOption.payBill:
+        return _payBillKey.currentState?.isReviewing ?? false;
+      case _PayOption.buyGoods:
+        return _buyGoodsKey.currentState?.isReviewing ?? false;
+      case _PayOption.pochiLaBiashara:
+        return _pochiKey.currentState?.isReviewing ?? false;
+      case null:
+        return false;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final colors = AppColors.getThemeColors(context);
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final primary = Theme.of(context).colorScheme.primary;
     final snap = ref.watch(walletAccountsProvider).valueOrNull;
-    final wallets = _walletsFrom(snap);
+    final wallets = SafariCardEntry.fromSnapshot(snap);
 
     final title = switch (_selected) {
       _PayOption.truePayMerchant => 'TruePay merchant',
@@ -166,129 +152,133 @@ class _PayPageState extends ConsumerState<PayPage> {
                 )
               : null,
         ),
-        body: _selected == null
-            ? _PayHub(
-                wallets: wallets,
-                loadingBalance: _loadingWallets,
-                initialCurrency: _selectedCurrency,
-                onCurrencyChanged: (code) =>
-                    setState(() => _selectedCurrency = code),
-                onSelect: _openOption,
+        body: _isReviewing
+            ? Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _walletCard(wallets),
+                  const SizedBox(height: 16),
+                  _methodDropdown(),
+                  const SizedBox(height: 16),
+                  Expanded(child: _selectedFlow()),
+                ],
               )
-            : switch (_selected!) {
-                _PayOption.truePayMerchant => SafariTapTruePayMerchantView(
-                    key: _truePayMerchantKey,
-                    kesBalance: _kesBalance,
-                    loadingBalance: _loadingWallets,
-                    payApi: ref.read(safariTapPayApiProvider),
-                    onPaid: () => Navigator.of(context).pop(true),
-                    onScanQr: _openQrScanner,
-                    onFlowStepChanged: () {
-                      if (mounted) setState(() {});
-                    },
-                  ),
-                _PayOption.payBill => SafariTapPayBillView(
-                    key: _payBillKey,
-                    kesBalance: _kesBalance,
-                    loadingBalance: _loadingWallets,
-                    payApi: ref.read(safariTapPayApiProvider),
-                    onPaid: () => Navigator.of(context).pop(true),
-                    onScanQr: _openQrScanner,
-                    onFlowStepChanged: () {
-                      if (mounted) setState(() {});
-                    },
-                  ),
-                _PayOption.buyGoods => SafariTapBuyGoodsView(
-                    key: _buyGoodsKey,
-                    kesBalance: _kesBalance,
-                    loadingBalance: _loadingWallets,
-                    payApi: ref.read(safariTapPayApiProvider),
-                    onPaid: () => Navigator.of(context).pop(true),
-                    onScanQr: _openQrScanner,
-                    onFlowStepChanged: () {
-                      if (mounted) setState(() {});
-                    },
-                  ),
-                _PayOption.pochiLaBiashara => SafariTapPochiView(
-                    key: _pochiKey,
-                    kesBalance: _kesBalance,
-                    loadingBalance: _loadingWallets,
-                    payApi: ref.read(safariTapPayApiProvider),
-                    onPaid: () => Navigator.of(context).pop(true),
-                    onScanQr: _openQrScanner,
-                  ),
-              },
+            : KeyboardAwareScroll(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _walletCard(wallets),
+                    const SizedBox(height: 16),
+                    _methodDropdown(),
+                    const SizedBox(height: 16),
+                    _selectedFlow(),
+                  ],
+                ),
+              ),
       ),
     );
   }
-}
 
-class _PayHub extends StatelessWidget {
-  const _PayHub({
-    required this.wallets,
-    required this.loadingBalance,
-    required this.initialCurrency,
-    required this.onCurrencyChanged,
-    required this.onSelect,
-  });
-
-  final List<SafariCardEntry> wallets;
-  final bool loadingBalance;
-  final String initialCurrency;
-  final ValueChanged<String> onCurrencyChanged;
-  final ValueChanged<_PayOption> onSelect;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = AppColors.getThemeColors(context);
-
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
-      children: [
-        SafariCardPager(
-          wallets: wallets,
-          loading: loadingBalance,
-          initialCurrency: initialCurrency,
-          onCurrencyChanged: onCurrencyChanged,
-        ),
-        const SizedBox(height: 24),
-        Text(
-          'Select Method',
-          style: TextStyle(
-            color: colors.textPrimary,
-            fontSize: 16,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-        const SizedBox(height: 12),
-        MoneyMethodTile(
-          icon: Icons.storefront_outlined,
-          title: 'TruePay merchant',
-          selected: false,
-          onTap: () => onSelect(_PayOption.truePayMerchant),
-        ),
-        const SizedBox(height: 10),
-        MoneyMethodTile(
-          icon: Icons.receipt_long_rounded,
-          title: 'Pay Bill',
-          selected: false,
-          onTap: () => onSelect(_PayOption.payBill),
-        ),
-        const SizedBox(height: 10),
-        MoneyMethodTile(
-          icon: Icons.storefront_rounded,
-          title: 'Buy Goods',
-          selected: false,
-          onTap: () => onSelect(_PayOption.buyGoods),
-        ),
-        const SizedBox(height: 10),
-        MoneyMethodTile(
-          icon: Icons.account_balance_wallet_outlined,
-          title: 'Pochi La Biashara',
-          selected: false,
-          onTap: () => onSelect(_PayOption.pochiLaBiashara),
-        ),
-      ],
+  Widget _walletCard(List<SafariCardEntry> wallets) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+      child: SafariCardPager(
+        key: const ValueKey('pay-safari-card'),
+        wallets: wallets,
+        loading: _loadingWallets,
+        initialCurrency: _selectedCurrency,
+        onCurrencyChanged: (code) => setState(() => _selectedCurrency = code),
+      ),
     );
+  }
+
+  Widget _methodDropdown() {
+    final colors = AppColors.getThemeColors(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            'Select Method',
+            style: TextStyle(
+              color: colors.textPrimary,
+              fontSize: 16,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 12),
+          MoneyMethodDropdown<_PayOption>(
+            value: _selected,
+            onChanged: _openOption,
+            options: const [
+              MoneyMethodOption(
+                value: _PayOption.truePayMerchant,
+                label: 'TruePay merchant',
+                icon: Icons.storefront_outlined,
+              ),
+              MoneyMethodOption(
+                value: _PayOption.payBill,
+                label: 'Pay Bill',
+                icon: Icons.receipt_long_rounded,
+              ),
+              MoneyMethodOption(
+                value: _PayOption.buyGoods,
+                label: 'Buy Goods',
+                icon: Icons.storefront_rounded,
+              ),
+              MoneyMethodOption(
+                value: _PayOption.pochiLaBiashara,
+                label: 'Pochi La Biashara',
+                icon: Icons.account_balance_wallet_outlined,
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _selectedFlow() {
+    if (_selected == null) return const SizedBox.shrink();
+    return switch (_selected!) {
+      _PayOption.truePayMerchant => SafariTapTruePayMerchantView(
+          key: _truePayMerchantKey,
+          kesBalance: _kesBalance,
+          payApi: ref.read(safariTapPayApiProvider),
+          onPaid: () => Navigator.of(context).pop(true),
+          onScanQr: _openQrScanner,
+          onFlowStepChanged: () {
+            if (mounted) setState(() {});
+          },
+        ),
+      _PayOption.payBill => SafariTapPayBillView(
+          key: _payBillKey,
+          kesBalance: _kesBalance,
+          payApi: ref.read(safariTapPayApiProvider),
+          onPaid: () => Navigator.of(context).pop(true),
+          onScanQr: _openQrScanner,
+          onFlowStepChanged: () {
+            if (mounted) setState(() {});
+          },
+        ),
+      _PayOption.buyGoods => SafariTapBuyGoodsView(
+          key: _buyGoodsKey,
+          kesBalance: _kesBalance,
+          payApi: ref.read(safariTapPayApiProvider),
+          onPaid: () => Navigator.of(context).pop(true),
+          onScanQr: _openQrScanner,
+          onFlowStepChanged: () {
+            if (mounted) setState(() {});
+          },
+        ),
+      _PayOption.pochiLaBiashara => SafariTapPochiView(
+          key: _pochiKey,
+          kesBalance: _kesBalance,
+          payApi: ref.read(safariTapPayApiProvider),
+          onPaid: () => Navigator.of(context).pop(true),
+          onScanQr: _openQrScanner,
+        ),
+    };
   }
 }

@@ -19,6 +19,15 @@ void main() {
       expect(TopupDepositCountry.isCryptoDepositAsset('BNB'), isTrue);
       expect(TopupDepositCountry.isCryptoDepositAsset('USD'), isFalse);
     });
+
+    test('hides ETB and CAD', () {
+      expect(TopupDepositCountry.isAllowedOnDepositSelector('ETB'), isFalse);
+      expect(TopupDepositCountry.isAllowedOnDepositSelector('CAD'), isFalse);
+      expect(
+        topupDepositPickerCodes(apiCodes: ['USD', 'KES', 'ETB', 'CAD', 'GBP']),
+        isNot(containsAll(['ETB', 'CAD'])),
+      );
+    });
   });
 
   group('TopUpFlowState routing', () {

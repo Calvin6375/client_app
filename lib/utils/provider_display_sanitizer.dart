@@ -3,7 +3,7 @@ class ProviderDisplaySanitizer {
   ProviderDisplaySanitizer._();
 
   static const _providerPattern =
-      r'paystack|transak|transack|intasend|inta[\s-]?send|transfi|crossmint';
+      r'paystack|transak|transack|intasend|inta[\s-]?send|transfi|crossmint|persona|grid|circle|onramp';
 
   static final RegExp _parentheticalProvider = RegExp(
     r'\s*\([^)]*(?:' + _providerPattern + r')[^)]*\)',
@@ -101,5 +101,31 @@ class ProviderDisplaySanitizer {
         normalized.contains('transak') ||
         normalized.contains('intasend') ||
         normalized.contains('crossmint');
+  }
+
+  /// Safe copy for payment-failure dialogs. Never forward raw backend or
+  /// processor messages (HTTP codes, staging URLs, partner names).
+  static const genericPaymentFailure =
+      'We couldn’t complete this payment right now. Please try again later.';
+
+  static String userFacingPaymentError(String? raw) {
+    final text = (raw ?? '').trim().toLowerCase();
+    if (text.isEmpty) return genericPaymentFailure;
+
+    if (text.contains('unauthenticated') ||
+        text.contains('authentication failed') ||
+        text.contains('sign in') ||
+        text.contains('logged in')) {
+      return 'Please sign in again and try again.';
+    }
+    if (text.contains('network') ||
+        text.contains('socket') ||
+        text.contains('timed out') ||
+        text.contains('timeout') ||
+        text.contains('connection')) {
+      return 'Check your connection and try again.';
+    }
+
+    return genericPaymentFailure;
   }
 }

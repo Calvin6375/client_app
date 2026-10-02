@@ -190,13 +190,13 @@ class TopupDepositCountry {
     'XAF',
   };
 
-  /// Deposit currency picker: KES + ETB + non-African fiat (AED excluded).
+  /// Deposit currency picker: KES + non-African fiat (AED, CAD, ETB excluded).
   /// Crypto assets are listed separately via [cryptoDepositAssets].
   static bool isAllowedOnDepositSelector(String code) {
     final u = code.trim().toUpperCase();
     if (isCryptoDepositAsset(u)) return false;
-    if (u == 'KES' || u == 'ETB') return true;
-    if (u == 'AED') return false;
+    if (u == 'KES') return true;
+    if (u == 'AED' || u == 'CAD' || u == 'ETB') return false;
     if (africanCurrencyCodes.contains(u)) return false;
     if (_otherAfricanCurrencyCodes.contains(u)) return false;
     return true;

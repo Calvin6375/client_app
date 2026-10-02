@@ -186,88 +186,103 @@ class MoneyBalanceCard extends StatelessWidget {
   }
 }
 
-class MoneyMethodTile extends StatelessWidget {
-  const MoneyMethodTile({
-    super.key,
+class MoneyMethodOption<T> {
+  const MoneyMethodOption({
+    required this.value,
+    required this.label,
     required this.icon,
-    required this.title,
-    required this.selected,
-    required this.onTap,
   });
 
+  final T value;
+  final String label;
   final IconData icon;
-  final String title;
-  final bool selected;
-  final VoidCallback onTap;
+}
+
+class MoneyMethodDropdown<T> extends StatelessWidget {
+  const MoneyMethodDropdown({
+    super.key,
+    required this.options,
+    required this.onChanged,
+    this.value,
+    this.hint = 'Select method',
+  });
+
+  final T? value;
+  final List<MoneyMethodOption<T>> options;
+  final ValueChanged<T> onChanged;
+  final String hint;
 
   @override
   Widget build(BuildContext context) {
     final colors = AppColors.getThemeColors(context);
-    final primary = Theme.of(context).colorScheme.primary;
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primary = Theme.of(context).colorScheme.primary;
 
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 180),
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-          decoration: BoxDecoration(
-            color: selected
-                ? primary.withValues(alpha: isDark ? 0.16 : 0.10)
-                : (isDark ? colors.surface : Colors.white),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: selected
-                  ? primary
-                  : (isDark
-                      ? colors.border.withValues(alpha: 0.45)
-                      : const Color(0xFFE5E7EB)),
-              width: selected ? 1.6 : 1,
-            ),
-          ),
-          child: Row(
+    return DropdownButtonFormField<T>(
+      key: ValueKey<T?>(value),
+      initialValue: value,
+      isExpanded: true,
+      hint: Text(
+        hint,
+        style: TextStyle(
+          color: colors.textTertiary,
+          fontSize: 15,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+      icon: Icon(
+        Icons.keyboard_arrow_down_rounded,
+        color: colors.textSecondary,
+      ),
+      dropdownColor: isDark ? colors.surface : Colors.white,
+      borderRadius: BorderRadius.circular(16),
+      style: TextStyle(
+        color: colors.textPrimary,
+        fontSize: 15,
+        fontWeight: FontWeight.w600,
+      ),
+      decoration: moneyFieldDecoration(context),
+      selectedItemBuilder: (context) => [
+        for (final option in options)
+          Row(
             children: [
-              Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  color: selected
-                      ? primary.withValues(alpha: 0.18)
-                      : (isDark
-                          ? colors.background
-                          : const Color(0xFFF1F5F9)),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  icon,
-                  color: selected ? primary : colors.textSecondary,
-                  size: 20,
-                ),
-              ),
-              const SizedBox(width: 12),
+              Icon(option.icon, size: 20, color: primary),
+              const SizedBox(width: 10),
               Expanded(
                 child: Text(
-                  title,
+                  option.label,
+                  overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    color: selected ? primary : colors.textPrimary,
+                    color: colors.textPrimary,
                     fontSize: 15,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
               ),
-              Icon(
-                selected
-                    ? Icons.radio_button_checked_rounded
-                    : Icons.radio_button_off_rounded,
-                color: selected ? primary : colors.textTertiary,
-              ),
             ],
           ),
-        ),
-      ),
+      ],
+      items: [
+        for (final option in options)
+          DropdownMenuItem<T>(
+            value: option.value,
+            child: Row(
+              children: [
+                Icon(option.icon, size: 20, color: primary),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    option.label,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+          ),
+      ],
+      onChanged: (next) {
+        if (next != null) onChanged(next);
+      },
     );
   }
 }

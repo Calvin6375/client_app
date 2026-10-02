@@ -172,7 +172,7 @@ class SendMoneyFlowNotifier extends AutoDisposeNotifier<SendMoneyFlowState> {
         return {
           'type': 'SAFARITAP_WALLET',
           'amount': amount,
-          'currency': 'KES',
+          'currency': state.details.fromCurrency.toUpperCase(),
           'clientRequestId': clientRequestId,
           'recipient': safariTapWalletRecipient(name: displayName),
           'narrative': 'SafariTap wallet transfer',
@@ -208,7 +208,7 @@ class SendMoneyFlowNotifier extends AutoDisposeNotifier<SendMoneyFlowState> {
         return {
           'type': 'SAFARITAP_WALLET',
           'amount': amount,
-          'currency': 'KES',
+          'currency': state.details.fromCurrency.toUpperCase(),
           'recipient': safariTapWalletRecipient(),
         };
       case null:

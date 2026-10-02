@@ -382,130 +382,166 @@ class _NotificationDetailSheet extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Container(
-                        width: 44,
-                        height: 44,
-                        decoration: BoxDecoration(
-                          color: primary.withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Icon(
-                          _notificationIconFor(notification),
-                          color: primary,
-                          size: 24,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Text(
-                          notification.displayTitle,
-                          style: TextStyle(
-                            color: colors.textPrimary,
-                            fontSize: 18,
-                            fontWeight: FontWeight.w700,
-                            height: 1.25,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    'Message',
-                    style: TextStyle(
-                      color: colors.textTertiary,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      letterSpacing: 0.3,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  SelectableText(
-                    notification.displayMessage,
-                    style: TextStyle(
-                      color: colors.textPrimary,
-                      fontSize: 15,
-                      height: 1.45,
-                    ),
-                  ),
-                  if (notification.metadata.isNotEmpty) ...[
-                    const SizedBox(height: 20),
-                    Text(
-                      'Details',
-                      style: TextStyle(
-                        color: colors.textTertiary,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: 0.3,
-                      ),
-                    ),
-                    const SizedBox(height: 10),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
                     Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(18),
+                      width: 44,
+                      height: 44,
                       decoration: BoxDecoration(
-                        color: isDark ? colors.surface : Colors.white,
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: colors.border),
-                        boxShadow: isDark
-                            ? null
-                            : [
-                                BoxShadow(
-                                  color: Colors.black.withValues(alpha: 0.06),
-                                  blurRadius: 10,
-                                  offset: const Offset(0, 3),
-                                ),
-                              ],
+                        color: primary.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(12),
                       ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: _metadataReceiptRows(
-                          context,
-                          colors,
-                          notification.metadata,
+                      child: Icon(
+                        _notificationIconFor(notification),
+                        color: primary,
+                        size: 24,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        notification.displayTitle,
+                        style: TextStyle(
+                          color: colors.textPrimary,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700,
+                          height: 1.25,
                         ),
                       ),
                     ),
                   ],
-                  const SizedBox(height: 16),
-                  _detailRow(
-                    colors,
-                    'Type',
-                    notification.type.isEmpty ? '—' : notification.type,
-                  ),
-                  if (notification.createdAt != null)
-                    _detailRow(
-                      colors,
-                      'Received',
-                      _formatFullTimestamp(notification.createdAt!),
-                    ),
-                  if (notification.updatedAt != null)
-                    _detailRow(
-                      colors,
-                      'Updated',
-                      _formatFullTimestamp(notification.updatedAt!),
-                    ),
-                  if (notification.actionUrl != null && notification.actionUrl!.isNotEmpty) ...[
-                    const SizedBox(height: 16),
-                    FilledButton.tonal(
-                      onPressed: () async {
-                        final uri = Uri.tryParse(notification.actionUrl!);
-                        if (uri != null && await canLaunchUrl(uri)) {
-                          await launchUrl(uri, mode: LaunchMode.externalApplication);
-                        }
-                      },
-                      child: const Text('Open link'),
-                    ),
-                  ],
-                ],
-              ),
+                ),
+                const SizedBox(height: 16),
+                if (notification.isPromotion || notification.isSystem)
+                  ..._announcementBody(context)
+                else
+                  ..._transactionBody(context, isDark),
+              ],
             ),
+          ),
         ],
       ),
     );
+  }
+
+  List<Widget> _announcementBody(BuildContext context) {
+    final url = notification.actionUrl?.trim() ?? '';
+    return [
+      SelectableText(
+        notification.displayMessage,
+        style: TextStyle(
+          color: colors.textPrimary,
+          fontSize: 15,
+          height: 1.5,
+        ),
+      ),
+      if (url.isNotEmpty) ...[
+        const SizedBox(height: 24),
+        FilledButton(
+          onPressed: () async {
+            final uri = Uri.tryParse(url);
+            if (uri != null && await canLaunchUrl(uri)) {
+              await launchUrl(uri, mode: LaunchMode.externalApplication);
+            }
+          },
+          child: Text(notification.isPromotion ? 'Learn more' : 'Open'),
+        ),
+      ],
+    ];
+  }
+
+  List<Widget> _transactionBody(BuildContext context, bool isDark) {
+    return [
+      Text(
+        'Message',
+        style: TextStyle(
+          color: colors.textTertiary,
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+          letterSpacing: 0.3,
+        ),
+      ),
+      const SizedBox(height: 6),
+      SelectableText(
+        notification.displayMessage,
+        style: TextStyle(
+          color: colors.textPrimary,
+          fontSize: 15,
+          height: 1.45,
+        ),
+      ),
+      if (notification.metadata.isNotEmpty) ...[
+        const SizedBox(height: 20),
+        Text(
+          'Details',
+          style: TextStyle(
+            color: colors.textTertiary,
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            letterSpacing: 0.3,
+          ),
+        ),
+        const SizedBox(height: 10),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            color: isDark ? colors.surface : Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: colors.border),
+            boxShadow: isDark
+                ? null
+                : [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.06),
+                      blurRadius: 10,
+                      offset: const Offset(0, 3),
+                    ),
+                  ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: _metadataReceiptRows(
+              context,
+              colors,
+              notification.metadata,
+            ),
+          ),
+        ),
+      ],
+      const SizedBox(height: 16),
+      _detailRow(
+        colors,
+        'Type',
+        notification.type.isEmpty ? '—' : notification.type,
+      ),
+      if (notification.createdAt != null)
+        _detailRow(
+          colors,
+          'Received',
+          _formatFullTimestamp(notification.createdAt!),
+        ),
+      if (notification.updatedAt != null)
+        _detailRow(
+          colors,
+          'Updated',
+          _formatFullTimestamp(notification.updatedAt!),
+        ),
+      if (notification.actionUrl != null &&
+          notification.actionUrl!.isNotEmpty) ...[
+        const SizedBox(height: 16),
+        FilledButton.tonal(
+          onPressed: () async {
+            final uri = Uri.tryParse(notification.actionUrl!);
+            if (uri != null && await canLaunchUrl(uri)) {
+              await launchUrl(uri, mode: LaunchMode.externalApplication);
+            }
+          },
+          child: const Text('Open link'),
+        ),
+      ],
+    ];
   }
 
   Widget _detailRow(AppThemeColors colors, String label, String value) {

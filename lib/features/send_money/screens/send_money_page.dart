@@ -5,8 +5,11 @@ import 'package:pretium/features/send_money/screens/send_money_form_screen.dart'
 import 'package:pretium/features/send_money/screens/payment_method_screen.dart';
 import 'package:pretium/features/send_money/screens/review_details_screen.dart';
 import 'package:pretium/core/constants/app_colors.dart';
+import 'package:pretium/core/providers/wallet_accounts_provider.dart';
 import 'package:pretium/features/safari_tap/services/safari_tap_pay_flow.dart';
 import 'package:pretium/utils/async_action_guard.dart';
+import 'package:pretium/widgets/keyboard_aware_scroll.dart';
+import 'package:pretium/widgets/safari_card.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:uuid/uuid.dart';
 
@@ -20,6 +23,24 @@ class SendMoneyPage extends ConsumerStatefulWidget {
 }
 
 class _SendMoneyPageState extends ConsumerState<SendMoneyPage> {
+  late String _selectedCurrency;
+
+  @override
+  void initState() {
+    super.initState();
+    final initial = widget.initialFromCurrency?.trim().toUpperCase() ?? '';
+    _selectedCurrency = initial.isEmpty ? 'KES' : initial;
+    if (initial.isNotEmpty && initial != 'KES') {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        final details = ref.read(sendMoneyFlowProvider).details;
+        details.fromCurrency = _selectedCurrency;
+        details.toCurrency = _selectedCurrency;
+        ref.read(sendMoneyFlowProvider.notifier).updateDetails(details);
+      });
+    }
+  }
+
   Future<void> _onFormContinue() async {
     final error =
         await ref.read(sendMoneyFlowProvider.notifier).continueFromForm();
@@ -54,16 +75,6 @@ class _SendMoneyPageState extends ConsumerState<SendMoneyPage> {
         final details = ref.read(sendMoneyFlowProvider).details;
         final amount = details.amountToSend;
         if (amount <= 0) return;
-
-        if (details.paymentMethod == PaymentMethod.truePay &&
-            details.fromCurrency.toUpperCase() != 'KES') {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('SafariTap wallet transfers require a KES wallet.'),
-            ),
-          );
-          return;
-        }
 
         if (details.paymentMethod == PaymentMethod.bank &&
             (amount < 100 || amount > 999999)) {
@@ -125,6 +136,10 @@ class _SendMoneyPageState extends ConsumerState<SendMoneyPage> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final primary = Theme.of(context).colorScheme.primary;
     final flow = ref.watch(sendMoneyFlowProvider);
+    final accounts = ref.watch(walletAccountsProvider);
+    final snap = accounts.valueOrNull;
+    final wallets = SafariCardEntry.fromSnapshot(snap);
+    final loadingWallets = accounts.isLoading && snap == null;
 
     return Scaffold(
       backgroundColor: colors.background,
@@ -141,7 +156,44 @@ class _SendMoneyPageState extends ConsumerState<SendMoneyPage> {
               )
             : null,
       ),
-      body: _buildCurrentStep(flow),
+      body: flow.step == SendMoneyStep.review
+          ? Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _walletCard(wallets, loadingWallets),
+                const SizedBox(height: 16),
+                Expanded(child: _buildCurrentStep(flow)),
+              ],
+            )
+          : KeyboardAwareScroll(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _walletCard(wallets, loadingWallets),
+                  const SizedBox(height: 16),
+                  _buildCurrentStep(flow),
+                ],
+              ),
+            ),
+    );
+  }
+
+  Widget _walletCard(List<SafariCardEntry> wallets, bool loadingWallets) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+      child: SafariCardPager(
+        key: const ValueKey('send-safari-card'),
+        wallets: wallets,
+        loading: loadingWallets,
+        initialCurrency: _selectedCurrency,
+        onCurrencyChanged: (code) {
+          setState(() => _selectedCurrency = code);
+          final details = ref.read(sendMoneyFlowProvider).details;
+          details.fromCurrency = code;
+          details.toCurrency = code;
+          ref.read(sendMoneyFlowProvider.notifier).updateDetails(details);
+        },
+      ),
     );
   }
 }

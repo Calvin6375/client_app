@@ -33,6 +33,8 @@ mixin SafariTapPayValidationMixin<T extends ConsumerStatefulWidget>
 
   bool get isBeneficiaryValidated => payFlow.isValidated;
 
+  bool get isReviewing => payFlow.step == KenyaPayStep.review;
+
   Future<bool> validateBeneficiary(Map<String, dynamic> body) =>
       payFlowN.validate(body);
 
@@ -66,7 +68,6 @@ class SafariTapPayBillView extends ConsumerStatefulWidget {
   const SafariTapPayBillView({
     super.key,
     required this.kesBalance,
-    required this.loadingBalance,
     required this.payApi,
     required this.onPaid,
     this.onFlowStepChanged,
@@ -74,7 +75,6 @@ class SafariTapPayBillView extends ConsumerStatefulWidget {
   });
 
   final double kesBalance;
-  final bool loadingBalance;
   final SafariTapPayApiService payApi;
   final VoidCallback onPaid;
   final VoidCallback? onFlowStepChanged;
@@ -257,29 +257,23 @@ class SafariTapPayBillViewState extends ConsumerState<SafariTapPayBillView>
     }
 
     final colors = AppColors.getThemeColors(context);
-    return Column(
+    return _PayFormColumn(
+      action: MoneyPrimaryButton(
+        label: isBeneficiaryValidated ? 'Continue to pay' : 'Validate',
+        loading: validationLoading,
+        onPressed: _continueToReview,
+      ),
       children: [
-        Expanded(
-          child: ListView(
-            padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
-            children: [
-              MoneyBalanceCard(
-                currency: kSafariTapPayCurrency,
-                balance: widget.kesBalance,
-                loading: widget.loadingBalance,
-                caption: 'Pay from your $kSafariTapPayCurrency wallet',
-              ),
-              const SizedBox(height: 24),
-              MoneyLabeledField(
-                controller: _businessCtrl,
-                label: 'PayBill number',
-                hint: 'e.g. 888880',
-                keyboardType: TextInputType.number,
-                onChanged: (_) => _clearValidation(),
-                suffixIcon: widget.onScanQr == null
-                    ? null
-                    : MoneyQrFieldButton(onPressed: widget.onScanQr!),
-              ),
+        MoneyLabeledField(
+          controller: _businessCtrl,
+          label: 'PayBill number',
+          hint: 'e.g. 888880',
+          keyboardType: TextInputType.number,
+          onChanged: (_) => _clearValidation(),
+          suffixIcon: widget.onScanQr == null
+              ? null
+              : MoneyQrFieldButton(onPressed: widget.onScanQr!),
+        ),
               const SizedBox(height: 14),
               MoneyLabeledField(
                 controller: _accountCtrl,
@@ -292,24 +286,16 @@ class SafariTapPayBillViewState extends ConsumerState<SafariTapPayBillView>
                 controller: _amountCtrl,
                 onChanged: (_) => setState(() {}),
               ),
-              MerchantValidationPanel(
-                beneficiaryName: beneficiaryName,
-                loading: validationLoading,
-                error: validationError,
-                idleMessage: 'Merchant name will appear here after validation',
-              ),
-              const SizedBox(height: 16),
-              Text(
-                'Payments are sent in KES from your SafariTap wallet.',
-                style: TextStyle(color: colors.textTertiary, fontSize: 12),
-              ),
-            ],
-          ),
-        ),
-        MoneyPrimaryButton(
-          label: isBeneficiaryValidated ? 'Continue to pay' : 'Validate',
+        MerchantValidationPanel(
+          beneficiaryName: beneficiaryName,
           loading: validationLoading,
-          onPressed: _continueToReview,
+          error: validationError,
+          idleMessage: 'Merchant name will appear here after validation',
+        ),
+        const SizedBox(height: 16),
+        Text(
+          'Payments are sent in KES from your SafariTap wallet.',
+          style: TextStyle(color: colors.textTertiary, fontSize: 12),
         ),
       ],
     );
@@ -320,7 +306,6 @@ class SafariTapBuyGoodsView extends ConsumerStatefulWidget {
   const SafariTapBuyGoodsView({
     super.key,
     required this.kesBalance,
-    required this.loadingBalance,
     required this.payApi,
     required this.onPaid,
     this.onFlowStepChanged,
@@ -328,7 +313,6 @@ class SafariTapBuyGoodsView extends ConsumerStatefulWidget {
   });
 
   final double kesBalance;
-  final bool loadingBalance;
   final SafariTapPayApiService payApi;
   final VoidCallback onPaid;
   final VoidCallback? onFlowStepChanged;
@@ -499,51 +483,37 @@ class SafariTapBuyGoodsViewState extends ConsumerState<SafariTapBuyGoodsView>
     }
 
     final colors = AppColors.getThemeColors(context);
-    return Column(
+    return _PayFormColumn(
+      action: MoneyPrimaryButton(
+        label: isBeneficiaryValidated ? 'Continue to pay' : 'Validate',
+        loading: validationLoading,
+        onPressed: _continueToReview,
+      ),
       children: [
-        Expanded(
-          child: ListView(
-            padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
-            children: [
-              MoneyBalanceCard(
-                currency: kSafariTapPayCurrency,
-                balance: widget.kesBalance,
-                loading: widget.loadingBalance,
-                caption: 'Pay from your $kSafariTapPayCurrency wallet',
-              ),
-              const SizedBox(height: 24),
-              MoneyLabeledField(
-                controller: _tillCtrl,
-                label: 'Till number',
-                hint: 'Lipa Na M-Pesa till',
-                keyboardType: TextInputType.number,
-                onChanged: (_) => _clearValidation(),
-                suffixIcon: widget.onScanQr == null
-                    ? null
-                    : MoneyQrFieldButton(onPressed: widget.onScanQr!),
-              ),
-              const SizedBox(height: 24),
-              MoneyAmountEntry(
-                controller: _amountCtrl,
-                onChanged: (_) => setState(() {}),
-              ),
-              MerchantValidationPanel(
-                beneficiaryName: beneficiaryName,
-                loading: validationLoading,
-                error: validationError,
-              ),
-              const SizedBox(height: 16),
-              Text(
-                'Payments are sent in KES from your SafariTap wallet.',
-                style: TextStyle(color: colors.textTertiary, fontSize: 12),
-              ),
-            ],
-          ),
+        MoneyLabeledField(
+          controller: _tillCtrl,
+          label: 'Till number',
+          hint: 'Lipa Na M-Pesa till',
+          keyboardType: TextInputType.number,
+          onChanged: (_) => _clearValidation(),
+          suffixIcon: widget.onScanQr == null
+              ? null
+              : MoneyQrFieldButton(onPressed: widget.onScanQr!),
         ),
-        MoneyPrimaryButton(
-          label: isBeneficiaryValidated ? 'Continue to pay' : 'Validate',
+        const SizedBox(height: 24),
+        MoneyAmountEntry(
+          controller: _amountCtrl,
+          onChanged: (_) => setState(() {}),
+        ),
+        MerchantValidationPanel(
+          beneficiaryName: beneficiaryName,
           loading: validationLoading,
-          onPressed: _continueToReview,
+          error: validationError,
+        ),
+        const SizedBox(height: 16),
+        Text(
+          'Payments are sent in KES from your SafariTap wallet.',
+          style: TextStyle(color: colors.textTertiary, fontSize: 12),
         ),
       ],
     );
@@ -554,7 +524,6 @@ class SafariTapTruePayMerchantView extends ConsumerStatefulWidget {
   const SafariTapTruePayMerchantView({
     super.key,
     required this.kesBalance,
-    required this.loadingBalance,
     required this.payApi,
     required this.onPaid,
     this.onFlowStepChanged,
@@ -562,7 +531,6 @@ class SafariTapTruePayMerchantView extends ConsumerStatefulWidget {
   });
 
   final double kesBalance;
-  final bool loadingBalance;
   final SafariTapPayApiService payApi;
   final VoidCallback onPaid;
   final VoidCallback? onFlowStepChanged;
@@ -869,52 +837,37 @@ class SafariTapTruePayMerchantViewState extends ConsumerState<SafariTapTruePayMe
     }
 
     final colors = AppColors.getThemeColors(context);
-    return Column(
+    return _PayFormColumn(
+      action: MoneyPrimaryButton(
+        label: isBeneficiaryValidated ? 'Continue to pay' : 'Validate',
+        loading: validationLoading || _resolving,
+        onPressed: _continueToReview,
+      ),
       children: [
-        Expanded(
-          child: ListView(
-            padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
-            children: [
-              MoneyBalanceCard(
-                currency: kSafariTapPayCurrency,
-                balance: widget.kesBalance,
-                loading: widget.loadingBalance,
-                caption: 'Pay from your $kSafariTapPayCurrency wallet',
-              ),
-              const SizedBox(height: 24),
-              MoneyLabeledField(
-                controller: _merchantCtrl,
-                label: 'Merchant ID',
-                hint: 'TruePay merchant ID',
-                onChanged: (_) => _clearValidation(),
-                suffixIcon: widget.onScanQr == null
-                    ? null
-                    : MoneyQrFieldButton(onPressed: widget.onScanQr!),
-              ),
-              const SizedBox(height: 24),
-              MoneyAmountEntry(
-                controller: _amountCtrl,
-                onChanged: (_) => setState(() {}),
-              ),
-              MerchantValidationPanel(
-                beneficiaryName: beneficiaryName,
-                loading: validationLoading || _resolving,
-                loadingMessage:
-                    _resolving ? 'Looking up merchant…' : 'Validating…',
-                error: validationError,
-              ),
-              const SizedBox(height: 16),
-              Text(
-                'Payments are sent in KES from your SafariTap wallet.',
-                style: TextStyle(color: colors.textTertiary, fontSize: 12),
-              ),
-            ],
-          ),
+        MoneyLabeledField(
+          controller: _merchantCtrl,
+          label: 'Merchant ID',
+          hint: 'TruePay merchant ID',
+          onChanged: (_) => _clearValidation(),
+          suffixIcon: widget.onScanQr == null
+              ? null
+              : MoneyQrFieldButton(onPressed: widget.onScanQr!),
         ),
-        MoneyPrimaryButton(
-          label: isBeneficiaryValidated ? 'Continue to pay' : 'Validate',
+        const SizedBox(height: 24),
+        MoneyAmountEntry(
+          controller: _amountCtrl,
+          onChanged: (_) => setState(() {}),
+        ),
+        MerchantValidationPanel(
+          beneficiaryName: beneficiaryName,
           loading: validationLoading || _resolving,
-          onPressed: _continueToReview,
+          loadingMessage: _resolving ? 'Looking up merchant…' : 'Validating…',
+          error: validationError,
+        ),
+        const SizedBox(height: 16),
+        Text(
+          'Payments are sent in KES from your SafariTap wallet.',
+          style: TextStyle(color: colors.textTertiary, fontSize: 12),
         ),
       ],
     );
@@ -925,14 +878,12 @@ class SafariTapPochiView extends ConsumerStatefulWidget {
   const SafariTapPochiView({
     super.key,
     required this.kesBalance,
-    required this.loadingBalance,
     required this.payApi,
     required this.onPaid,
     this.onScanQr,
   });
 
   final double kesBalance;
-  final bool loadingBalance;
   final SafariTapPayApiService payApi;
   final VoidCallback onPaid;
   final VoidCallback? onScanQr;
@@ -1017,52 +968,65 @@ class SafariTapPochiViewState extends ConsumerState<SafariTapPochiView>
   @override
   Widget build(BuildContext context) {
     final colors = AppColors.getThemeColors(context);
-    return Column(
+    return _PayFormColumn(
+      action: MoneyPrimaryButton(
+        label: isBeneficiaryValidated ? 'Confirm Payment' : 'Validate',
+        loading: validationLoading || _submitting,
+        onPressed: _pay,
+      ),
       children: [
-        Expanded(
-          child: ListView(
-            padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
-            children: [
-              MoneyBalanceCard(
-                currency: kSafariTapPayCurrency,
-                balance: widget.kesBalance,
-                loading: widget.loadingBalance,
-                caption: 'Pay from your $kSafariTapPayCurrency wallet',
-              ),
-              const SizedBox(height: 24),
-              MoneyLabeledField(
-                controller: _pochiCtrl,
-                label: 'Pochi number',
-                hint: '07XXXXXXXX or 2547XXXXXXXX',
-                keyboardType: TextInputType.phone,
-                onChanged: (_) => payFlowN.clearValidation(),
-                suffixIcon: widget.onScanQr == null
-                    ? null
-                    : MoneyQrFieldButton(onPressed: widget.onScanQr!),
-              ),
-              const SizedBox(height: 24),
-              MoneyAmountEntry(
-                controller: _amountCtrl,
-                onChanged: (_) => setState(() {}),
-              ),
-              MerchantValidationPanel(
-                beneficiaryName: beneficiaryName,
-                loading: validationLoading,
-                error: validationError,
-              ),
-              const SizedBox(height: 16),
-              Text(
-                'Payments are sent in KES from your SafariTap wallet.',
-                style: TextStyle(color: colors.textTertiary, fontSize: 12),
-              ),
-            ],
+        MoneyLabeledField(
+          controller: _pochiCtrl,
+          label: 'Pochi number',
+          hint: '07XXXXXXXX or 2547XXXXXXXX',
+          keyboardType: TextInputType.phone,
+          onChanged: (_) => payFlowN.clearValidation(),
+          suffixIcon: widget.onScanQr == null
+              ? null
+              : MoneyQrFieldButton(onPressed: widget.onScanQr!),
+        ),
+        const SizedBox(height: 24),
+        MoneyAmountEntry(
+          controller: _amountCtrl,
+          onChanged: (_) => setState(() {}),
+        ),
+        MerchantValidationPanel(
+          beneficiaryName: beneficiaryName,
+          loading: validationLoading,
+          error: validationError,
+        ),
+        const SizedBox(height: 16),
+        Text(
+          'Payments are sent in KES from your SafariTap wallet.',
+          style: TextStyle(color: colors.textTertiary, fontSize: 12),
+        ),
+      ],
+    );
+  }
+}
+
+class _PayFormColumn extends StatelessWidget {
+  const _PayFormColumn({
+    required this.children,
+    required this.action,
+  });
+
+  final List<Widget> children;
+  final Widget action;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: children,
           ),
         ),
-        MoneyPrimaryButton(
-          label: isBeneficiaryValidated ? 'Confirm Payment' : 'Validate',
-          loading: validationLoading || _submitting,
-          onPressed: _pay,
-        ),
+        action,
       ],
     );
   }

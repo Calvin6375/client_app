@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_contacts/flutter_contacts.dart';
+import 'package:pretium/features/send_money/utils/recipient_contact_picker.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:pretium/core/constants/app_colors.dart';
-import 'package:pretium/core/providers/owned_wallet_balances.dart';
 import 'package:pretium/core/providers/wallet_accounts_provider.dart';
 import 'package:pretium/features/auth/widgets/phone_number_field.dart';
 import 'package:pretium/features/pay/screens/qr_scan_page.dart';
@@ -13,13 +12,12 @@ import 'package:pretium/features/safari_tap/models/safari_tap_bank.dart';
 import 'package:pretium/features/safari_tap/services/safari_tap_pay_api_service.dart';
 import 'package:pretium/features/send_money/screens/payment_method_screen.dart';
 import 'package:pretium/features/send_money/widgets/bank_picker_bottom_sheet.dart';
-import 'package:pretium/features/swap/widgets/currency_picker_bottom_sheet.dart';
 import 'package:pretium/models/transaction_details_model.dart';
+import 'package:pretium/services/dashboard_session_cache.dart';
 import 'package:pretium/widgets/app_shimmer.dart';
-import 'package:pretium/widgets/currency_logo.dart';
 import 'package:pretium/widgets/money_form_widgets.dart';
 
-/// Single Send Money form: balance card, method, amount chips, recipient fields.
+/// Send Money form: method, amount chips, recipient fields. Wallet card lives on [SendMoneyPage].
 class SendMoneyFormScreen extends ConsumerStatefulWidget {
   const SendMoneyFormScreen({
     super.key,
@@ -50,8 +48,6 @@ class _SendMoneyFormScreenState extends ConsumerState<SendMoneyFormScreen> {
   PaymentMethod? _method;
   String _currency = 'KES';
   double _balance = 0;
-  bool _loadingBalance = true;
-  final List<String> _ownedCurrencyCodes = [];
   final Map<String, double> _ownedBalances = {};
   List<SafariTapBank> _banks = const [];
   bool _loadingBanks = false;
@@ -100,6 +96,16 @@ class _SendMoneyFormScreenState extends ConsumerState<SendMoneyFormScreen> {
     if (_method == PaymentMethod.bank) _loadBanks();
   }
 
+  @override
+  void didUpdateWidget(covariant SendMoneyFormScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final incoming = widget.initialDetails.fromCurrency.trim().toUpperCase();
+    if (incoming.isNotEmpty && incoming != _currency) {
+      _currency = incoming;
+      _balance = _ownedBalances[_currency] ?? _balance;
+    }
+  }
+
   void _hydratePhone(String raw) {
     var digits = raw.replaceAll(RegExp(r'[^\d]'), '');
     if (digits.startsWith('00')) digits = digits.substring(2);
@@ -145,71 +151,17 @@ class _SendMoneyFormScreenState extends ConsumerState<SendMoneyFormScreen> {
 
   DateTime? _appliedWalletAt;
 
-  void _applyOwnedWallets(OwnedWalletBalances owned, {required bool loading}) {
-    if (owned.fiatCodes.isEmpty) {
-      _loadingBalance = loading;
-      return;
+  void _applyOwnedWallets(WalletSessionSnapshot snap) {
+    _ownedBalances.clear();
+    for (final e in snap.fiatWallets.entries) {
+      _ownedBalances[e.key] = e.value.balance;
     }
-    if (!owned.fiatCodes.contains(_currency)) {
-      _currency = owned.fiatCodes.first;
+    for (final e in snap.cryptoWallets.entries) {
+      _ownedBalances[e.key] = e.value.balance;
     }
-    _ownedCurrencyCodes
-      ..clear()
-      ..addAll(owned.fiatCodes);
-    _ownedBalances
-      ..clear()
-      ..addAll(owned.fiatBalances);
+    final next = widget.initialDetails.fromCurrency.trim().toUpperCase();
+    if (next.isNotEmpty) _currency = next;
     _balance = _ownedBalances[_currency] ?? 0;
-    _loadingBalance = false;
-  }
-
-  Future<void> _selectWallet(String code) async {
-    final upper = code.trim().toUpperCase();
-    if (upper.isEmpty || upper == _currency) return;
-    if (!_ownedCurrencyCodes.contains(upper)) return;
-
-    setState(() {
-      _currency = upper;
-      _balance = _ownedBalances[upper] ?? 0;
-      // Safari Card payouts (MM / Bank / Wallet) are KES-only.
-      if (upper != 'KES') {
-        // Keep method selection; continue will prompt to switch to KES.
-      } else if (_countryCode != '254' &&
-          (_method == PaymentMethod.mobileMoney ||
-              _method == PaymentMethod.truePay)) {
-        _countryCode = '254';
-      }
-    });
-    _emitUpdate();
-  }
-
-  /// Same picker sheet as Exchange (`CurrencyPickerBottomSheet`).
-  void _showWalletPicker() {
-    final currencies = [
-      for (final code in _ownedCurrencyCodes)
-        if (code.trim().isNotEmpty)
-          Currency(
-            code: code,
-            name: CurrencyLogo.displayNameFor(code),
-            flagEmoji: CurrencyLogo.emojiFor(code),
-          ),
-    ];
-    if (currencies.isEmpty) return;
-
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      useSafeArea: false,
-      backgroundColor: Colors.transparent,
-      builder: (context) => CurrencyPickerBottomSheet(
-        currencies: currencies,
-        selectedCode: _currency,
-        onSelected: (currency) {
-          // Sheet already pops itself before calling onSelected.
-          _selectWallet(currency.code);
-        },
-      ),
-    );
   }
 
   Future<void> _showBankPicker({ValueChanged<String>? onPicked}) async {
@@ -289,32 +241,17 @@ class _SendMoneyFormScreenState extends ConsumerState<SendMoneyFormScreen> {
 
   Future<void> _pickFromContacts() async {
     try {
-      final status =
-          await FlutterContacts.permissions.request(PermissionType.read);
-      if (status != PermissionStatus.granted &&
-          status != PermissionStatus.limited) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Contacts permission is required to pick a recipient'),
-          ),
-        );
-        return;
-      }
+      final contact = await RecipientContactPicker.pick();
+      if (!mounted || contact == null) return;
 
-      final contact = await FlutterContacts.native.showPicker(
-        properties: {ContactProperty.name, ContactProperty.phone},
-      );
-      if (contact == null || !mounted) return;
-
-      final name = contact.displayName?.trim() ?? '';
+      final name = contact.name?.trim() ?? '';
       if (name.isNotEmpty) {
         _fullNameCtrl.text = name;
       }
 
-      if (contact.phones.isNotEmpty) {
-        final phone = contact.phones.first;
-        _applyPhoneFromContact(phone.normalizedNumber ?? phone.number);
+      final phone = contact.phone;
+      if (phone != null && phone.isNotEmpty) {
+        _applyPhoneFromContact(phone);
       } else {
         _emitUpdate();
       }
@@ -470,16 +407,6 @@ class _SendMoneyFormScreenState extends ConsumerState<SendMoneyFormScreen> {
   void _onContinue() {
     if (!_formKey.currentState!.validate()) return;
     if (!_canContinue) return;
-    if (_currency != 'KES') {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Send Money payouts require a KES wallet. Switch to KES to continue.',
-          ),
-        ),
-      );
-      return;
-    }
     if (_method == PaymentMethod.mobileMoney && _countryCode != '254') {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -508,38 +435,26 @@ class _SendMoneyFormScreenState extends ConsumerState<SendMoneyFormScreen> {
     final accounts = ref.watch(walletAccountsProvider);
     final snap = accounts.valueOrNull;
     if (snap != null && snap.refreshedAt != _appliedWalletAt) {
-      _applyOwnedWallets(
-        OwnedWalletBalances.fundedFiat(snap),
-        loading: accounts.isLoading,
-      );
+      _applyOwnedWallets(snap);
       _appliedWalletAt = snap.refreshedAt;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _emitUpdate();
       });
-    } else if (snap == null) {
-      _loadingBalance = accounts.isLoading;
     }
 
     final colors = AppColors.getThemeColors(context);
     final primary = Theme.of(context).colorScheme.primary;
 
-    return Column(
-      children: [
-        Expanded(
-          child: Form(
-            key: _formKey,
-            child: ListView(
-              padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+    return Form(
+      key: _formKey,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                MoneyBalanceCard(
-                  currency: _currency,
-                  balance: _balance,
-                  loading: _loadingBalance,
-                  onWalletTap: _ownedCurrencyCodes.isNotEmpty
-                      ? _showWalletPicker
-                      : null,
-                ),
-                const SizedBox(height: 24),
                 Text(
                   'Select Method',
                   style: TextStyle(
@@ -549,33 +464,27 @@ class _SendMoneyFormScreenState extends ConsumerState<SendMoneyFormScreen> {
                   ),
                 ),
                 const SizedBox(height: 12),
-                MoneyMethodTile(
-                  icon: Icons.account_balance_wallet_rounded,
-                  title: 'SafariTap wallet',
-                  selected: _method == PaymentMethod.truePay,
-                  onTap: () => _selectMethod(PaymentMethod.truePay),
+                MoneyMethodDropdown<PaymentMethod>(
+                  value: _method,
+                  onChanged: _selectMethod,
+                  options: const [
+                    MoneyMethodOption(
+                      value: PaymentMethod.truePay,
+                      label: 'SafariTap wallet',
+                      icon: Icons.account_balance_wallet_rounded,
+                    ),
+                    MoneyMethodOption(
+                      value: PaymentMethod.mobileMoney,
+                      label: 'Mobile Money',
+                      icon: Icons.phone_android_rounded,
+                    ),
+                    MoneyMethodOption(
+                      value: PaymentMethod.bank,
+                      label: 'Bank Transfer',
+                      icon: Icons.account_balance_rounded,
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 10),
-                MoneyMethodTile(
-                  icon: Icons.phone_android_rounded,
-                  title: 'Mobile Money',
-                  selected: _method == PaymentMethod.mobileMoney,
-                  onTap: () => _selectMethod(PaymentMethod.mobileMoney),
-                ),
-                const SizedBox(height: 10),
-                MoneyMethodTile(
-                  icon: Icons.account_balance_rounded,
-                  title: 'Bank Transfer',
-                  selected: _method == PaymentMethod.bank,
-                  onTap: () => _selectMethod(PaymentMethod.bank),
-                ),
-                if (_currency != 'KES') ...[
-                  const SizedBox(height: 10),
-                  Text(
-                    'Send Money requires a KES wallet for SafariTap wallet, Mobile Money, and Bank Transfer.',
-                    style: TextStyle(color: colors.error, fontSize: 12),
-                  ),
-                ],
                 const SizedBox(height: 24),
                 Text(
                   'Amount ($_currency)',
@@ -801,14 +710,14 @@ class _SendMoneyFormScreenState extends ConsumerState<SendMoneyFormScreen> {
               ],
             ),
           ),
-        ),
-        MoneyPrimaryButton(
-          label: 'Continue',
-          loading: widget.isValidating,
-          enabled: _canContinue && !widget.isValidating,
-          onPressed: _onContinue,
-        ),
-      ],
+          MoneyPrimaryButton(
+            label: 'Continue',
+            loading: widget.isValidating,
+            enabled: _canContinue && !widget.isValidating,
+            onPressed: _onContinue,
+          ),
+        ],
+      ),
     );
   }
 }
