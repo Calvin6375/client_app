@@ -106,7 +106,7 @@ class _WalletCardState extends ConsumerState<WalletCard> {
           children: [
             Expanded(
               child: _FlowPayActionButton(
-                label: 'Top Up',
+                label: 'Add Money',
                 isPrimary: false,
                 onPressed: onTopUp,
               ),

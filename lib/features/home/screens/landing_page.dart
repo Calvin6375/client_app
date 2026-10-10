@@ -344,7 +344,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                             children: [
                               Expanded(
                                 child: _FloatingNavItem(
-                                  icon: Icons.account_balance_wallet_outlined,
+                                  icon: Icons.home_outlined,
                                   isSelected:
                                       ref.watch(dashboardNavProvider).selectedIndex == 0,
                                   primary: primary,

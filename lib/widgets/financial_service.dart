@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:pretium/features/offers/screens/trip_offers_page.dart';
 import 'package:pretium/features/safari_ai/screens/safari_ai_page.dart';
 import 'package:pretium/features/send_money/screens/send_money_page.dart';
 import 'package:pretium/features/swap/screens/swap_page.dart';
@@ -74,6 +75,17 @@ class FinancialServices extends StatelessWidget {
               () => Navigator.of(context).push(
                 MaterialPageRoute<void>(
                   builder: (_) => const SafariAiPage(),
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            _buildServiceButton(
+              context,
+              FontAwesomeIcons.tags,
+              "Offers",
+              () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => const TripOffersPage(),
                 ),
               ),
             ),
