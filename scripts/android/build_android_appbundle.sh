@@ -2,8 +2,8 @@
 # Build a release Android App Bundle (AAB) for Play Store upload.
 #
 # Usage:
-#   ./scripts/build_android_appbundle.sh
-#   ./scripts/build_android_appbundle.sh --obfuscate
+#   ./scripts/android/build_android_appbundle.sh
+#   ./scripts/android/build_android_appbundle.sh --obfuscate
 #
 # Output:
 #   build/app/outputs/bundle/release/app-release.aab
@@ -11,7 +11,7 @@
 set -euo pipefail
 
 # shellcheck source=scripts/_common.sh
-source "$(cd "$(dirname "$0")" && pwd)/_common.sh"
+source "$(cd "$(dirname "$0")" && pwd)/../_common.sh"
 
 require_flutter
 

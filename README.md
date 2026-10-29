@@ -368,12 +368,14 @@ This builds a release PWA with Flutter’s offline-first service worker, branded
 ### Mobile release builds
 
 ```bash
-./scripts/build_android_apk.sh              # release APK → dist/android/
-./scripts/build_android_apk.sh --split-per-abi
-./scripts/build_android_appbundle.sh        # Play Store AAB
-./scripts/build_ios.sh                      # signed IPA (macOS + Xcode signing)
-./scripts/build_ios.sh --no-codesign        # unsigned iOS build
-./scripts/build_all.sh                      # android + web + ios (when available)
+./scripts/android/build_android_apk.sh              # release APK → dist/android/
+./scripts/android/build_android_apk.sh --split-per-abi
+./scripts/android/build_android_appbundle.sh        # Play Store AAB
+./scripts/android/build_production_apk.sh           # obfuscated production APK
+./scripts/ios/build_ios.sh --no-codesign            # unsigned iOS .app
+./scripts/ios/build_ios_ipa.sh                      # signed IPA (macOS + Xcode signing)
+./scripts/ios/build_production_ipa.sh               # obfuscated production IPA
+./scripts/build_all.sh                              # android + web + ios (when available)
 ```
 
 Artifacts are copied under `dist/{android,ios,web}`.

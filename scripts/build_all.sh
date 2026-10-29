@@ -49,8 +49,8 @@ run_step() {
 }
 
 if [[ "$SKIP_ANDROID" -eq 0 ]]; then
-  run_step "Android APK" "$SCRIPTS_DIR/build_android_apk.sh" || true
-  run_step "Android App Bundle" "$SCRIPTS_DIR/build_android_appbundle.sh" || true
+  run_step "Android APK" "$SCRIPTS_DIR/android/build_android_apk.sh" || true
+  run_step "Android App Bundle" "$SCRIPTS_DIR/android/build_android_appbundle.sh" || true
 fi
 
 if [[ "$SKIP_WEB" -eq 0 ]]; then
@@ -60,8 +60,8 @@ fi
 if [[ "$SKIP_IOS" -eq 0 ]]; then
   if [[ "$(uname -s)" == "Darwin" ]]; then
     # Prefer IPA; fall back to unsigned ios build if signing is not ready.
-    if ! run_step "iOS IPA" "$SCRIPTS_DIR/build_ios.sh"; then
-      run_step "iOS (no codesign fallback)" "$SCRIPTS_DIR/build_ios.sh" --no-codesign || true
+    if ! run_step "iOS IPA" "$SCRIPTS_DIR/ios/build_ios_ipa.sh"; then
+      run_step "iOS (no codesign fallback)" "$SCRIPTS_DIR/ios/build_ios.sh" --no-codesign || true
     fi
   else
     echo "Skipping iOS (not macOS)."

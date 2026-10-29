@@ -1,37 +1,26 @@
 #!/usr/bin/env bash
-# Build a release Android APK for SafariTap.
+# Build a production Android APK (release, obfuscated).
 #
 # Usage:
-#   ./scripts/build_android_apk.sh
-#   ./scripts/build_android_apk.sh --split-per-abi
-#   ./scripts/build_android_apk.sh --debug
+#   ./scripts/android/build_production_apk.sh
+#   ./scripts/android/build_production_apk.sh --split-per-abi
 #
 # Output:
 #   build/app/outputs/flutter-apk/*.apk
-#   dist/android/*.apk  (copy)
+#   dist/android/*.apk
 set -euo pipefail
 
 # shellcheck source=scripts/_common.sh
-source "$(cd "$(dirname "$0")" && pwd)/_common.sh"
+source "$(cd "$(dirname "$0")" && pwd)/../_common.sh"
 
 require_flutter
 
-MODE="release"
 SPLIT_PER_ABI=0
-EXTRA_ARGS=()
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --debug)
-      MODE="debug"
-      shift
-      ;;
     --split-per-abi)
       SPLIT_PER_ABI=1
-      shift
-      ;;
-    --obfuscate)
-      EXTRA_ARGS+=(--obfuscate --split-debug-info="$DIST_DIR/android/symbols")
       shift
       ;;
     -h|--help)
@@ -46,14 +35,19 @@ while [[ $# -gt 0 ]]; do
 done
 
 prepare_dist
-mkdir -p "$DIST_DIR/android"
+mkdir -p "$DIST_DIR/android/symbols"
 pub_get
 
-BUILD_ARGS=(build apk "--$MODE" --tree-shake-icons)
+BUILD_ARGS=(
+  build apk
+  --release
+  --tree-shake-icons
+  --obfuscate
+  --split-debug-info="$DIST_DIR/android/symbols"
+)
 if [[ "$SPLIT_PER_ABI" -eq 1 ]]; then
   BUILD_ARGS+=(--split-per-abi)
 fi
-BUILD_ARGS+=("${EXTRA_ARGS[@]}")
 
 echo "==> flutter ${BUILD_ARGS[*]}"
 flutter "${BUILD_ARGS[@]}"
@@ -69,7 +63,7 @@ COPIED=()
 shopt -s nullglob
 for apk in "$APK_DIR"/*.apk; do
   base="$(basename "$apk")"
-  dest="$DIST_DIR/android/SafariTap_${VERSION}_${base}"
+  dest="$DIST_DIR/android/SafariTap_${VERSION}_prod_${base}"
   cp -f "$apk" "$dest"
   COPIED+=("$dest")
 done
@@ -81,7 +75,7 @@ if [[ ${#COPIED[@]} -eq 0 ]]; then
 fi
 
 echo ""
-echo "APK(s) built:"
+echo "Production APK(s) built:"
 for f in "${COPIED[@]}"; do
   ls -lh "$f"
 done
